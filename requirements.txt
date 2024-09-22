@@ -1,0 +1,10 @@
+nextcord
+openai
+textblob
+pillow
+aiohttp
+python-dotenv
+httpx
+yt-dlp
+spotipy
+youtube-search-python
