@@ -8,3 +8,4 @@ httpx
 yt-dlp
 spotipy
 youtube-search-python
+pynacl
