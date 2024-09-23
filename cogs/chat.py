@@ -5,7 +5,7 @@ import os
 import logging
 import asyncio
 from textblob import TextBlob
-from dotenv import load_dotenv  # Import to load .env file
+from dotenv import load_dotenv  
 
 # Load environment variables from .env file
 load_dotenv()
@@ -21,7 +21,7 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 user_chat_histories = {}
 user_last_interaction = {}
 
-# Set a rate limit (in seconds)
+# rate limit (in seconds)
 RATE_LIMIT_SECONDS = 5
 
 class Chat(commands.Cog):
