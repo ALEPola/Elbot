@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import time
 import asyncio
 import tempfile
-from pathlib import Path
+import platform
 
 # Load environment variables
 load_dotenv()
@@ -40,7 +40,7 @@ class Music(commands.Cog):
             "voice": "nova",
             "input": text
         }
-        
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, headers=headers, json=data)
@@ -53,7 +53,6 @@ class Music(commands.Cog):
     @nextcord.slash_command(name="join", description="Join the voice channel.", guild_ids=[761070952674230292])
     async def join(self, interaction: nextcord.Interaction):
         if interaction.user.voice is None:
-            # Use followup if the interaction has been deferred
             await interaction.followup.send(f"{interaction.user.display_name}, you are not in a voice channel.", ephemeral=True)
             return
 
@@ -63,9 +62,7 @@ class Music(commands.Cog):
         else:
             await channel.connect()
 
-        # Use followup if interaction has been deferred
         await interaction.followup.send(f"Joined {channel}!")
-
 
     @nextcord.slash_command(name="leave", description="Leave the voice channel.", guild_ids=[761070952674230292])
     async def leave(self, interaction: nextcord.Interaction):
@@ -77,10 +74,9 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="play", description="Play a song from YouTube.", guild_ids=[761070952674230292])
     async def play(self, interaction: nextcord.Interaction, search: str):
-        await interaction.response.defer()  # Defer the response if processing takes time
+        await interaction.response.defer()
         user = interaction.user
-
-        await self.join(interaction)  # Calls join, but join now uses followup.send
+        await self.join(interaction)
 
         try:
             url, title = await self.download_youtube_audio(search)
@@ -97,17 +93,14 @@ class Music(commands.Cog):
             logger.error(f"An unexpected error occurred: {e}")
             await interaction.followup.send(f"{user.display_name}, an unexpected error occurred: {e}")
 
-
     async def play_next(self, interaction: nextcord.Interaction):
         if self.queue:
             url, title = self.queue.pop(0)
 
-            # Generate TTS for the song announcement
             announcement_text = f"Now playing: {title}"
             tts_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
             await self.generate_tts(announcement_text, tts_file.name)
 
-            # Play TTS announcement
             source = nextcord.FFmpegPCMAudio(tts_file.name)
             interaction.guild.voice_client.play(nextcord.PCMVolumeTransformer(source), after=lambda e: asyncio.run_coroutine_threadsafe(self.play_song(interaction, url, title), self.bot.loop))
         else:
@@ -120,11 +113,17 @@ class Music(commands.Cog):
         ffmpeg_opts = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn',
-            'executable': "C:/ffmpeg/bin/ffmpeg.exe"
+            'executable': self.get_ffmpeg_executable()
         }
         source = nextcord.FFmpegPCMAudio(url, **ffmpeg_opts)
         interaction.guild.voice_client.play(nextcord.PCMVolumeTransformer(source), after=lambda e: self.bot.loop.create_task(self.play_next(interaction)))
         await interaction.followup.send(f'Now playing: {title}')
+
+    def get_ffmpeg_executable(self):
+        if platform.system() == "Windows":
+            return "C:/ffmpeg/bin/ffmpeg.exe"
+        else:
+            return "ffmpeg"
 
     async def download_youtube_audio(self, query, retries=3):
         ydl_opts = {
@@ -150,7 +149,6 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="volume", description="Set the bot's volume.", guild_ids=[761070952674230292])
     async def volume(self, interaction: nextcord.Interaction, volume: int):
-        """Sets the bot's volume."""
         if interaction.guild.voice_client is None:
             return await interaction.response.send_message("I'm not connected to a voice channel.", ephemeral=True)
         
@@ -159,43 +157,38 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="pause", description="Pause the currently playing song.", guild_ids=[761070952674230292])
     async def pause(self, interaction: nextcord.Interaction):
-        username = interaction.user.display_name
         if interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.pause()
-            await interaction.response.send_message(f"{username}, paused the song.")
+            await interaction.response.send_message(f"{interaction.user.display_name}, paused the song.")
         else:
-            await interaction.response.send_message(f"{username}, no song is playing.", ephemeral=True)
+            await interaction.response.send_message(f"{interaction.user.display_name}, no song is playing.", ephemeral=True)
 
     @nextcord.slash_command(name="resume", description="Resume the currently paused song.", guild_ids=[761070952674230292])
     async def resume(self, interaction: nextcord.Interaction):
-        username = interaction.user.display_name
         if interaction.guild.voice_client.is_paused():
             interaction.guild.voice_client.resume()
-            await interaction.response.send_message(f"{username}, resumed the song.")
+            await interaction.response.send_message(f"{interaction.user.display_name}, resumed the song.")
         else:
-            await interaction.response.send_message(f"{username}, the song is not paused.", ephemeral=True)
+            await interaction.response.send_message(f"{interaction.user.display_name}, the song is not paused.", ephemeral=True)
 
     @nextcord.slash_command(name="stop", description="Stop the currently playing song.", guild_ids=[761070952674230292])
     async def stop(self, interaction: nextcord.Interaction):
-        username = interaction.user.display_name
         if interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.stop()
-            await interaction.response.send_message(f"{username}, stopped the song.")
+            await interaction.response.send_message(f"{interaction.user.display_name}, stopped the song.")
         else:
-            await interaction.response.send_message(f"{username}, no song is currently playing.", ephemeral=True)
+            await interaction.response.send_message(f"{interaction.user.display_name}, no song is currently playing.", ephemeral=True)
 
     @nextcord.slash_command(name="skip", description="Skip the currently playing song.", guild_ids=[761070952674230292])
     async def skip(self, interaction: nextcord.Interaction):
-        username = interaction.user.display_name
         if interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.stop()
-            await interaction.response.send_message(f"{username}, skipped the song.")
+            await interaction.response.send_message(f"{interaction.user.display_name}, skipped the song.")
         else:
-            await interaction.response.send_message(f"{username}, no song is currently playing.", ephemeral=True)
+            await interaction.response.send_message(f"{interaction.user.display_name}, no song is currently playing.", ephemeral=True)
 
     @nextcord.slash_command(name="queue", description="Displays the current queue.", guild_ids=[761070952674230292])
     async def queue(self, interaction: nextcord.Interaction):
-        """Displays the current queue."""
         if not self.queue:
             return await interaction.response.send_message("The queue is empty.", ephemeral=True)
         
