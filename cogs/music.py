@@ -6,10 +6,11 @@ import openai
 import httpx
 import os
 from dotenv import load_dotenv
-import time
 import asyncio
 import tempfile
 import platform
+from urllib.parse import urlparse
+from io import BytesIO
 
 # Load environment variables
 load_dotenv()
@@ -28,8 +29,26 @@ class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.queue = []
+        self.last_activity_time = {}  # To track the last activity time for each guild
+        self.inactivity_timeout = 300  # 5 minutes (in seconds)
 
-    async def generate_tts(self, text: str, output_file: str):
+    async def start_inactivity_timer(self, guild_id):
+        while guild_id in self.last_activity_time:
+            if asyncio.get_event_loop().time() - self.last_activity_time[guild_id] > self.inactivity_timeout:
+                if guild := self.bot.get_guild(guild_id):
+                    if guild.voice_client and guild.voice_client.is_connected():
+                        await guild.voice_client.disconnect()
+                        print(f"Disconnected from {guild.name} due to inactivity.")
+                        self.last_activity_time.pop(guild_id, None)
+                return  # Stop the timer for this guild
+            await asyncio.sleep(10)
+
+    async def update_activity(self, guild_id):
+        self.last_activity_time[guild_id] = asyncio.get_event_loop().time()
+        if len(self.last_activity_time) == 1:  # Start the timer only once
+            self.bot.loop.create_task(self.start_inactivity_timer(guild_id))
+
+    async def generate_tts(self, text: str):
         url = "https://api.openai.com/v1/audio/speech"
         headers = {
             "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -45,10 +64,12 @@ class Music(commands.Cog):
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, headers=headers, json=data)
                 response.raise_for_status()
-                with open(output_file, "wb") as f:
-                    f.write(response.content)
+                # Use an in-memory bytes object instead of a file
+                audio_data = BytesIO(response.content)
+                return audio_data
         except Exception as e:
             logger.error(f"TTS API Exception: {e}", exc_info=True)
+            return None
 
     @nextcord.slash_command(name="join", description="Join the voice channel.", guild_ids=[761070952674230292])
     async def join(self, interaction: nextcord.Interaction):
@@ -62,12 +83,14 @@ class Music(commands.Cog):
         else:
             await channel.connect()
 
+        await self.update_activity(interaction.guild.id)  # Update activity timestamp
         await interaction.followup.send(f"Joined {channel}!")
 
     @nextcord.slash_command(name="leave", description="Leave the voice channel.", guild_ids=[761070952674230292])
     async def leave(self, interaction: nextcord.Interaction):
         if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
             await interaction.guild.voice_client.disconnect()
+            self.last_activity_time.pop(interaction.guild.id, None)  # Remove from activity tracker
             await interaction.response.send_message(f"{interaction.user.display_name}, I've left the voice channel.")
         else:
             await interaction.response.send_message(f"{interaction.user.display_name}, I'm not connected to any voice channel.", ephemeral=True)
@@ -75,10 +98,14 @@ class Music(commands.Cog):
     @nextcord.slash_command(name="play", description="Play a song from YouTube.", guild_ids=[761070952674230292])
     async def play(self, interaction: nextcord.Interaction, search: str):
         await interaction.response.defer()
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
+            await self.update_activity(interaction.guild.id)
+
         user = interaction.user
         await self.join(interaction)
 
         try:
+            # Detect if input is a URL or search query
             url, title = await self.download_youtube_audio(search)
             if url is None:
                 await interaction.followup.send(f"{user.display_name}, an error occurred while downloading the video.")
@@ -98,13 +125,21 @@ class Music(commands.Cog):
             url, title = self.queue.pop(0)
 
             announcement_text = f"Now playing: {title}"
-            tts_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-            await self.generate_tts(announcement_text, tts_file.name)
+            tts_audio = await self.generate_tts(announcement_text)
+            if tts_audio:
+                # Use FFmpeg with in-memory TTS data
+                source = nextcord.FFmpegPCMAudio(tts_audio, pipe=True)
+                interaction.guild.voice_client.play(
+                    nextcord.PCMVolumeTransformer(source),
+                    after=lambda e: asyncio.run_coroutine_threadsafe(self.play_song(interaction, url, title), self.bot.loop)
+                )
+            else:
+                logger.error("Failed to generate TTS for announcement.")
+                await self.play_song(interaction, url, title)
 
-            source = nextcord.FFmpegPCMAudio(tts_file.name)
-            interaction.guild.voice_client.play(nextcord.PCMVolumeTransformer(source), after=lambda e: asyncio.run_coroutine_threadsafe(self.play_song(interaction, url, title), self.bot.loop))
         else:
-            await interaction.followup.send("The queue is empty.")
+            if not interaction.response.is_done():
+                await interaction.followup.send("The queue is empty.")
 
     async def play_song(self, interaction: nextcord.Interaction, url, title):
         while interaction.guild.voice_client.is_playing():
@@ -131,9 +166,17 @@ class Music(commands.Cog):
             'quiet': True,
             'noplaylist': True
         }
+
         for attempt in range(retries):
             try:
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    # Check if the input is a URL
+                    parsed = urlparse(query)
+                    if parsed.scheme in ('http', 'https') and parsed.netloc:  # It's a URL
+                        info = ydl.extract_info(query, download=False)
+                        return info['url'], info['title']
+                    
+                    # Otherwise, treat it as a search query
                     search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
                     if search_result and 'entries' in search_result and len(search_result['entries']) > 0:
                         info = search_result['entries'][0]
@@ -142,23 +185,16 @@ class Music(commands.Cog):
                 logger.error(f"Error extracting info from YouTube: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Retrying... ({attempt + 1}/{retries})")
-                    time.sleep(2 ** attempt)
+                    await asyncio.sleep(2 ** attempt)
                 else:
                     raise
         return None, None
-
-    @nextcord.slash_command(name="volume", description="Set the bot's volume.", guild_ids=[761070952674230292])
-    async def volume(self, interaction: nextcord.Interaction, volume: int):
-        if interaction.guild.voice_client is None:
-            return await interaction.response.send_message("I'm not connected to a voice channel.", ephemeral=True)
-        
-        interaction.guild.voice_client.source.volume = volume / 100
-        await interaction.response.send_message(f"Volume set to {volume}%")
 
     @nextcord.slash_command(name="pause", description="Pause the currently playing song.", guild_ids=[761070952674230292])
     async def pause(self, interaction: nextcord.Interaction):
         if interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.pause()
+            await self.update_activity(interaction.guild.id)  # Update activity timestamp
             await interaction.response.send_message(f"{interaction.user.display_name}, paused the song.")
         else:
             await interaction.response.send_message(f"{interaction.user.display_name}, no song is playing.", ephemeral=True)
@@ -170,14 +206,6 @@ class Music(commands.Cog):
             await interaction.response.send_message(f"{interaction.user.display_name}, resumed the song.")
         else:
             await interaction.response.send_message(f"{interaction.user.display_name}, the song is not paused.", ephemeral=True)
-
-    @nextcord.slash_command(name="stop", description="Stop the currently playing song.", guild_ids=[761070952674230292])
-    async def stop(self, interaction: nextcord.Interaction):
-        if interaction.guild.voice_client.is_playing():
-            interaction.guild.voice_client.stop()
-            await interaction.response.send_message(f"{interaction.user.display_name}, stopped the song.")
-        else:
-            await interaction.response.send_message(f"{interaction.user.display_name}, no song is currently playing.", ephemeral=True)
 
     @nextcord.slash_command(name="skip", description="Skip the currently playing song.", guild_ids=[761070952674230292])
     async def skip(self, interaction: nextcord.Interaction):
@@ -191,12 +219,16 @@ class Music(commands.Cog):
     async def queue(self, interaction: nextcord.Interaction):
         if not self.queue:
             return await interaction.response.send_message("The queue is empty.", ephemeral=True)
-        
+
         queue_list = "\n".join([f"{index + 1}. {song[1]}" for index, song in enumerate(self.queue)])
         await interaction.response.send_message(f"Current Queue:\n{queue_list}")
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
+
+
+
 
 
 #new
