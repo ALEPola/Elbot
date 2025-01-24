@@ -2,25 +2,14 @@ import nextcord
 from nextcord.ext import commands
 import yt_dlp as youtube_dl
 import logging
-import openai
-import httpx
 import os
 from dotenv import load_dotenv
 import asyncio
-import tempfile
 import platform
 from urllib.parse import urlparse
-from io import BytesIO
 
 # Load environment variables
 load_dotenv()
-
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY environment variable not set.")
-
-openai.api_key = OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -47,29 +36,6 @@ class Music(commands.Cog):
         self.last_activity_time[guild_id] = asyncio.get_event_loop().time()
         if len(self.last_activity_time) == 1:  # Start the timer only once
             self.bot.loop.create_task(self.start_inactivity_timer(guild_id))
-
-    async def generate_tts(self, text: str):
-        url = "https://api.openai.com/v1/audio/speech"
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "tts-1",
-            "voice": "nova",
-            "input": text
-        }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, headers=headers, json=data)
-                response.raise_for_status()
-                # Use an in-memory bytes object instead of a file
-                audio_data = BytesIO(response.content)
-                return audio_data
-        except Exception as e:
-            logger.error(f"TTS API Exception: {e}", exc_info=True)
-            return None
 
     @nextcord.slash_command(name="join", description="Join the voice channel.", guild_ids=[761070952674230292])
     async def join(self, interaction: nextcord.Interaction):
@@ -123,20 +89,7 @@ class Music(commands.Cog):
     async def play_next(self, interaction: nextcord.Interaction):
         if self.queue:
             url, title = self.queue.pop(0)
-
-            announcement_text = f"Now playing: {title}"
-            tts_audio = await self.generate_tts(announcement_text)
-            if tts_audio:
-                # Use FFmpeg with in-memory TTS data
-                source = nextcord.FFmpegPCMAudio(tts_audio, pipe=True)
-                interaction.guild.voice_client.play(
-                    nextcord.PCMVolumeTransformer(source),
-                    after=lambda e: asyncio.run_coroutine_threadsafe(self.play_song(interaction, url, title), self.bot.loop)
-                )
-            else:
-                logger.error("Failed to generate TTS for announcement.")
-                await self.play_song(interaction, url, title)
-
+            await self.play_song(interaction, url, title)
         else:
             if not interaction.response.is_done():
                 await interaction.followup.send("The queue is empty.")
@@ -161,10 +114,12 @@ class Music(commands.Cog):
             return "ffmpeg"
 
     async def download_youtube_audio(self, query, retries=3):
+        # Added cookies to `ydl_opts`
         ydl_opts = {
             'format': 'bestaudio',
             'quiet': True,
-            'noplaylist': True
+            'noplaylist': True,
+            'cookies': '/home/alex/Documents/youtube_cookies.txt',  # Path to your cookies file
         }
 
         for attempt in range(retries):
@@ -225,9 +180,6 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
-
-
-
 
 
 
