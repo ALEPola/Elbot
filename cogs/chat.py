@@ -72,7 +72,7 @@ class Chat(commands.Cog):
             # Append the user's message to history
             user_chat_histories[user_id].append({"role": "user", "content": message})
 
-            # Limit the history to 10 messages
+            # Limit the history to 30 messages
             user_chat_histories[user_id] = user_chat_histories[user_id][-30:]
 
             # Prepare API request
@@ -84,7 +84,7 @@ class Chat(commands.Cog):
             )
 
             # Extract and append the assistant's response to the chat history
-            reply = response.choices[0].message.content  # Fixed this line
+            reply = response.choices[0].message['content']  # Fixed this line
             user_chat_histories[user_id].append({"role": "assistant", "content": reply})
 
             return reply
@@ -95,7 +95,8 @@ class Chat(commands.Cog):
 
     def is_rate_limited(self, user_id: int) -> bool:
         """Check if the user is being rate-limited."""
-        current_time = asyncio.get_event_loop().time()
+        import time
+        current_time = time.monotonic()
         last_interaction_time = user_last_interaction.get(user_id, 0)
 
         if current_time - last_interaction_time < RATE_LIMIT_SECONDS:
@@ -103,7 +104,8 @@ class Chat(commands.Cog):
         user_last_interaction[user_id] = current_time
         return False
 
-# Setup the cog
+def setup(bot):
+    """Setup the Chat cog for the bot."""
 def setup(bot):
     bot.add_cog(Chat(bot))
 
