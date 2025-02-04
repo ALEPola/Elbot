@@ -69,7 +69,8 @@ class Music(commands.Cog):
         if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
             await self.update_activity(interaction.guild.id)
 
-        await self.join(interaction)
+        if interaction.guild.voice_client is None or not interaction.guild.voice_client.is_connected():
+            await self.join(interaction)
 
         try:
             url, title = await self.download_youtube_audio(search)
