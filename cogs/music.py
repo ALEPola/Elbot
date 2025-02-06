@@ -39,20 +39,24 @@ class Music(commands.Cog):
         if len(self.last_activity_time) == 1:
             self.bot.loop.create_task(self.start_inactivity_timer(guild_id))
 
-    @nextcord.slash_command(name="join", description="Join the voice channel.", guild_ids=[761070952674230292])
-    async def join(self, interaction: nextcord.Interaction):
+    async def ensure_voice(self, interaction):
         if interaction.user.voice is None:
             await interaction.followup.send(f"{interaction.user.display_name}, you are not in a voice channel.", ephemeral=True)
-            return
+            return False
 
         channel = interaction.user.voice.channel
-        if interaction.guild.voice_client is not None:
-            await interaction.guild.voice_client.move_to(channel)
-        else:
+        if interaction.guild.voice_client is None:
             await channel.connect()
+        elif interaction.guild.voice_client.channel != channel:
+            await interaction.guild.voice_client.move_to(channel)
 
         await self.update_activity(interaction.guild.id)
-        await interaction.followup.send(f"Joined {channel}!")
+        return True
+
+    @nextcord.slash_command(name="join", description="Join the voice channel.", guild_ids=[761070952674230292])
+    async def join(self, interaction: nextcord.Interaction):
+        if await self.ensure_voice(interaction):
+            await interaction.followup.send(f"Joined {interaction.user.voice.channel}!")
 
     @nextcord.slash_command(name="leave", description="Leave the voice channel.", guild_ids=[761070952674230292])
     async def leave(self, interaction: nextcord.Interaction):
@@ -66,11 +70,8 @@ class Music(commands.Cog):
     @nextcord.slash_command(name="play", description="Play a song from YouTube.", guild_ids=[761070952674230292])
     async def play(self, interaction: nextcord.Interaction, search: str):
         await interaction.response.defer()
-        if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
-            await self.update_activity(interaction.guild.id)
-
-        if interaction.guild.voice_client is None or not interaction.guild.voice_client.is_connected():
-            await self.join(interaction)
+        if not await self.ensure_voice(interaction):
+            return
 
         try:
             url, title = await self.download_youtube_audio(search)
@@ -92,8 +93,7 @@ class Music(commands.Cog):
             url, title = self.queue.pop(0)
             await self.play_song(interaction, url, title)
         else:
-            if not interaction.response.is_done():
-                await interaction.followup.send("The queue is empty.")
+            await interaction.followup.send("The queue is empty.", ephemeral=True)
 
     async def play_song(self, interaction: nextcord.Interaction, url, title):
         while interaction.guild.voice_client.is_playing():
@@ -153,7 +153,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="pause", description="Pause the currently playing song.", guild_ids=[761070952674230292])
     async def pause(self, interaction: nextcord.Interaction):
-        if interaction.guild.voice_client.is_playing():
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.pause()
             await interaction.response.send_message("Paused the song.")
         else:
@@ -161,7 +161,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="resume", description="Resume the currently paused song.", guild_ids=[761070952674230292])
     async def resume(self, interaction: nextcord.Interaction):
-        if interaction.guild.voice_client.is_paused():
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_paused():
             interaction.guild.voice_client.resume()
             await interaction.response.send_message("Resumed the song.")
         else:
@@ -169,7 +169,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="skip", description="Skip the currently playing song.", guild_ids=[761070952674230292])
     async def skip(self, interaction: nextcord.Interaction):
-        if interaction.guild.voice_client.is_playing():
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.stop()
             await interaction.response.send_message("Skipped the song.")
         else:
@@ -217,8 +217,3 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
-
-
-
-
-
