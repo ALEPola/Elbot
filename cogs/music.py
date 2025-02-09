@@ -60,41 +60,52 @@ class Music(commands.Cog):
         await self.update_activity(interaction.guild.id)
         return True
 
-        @nextcord.slash_command(name="play", description="Play a song from YouTube.")
-        async def play(self, interaction: nextcord.Interaction, search: str):
-            await interaction.response.defer()
-            if not await self.ensure_voice(interaction):
-                return
+    @nextcord.slash_command(name="play", description="Play a song from YouTube.")
+    async def play(self, interaction: nextcord.Interaction, search: str):
+        await interaction.response.defer()
+        if not await self.ensure_voice(interaction):
+            return
 
-            guild_id = interaction.guild.id
-            result = await self.download_youtube_audio(search)
-            
-            if result is None:
-                await interaction.followup.send("❌ Could not find the video.")
-                return
+        guild_id = interaction.guild.id
+        result = await self.download_youtube_audio(search)
 
-            for item in result:
-                await self.queue[guild_id].put((item["url"], item["title"]))
+        if result is None:
+            await interaction.followup.send("❌ Could not find the video.")
+            return
 
-            if not interaction.guild.voice_client.is_playing():
-                await self.play_next(guild_id)
+        for item in result:
+            await self.queue[guild_id].put((item["url"], item["title"]))
 
-            # Extract video details
-            video_url = result[0]["url"]
-            title = result[0]["title"][:1020] + "..." if len(result[0]["title"]) > 1024 else result[0]["title"]
-            thumbnail_url = f"https://img.youtube.com/vi/{video_url.split('=')[-1]}/hqdefault.jpg"
-            song_duration = "Unknown"
-            artist = "Unknown"
+        if not interaction.guild.voice_client.is_playing():
+            await self.play_next(guild_id)
 
-            # Embed response with truncated fields
-            embed = nextcord.Embed(title="🎵 Now Playing", color=0x3498db)
-            embed.set_thumbnail(url=thumbnail_url)
-            embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})", inline=False)
-            embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
-            embed.add_field(name="🎤 Artist", value=artist, inline=True)
-            embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
+        # Extract video details
+        video_url = result[0]["url"]
+        title = result[0]["title"][:1020] + "..." if len(result[0]["title"]) > 1024 else result[0]["title"]
+        thumbnail_url = f"https://img.youtube.com/vi/{video_url.split('=')[-1]}/hqdefault.jpg"
+        song_duration = "Unknown"
+        artist = "Unknown"
 
-            await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
+        # Embed response with truncated values
+        embed = nextcord.Embed(title="🎵 Now Playing", color=0x3498db)
+        embed.set_thumbnail(url=thumbnail_url)
+        embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})"[:1020] + "...", inline=False)
+        embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
+        embed.add_field(name="🎤 Artist", value=artist[:1020] + "...", inline=True)
+        embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
+
+        await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
+
+
+         # Embed response with truncated fields
+        embed = nextcord.Embed(title="🎵 Now Playing", color=0x3498db)
+        embed.set_thumbnail(url=thumbnail_url)
+        embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})", inline=False)
+        embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
+        embed.add_field(name="🎤 Artist", value=artist, inline=True)
+        embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
+
+        await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
 
 
     async def play_next(self, guild_id):
