@@ -1,0 +1,139 @@
+Bot Deployment & Management Commands
+Introduction
+This document contains a comprehensive list of commands to manage and deploy your Discord bot in an SSH environment.
+1. Git Commands
+1.1 Update Your Bot
+Command to update the bot with the latest changes from the main branch:
+```bash
+git pull origin main
+```
+Description: Pulls the latest changes from the main branch of your repository.
+1.2 Commit Changes
+Command to commit changes to your local repository:
+```bash
+git add .
+git commit -m "Your commit message here"
+git push origin main
+```
+Description: Adds all changes, commits them with a message, and pushes them to the main branch of your repository.
+1.3 Clone the Repository
+Command to clone the repository to your machine:
+```bash
+git clone https://github.com/your-username/ELBOT.git
+```
+Description: Clones the repository to your machine.
+2. Bot Management Commands
+2.1 Start the Bot
+Command to start the bot as a systemd service:
+```bash
+sudo systemctl start elbot.service
+```
+Description: Starts the bot as a systemd service.
+2.2 Stop the Bot
+Command to stop the bot:
+```bash
+sudo systemctl stop elbot.service
+```
+Description: Stops the bot from running.
+2.3 Restart the Bot
+Command to restart the bot service:
+```bash
+sudo systemctl restart elbot.service
+```
+Description: Restarts the bot to apply any changes or restart if it’s unresponsive.
+2.4 Check Bot Status
+Command to check the current status of the bot's systemd service:
+```bash
+sudo systemctl status elbot.service
+```
+Description: Checks the current status of the bot's systemd service.
+2.5 Enable Bot to Start on Boot
+Command to ensure the bot starts on system boot:
+```bash
+sudo systemctl enable elbot.service
+```
+Description: Ensures the bot automatically starts on system boot.
+2.6 Disable Bot from Starting on Boot
+Command to disable the bot from starting automatically on system boot:
+```bash
+sudo systemctl disable elbot.service
+```
+Description: Disables the bot from automatically starting on system boot.
+3. System Monitoring Commands
+3.1 View Logs for the Bot
+Command to view the latest logs for the bot:
+```bash
+journalctl -u elbot.service --no-pager | tail -50
+```
+Description: Displays the most recent 50 lines of logs for the bot.
+3.2 Monitor Bot's Resource Usage
+Command to monitor system resources:
+```bash
+top
+```
+Description: Monitors CPU, memory, and other system resources used by running processes.
+4. File Management Commands
+4.1 Edit Files with Nano
+Command to open a file for editing:
+```bash
+nano /path/to/file.py
+```
+Description: Opens the specified file in the `nano` text editor for editing.
+4.2 Move Files
+Command to move a file:
+```bash
+mv /path/to/source /path/to/destination
+```
+Description: Moves a file from the source location to the destination.
+4.3 Copy Files
+Command to copy a file:
+```bash
+cp /path/to/source /path/to/destination
+```
+Description: Copies a file from the source location to the destination.
+4.4 List Files in a Directory
+Command to list files in a directory:
+```bash
+ls /path/to/directory
+```
+Description: Lists the contents of a directory.
+4.5 Change Directory
+Command to change the directory:
+```bash
+cd /path/to/directory
+```
+Description: Changes the current directory to the specified path.
+5. Virtual Environment Management
+5.1 Activate the Virtual Environment
+Command to activate the virtual environment:
+```bash
+source /path/to/venv/bin/activate
+```
+Description: Activates the virtual environment where your bot’s dependencies are installed.
+5.2 Install Dependencies from `requirements.txt`
+Command to install dependencies:
+```bash
+pip install -r requirements.txt
+```
+Description: Installs all Python dependencies listed in the `requirements.txt` file.
+5.3 Deactivate the Virtual Environment
+Command to deactivate the virtual environment:
+```bash
+deactivate
+```
+Description: Deactivates the current virtual environment.
+6. Bot Deployment Script
+6.1 Run Deployment Script
+Command to run the deployment script:
+```bash
+./deploy.sh
+```
+Description: Executes the `deploy.sh` script that updates and restarts the bot.
+6.2 Make the Deployment Script Executable
+Command to make the `deploy.sh` script executable:
+```bash
+chmod +x deploy.sh
+```
+Description: Makes the `deploy.sh` script executable if it’s not already.
+Final Notes
+Make sure to check the logs after performing any task like updating or restarting the bot to confirm that everything is working as expected.
