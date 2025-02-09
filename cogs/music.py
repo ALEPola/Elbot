@@ -81,8 +81,13 @@ class Music(commands.Cog):
         await self.play_song(guild.voice_client, item, interaction)
 
     async def play_song(self, voice_client, item, interaction: nextcord.Interaction = None):
-        """Play the song, send/update the persistent player message, and add controls."""
-        url = item.get("url")
+        """
+        Play the song using FFmpeg and update the persistent player message with
+        an embed containing song details and music controls.
+        """
+        # Use the stream URL for playback and the webpage URL for display.
+        stream_url = item.get("stream_url")
+        page_url = item.get("page_url")
         title = item.get("title")
         thumbnail = item.get("thumbnail")
 
@@ -90,7 +95,7 @@ class Music(commands.Cog):
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn"
         }
-        source = nextcord.FFmpegPCMAudio(url, **ffmpeg_opts)
+        source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
         voice_client.play(
             nextcord.PCMVolumeTransformer(source),
             after=lambda e: self.bot.loop.create_task(self.play_next(voice_client.guild.id))
@@ -102,7 +107,8 @@ class Music(commands.Cog):
 
         embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.green())
         embed.add_field(name="🎵 Title", value=title_display[:1024], inline=False)
-        embed.add_field(name="🔗 URL", value=f"[Click Here]({url})", inline=False)
+        # Use the shorter webpage URL in the embed field to stay within limits.
+        embed.add_field(name="🔗 URL", value=f"[Click Here]({page_url})", inline=False)
         embed.set_footer(text="Song By: Manu Chao | Esperanza")
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
@@ -157,7 +163,8 @@ class Music(commands.Cog):
     async def download_youtube_audio(self, query):
         """
         Retrieves video information from YouTube (using cookies if available) and returns a list
-        of dictionaries containing the URL, title, and thumbnail.
+        of dictionaries containing the stream URL (for FFmpeg), the webpage URL (for display),
+        the title, and the thumbnail.
         """
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", "/home/alex/Documents/youtube_cookies.txt")
         if cookie_file and not os.path.exists(cookie_file):
@@ -180,21 +187,19 @@ class Music(commands.Cog):
                     logger.info(f"Extracting direct URL: {query}")
                     video_info = ydl.extract_info(query, download=False)
                     return [{
-                        "url": video_info.get("url"),
+                        "stream_url": video_info.get("url"),
+                        "page_url": video_info.get("webpage_url"),
                         "title": video_info.get("title"),
                         "thumbnail": video_info.get("thumbnail")
                     }]
                 else:
                     logger.info(f"Searching YouTube for: {query}")
                     search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
-                    if (
-                        search_result 
-                        and "entries" in search_result 
-                        and len(search_result["entries"]) > 0
-                    ):
+                    if search_result and "entries" in search_result and len(search_result["entries"]) > 0:
                         video_info = search_result["entries"][0]
                         return [{
-                            "url": video_info.get("url"),
+                            "stream_url": video_info.get("url"),
+                            "page_url": video_info.get("webpage_url"),
                             "title": video_info.get("title"),
                             "thumbnail": video_info.get("thumbnail")
                         }]
@@ -204,6 +209,7 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
