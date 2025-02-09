@@ -16,6 +16,52 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+class MusicControls(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # Set timeout=None to make the view persistent if needed
+
+    @nextcord.ui.button(label="QUEUE", style=nextcord.ButtonStyle.green, custom_id="queue")
+    async def queue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Replace this with your actual queue logic
+        await interaction.response.send_message("Queue functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="BACK", style=nextcord.ButtonStyle.green, custom_id="back")
+    async def back_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Back functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="⏯ Pause/Resume", style=nextcord.ButtonStyle.grey, custom_id="pause_resume")
+    async def pause_resume_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Pause/Resume functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="SKIP", style=nextcord.ButtonStyle.green, custom_id="skip")
+    async def skip_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Skip functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="AUTOPLAY", style=nextcord.ButtonStyle.green, custom_id="autoplay")
+    async def autoplay_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Autoplay functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="LOOP", style=nextcord.ButtonStyle.green, custom_id="loop")
+    async def loop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Loop functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind")
+    async def rewind_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Rewind functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="🛑 STOP", style=nextcord.ButtonStyle.red, custom_id="stop")
+    async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Stop functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="FORWARD", style=nextcord.ButtonStyle.green, custom_id="forward")
+    async def forward_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Forward functionality not implemented yet.", ephemeral=True)
+
+    @nextcord.ui.button(label="REPLAY", style=nextcord.ButtonStyle.green, custom_id="replay")
+    async def replay_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("Replay functionality not implemented yet.", ephemeral=True)
+
+
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -113,7 +159,8 @@ class Music(commands.Cog):
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
 
-        view = self.create_music_controls()
+        # Use the new MusicControls view with defined callbacks
+        view = MusicControls()
 
         # Use the stored channel (or fallback) to send/update the persistent player message.
         guild_id = voice_client.guild.id
@@ -144,21 +191,6 @@ class Music(commands.Cog):
                 await interaction.edit_original_message(content="Now playing:")
             except Exception as e:
                 logger.error(f"Error editing original interaction message: {e}")
-
-    def create_music_controls(self):
-        """Builds a view with music player buttons."""
-        view = nextcord.ui.View()
-        view.add_item(nextcord.ui.Button(label="QUEUE", custom_id="queue", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="BACK", custom_id="back", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="⏯ Pause/Resume", custom_id="pause_resume", style=nextcord.ButtonStyle.grey))
-        view.add_item(nextcord.ui.Button(label="SKIP", custom_id="skip", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="AUTOPLAY", custom_id="autoplay", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="LOOP", custom_id="loop", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="REWIND", custom_id="rewind", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="🛑 STOP", custom_id="stop", style=nextcord.ButtonStyle.red))
-        view.add_item(nextcord.ui.Button(label="FORWARD", custom_id="forward", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="REPLAY", custom_id="replay", style=nextcord.ButtonStyle.green))
-        return view
 
     async def download_youtube_audio(self, query):
         """
@@ -209,6 +241,7 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
