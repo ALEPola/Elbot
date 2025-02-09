@@ -68,6 +68,7 @@ class Music(commands.Cog):
 
             guild_id = interaction.guild.id
             result = await self.download_youtube_audio(search)
+            
             if result is None:
                 await interaction.followup.send("❌ Could not find the video.")
                 return
@@ -80,13 +81,13 @@ class Music(commands.Cog):
 
             # Extract video details
             video_url = result[0]["url"]
-            title = result[0]["title"]
+            title = result[0]["title"][:1020] + "..." if len(result[0]["title"]) > 1024 else result[0]["title"]
             thumbnail_url = f"https://img.youtube.com/vi/{video_url.split('=')[-1]}/hqdefault.jpg"
-            song_duration = "Unknown"  # yt-dlp doesn't always provide duration
-            artist = "Unknown"  # yt-dlp doesn't always provide artist
+            song_duration = "Unknown"
+            artist = "Unknown"
 
-            # Create the embed
-            embed = Embed(title="🎵 Now Playing", color=0x3498db)
+            # Embed response with truncated fields
+            embed = nextcord.Embed(title="🎵 Now Playing", color=0x3498db)
             embed.set_thumbnail(url=thumbnail_url)
             embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})", inline=False)
             embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
@@ -94,6 +95,7 @@ class Music(commands.Cog):
             embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
 
             await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
+
 
     async def play_next(self, guild_id):
         """Plays the next song in the queue."""
