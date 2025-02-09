@@ -7,12 +7,15 @@ import re
 import asyncio
 import time
 from dotenv import load_dotenv
+from nextcord import Embed
+from nextcord.ui import View, Button
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 
 class Music(commands.Cog):
     def __init__(self, bot):
@@ -57,22 +60,6 @@ class Music(commands.Cog):
         await self.update_activity(interaction.guild.id)
         return True
 
-    @nextcord.slash_command(name="join", description="Join the voice channel.")
-    async def join(self, interaction: nextcord.Interaction):
-        if await self.ensure_voice(interaction):
-            await interaction.followup.send(f"Joined {interaction.user.voice.channel}!")
-
-    @nextcord.slash_command(name="leave", description="Leave the voice channel.")
-    async def leave(self, interaction: nextcord.Interaction):
-        guild_id = interaction.guild.id
-        if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
-            await interaction.guild.voice_client.disconnect()
-            self.last_activity_time.pop(guild_id, None)
-            self.queue.pop(guild_id, None)
-            await interaction.response.send_message("Left the voice channel.")
-        else:
-            await interaction.response.send_message("I'm not connected to any voice channel.", ephemeral=True)
-
     @nextcord.slash_command(name="play", description="Play a song from YouTube.")
     async def play(self, interaction: nextcord.Interaction, search: str):
         await interaction.response.defer()
@@ -82,7 +69,7 @@ class Music(commands.Cog):
         guild_id = interaction.guild.id
         result = await self.download_youtube_audio(search)
         if result is None:
-            await interaction.followup.send(f"Could not find the video.")
+            await interaction.followup.send("❌ Could not find the video.")
             return
 
         for item in result:
@@ -90,8 +77,23 @@ class Music(commands.Cog):
 
         if not interaction.guild.voice_client.is_playing():
             await self.play_next(guild_id)
-        else:
-            await interaction.followup.send(f"Added {result[0]['title']} to the queue.")
+
+        # Extract video details
+        video_url = result[0]["url"]
+        title = result[0]["title"]
+        thumbnail_url = f"https://img.youtube.com/vi/{video_url.split('=')[-1]}/hqdefault.jpg"
+        song_duration = "Unknown"  # yt-dlp doesn't always provide duration
+        artist = "Unknown"  # yt-dlp doesn't always provide artist
+
+        # Create the embed
+        embed = Embed(title="🎵 Now Playing", color=0x3498db)
+        embed.set_thumbnail(url=thumbnail_url)
+        embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})", inline=False)
+        embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
+        embed.add_field(name="🎤 Artist", value=artist, inline=True)
+        embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
+
+        await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
 
     async def play_next(self, guild_id):
         """Plays the next song in the queue."""
@@ -122,18 +124,17 @@ class Music(commands.Cog):
         """Downloads the best audio format from YouTube, using cookies for authentication."""
         cookie_file = os.getenv('YOUTUBE_COOKIES_PATH', '/home/alex/Documents/youtube_cookies.txt')
 
-        # Check if the cookie file exists before using it
         if not os.path.exists(cookie_file):
             logger.error(f"❌ Cookie file not found: {cookie_file}")
             return None
 
         ydl_opts = {
             'format': 'bestaudio',
-            'quiet': False,  # Debugging enabled
+            'quiet': False,
             'noplaylist': False,
-            'cookies': cookie_file,  # Use the cookie file
-            'geo_bypass': True,  # Helps with region-locked videos
-            'nocheckcertificate': True  # Bypass SSL issues
+            'cookies': cookie_file,
+            'geo_bypass': True,
+            'nocheckcertificate': True
         }
 
         url_pattern = re.compile(r'https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+')
@@ -141,52 +142,51 @@ class Music(commands.Cog):
         try:
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 if url_pattern.match(query):
-                    logger.info(f"🔎 Extracting direct URL: {query}")
                     video_info = ydl.extract_info(query, download=False)
-                    
-                    # Ensure video_info contains a URL
-                    if "url" in video_info:
-                        logger.info(f"✅ Successfully extracted video: {video_info.get('title', 'Unknown')}")
-                        return [{"url": video_info["url"], "title": video_info.get("title", "Unknown Title")}]
-                    else:
-                        logger.error("❌ Extracted video info does not contain a URL.")
-                        return None
+                    return [{"url": video_info["url"], "title": video_info.get("title", "Unknown Title")}] if "url" in video_info else None
                 else:
-                    logger.info(f"🔍 Searching YouTube for: {query}")
                     search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
-
-                    if search_result and "entries" in search_result and len(search_result["entries"]) > 0:
-                        video_info = search_result["entries"][0]
-                        logger.info(f"✅ Found search result: {video_info.get('title', 'Unknown')}")
-                        return [{"url": video_info["url"], "title": video_info["title"]}]
-                    else:
-                        logger.error("❌ No search results found.")
-                        return None
+                    return [{"url": search_result["entries"][0]["url"], "title": search_result["entries"][0]["title"]}] if search_result and "entries" in search_result else None
         except youtube_dl.DownloadError as e:
             logger.error(f"❌ YouTube-DL error: {e}")
             return None
 
+    def create_music_controls(self, guild_id):
+        return MusicControls(self.bot, guild_id)
 
-    @nextcord.slash_command(name="queue", description="Displays the current queue.")
-    async def queue(self, interaction: nextcord.Interaction):
-        guild_id = interaction.guild.id
-        if guild_id not in self.queue or self.queue[guild_id].empty():
-            return await interaction.response.send_message("The queue is empty.", ephemeral=True)
 
-        queue_list = "\n".join([f"{index + 1}. {song[1]}" for index, song in enumerate(self.queue[guild_id]._queue)])
-        await interaction.response.send_message(f"Current Queue:\n{queue_list}")
+class MusicControls(View):
+    def __init__(self, bot, guild_id):
+        super().__init__()
+        self.bot = bot
+        self.guild_id = guild_id
 
-    @nextcord.slash_command(name="clear", description="Clear the entire queue.")
-    async def clear(self, interaction: nextcord.Interaction):
-        guild_id = interaction.guild.id
-        if guild_id in self.queue:
-            self.queue[guild_id] = asyncio.Queue()
-            await interaction.response.send_message("The queue has been cleared.")
-        else:
-            await interaction.response.send_message("The queue is already empty.", ephemeral=True)
+    @nextcord.ui.button(label="QUEUE", style=nextcord.ButtonStyle.green)
+    async def queue(self, button: Button, interaction: nextcord.Interaction):
+        await interaction.response.send_message("/queue command placeholder", ephemeral=True)
 
+    @nextcord.ui.button(label="PAUSE/RESUME", style=nextcord.ButtonStyle.gray)
+    async def pause_resume(self, button: Button, interaction: nextcord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.pause()
+            await interaction.response.send_message("⏸️ Paused the song.")
+        elif vc and vc.is_paused():
+            vc.resume()
+            await interaction.response.send_message("▶️ Resumed the song.")
+
+    @nextcord.ui.button(label="SKIP", style=nextcord.ButtonStyle.green)
+    async def skip(self, button: Button, interaction: nextcord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()
+            await interaction.response.send_message("⏭️ Skipped the song.")
+
+    @nextcord.ui.button(label="STOP", style=nextcord.ButtonStyle.red)
+    async def stop(self, button: Button, interaction: nextcord.Interaction):
+        if interaction.guild.voice_client:
+            await interaction.guild.voice_client.disconnect()
+            await interaction.response.send_message("⏹️ Stopped playback.")
 
 def setup(bot):
     bot.add_cog(Music(bot))
-
-
