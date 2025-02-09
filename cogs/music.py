@@ -12,7 +12,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
@@ -41,13 +41,13 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="play", description="Play a song from YouTube.")
     async def play(self, interaction: nextcord.Interaction, search: str):
-        # Defer the response so the bot doesn't show "thinking" indefinitely.
+        # Defer the response to avoid the "thinking..." state.
         await interaction.response.defer()
         if not await self.ensure_voice(interaction):
             return
 
         guild_id = interaction.guild.id
-        # Save the channel to use for sending/updating the player message.
+        # Save the channel where the command was issued so the persistent message is sent there.
         self.player_channels[guild_id] = interaction.channel
 
         result = await self.download_youtube_audio(search)
@@ -55,7 +55,7 @@ class Music(commands.Cog):
             await interaction.followup.send("❌ Could not find the video.")
             return
 
-        # Enqueue each item (typically one video).
+        # Enqueue each song (typically one video).
         for item in result:
             await self.queue.setdefault(guild_id, asyncio.Queue()).put(item)
 
@@ -68,7 +68,7 @@ class Music(commands.Cog):
     async def play_next(self, guild_id, interaction: nextcord.Interaction = None):
         """Retrieve the next song in the queue and play it."""
         if guild_id not in self.queue or self.queue[guild_id].empty():
-            # Optionally, you can update the persistent message to say the queue is empty.
+            logger.info("Queue is empty, nothing to play next.")
             return
 
         guild = self.bot.get_guild(guild_id)
@@ -81,7 +81,7 @@ class Music(commands.Cog):
         await self.play_song(guild.voice_client, item, interaction)
 
     async def play_song(self, voice_client, item, interaction: nextcord.Interaction = None):
-        """Play the song, update (or create) the persistent player message, and add controls."""
+        """Play the song, send/update the persistent player message, and add controls."""
         url = item.get("url")
         title = item.get("title")
         thumbnail = item.get("thumbnail")
@@ -97,7 +97,7 @@ class Music(commands.Cog):
         )
         logger.info(f"Now playing: {title}")
 
-        # Shorten the title for display if it is too long.
+        # Shorten title if it is too long.
         title_display = title[:100] + "..." if len(title) > 100 else title
 
         embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.green())
@@ -109,15 +109,16 @@ class Music(commands.Cog):
 
         view = self.create_music_controls()
 
-        # Update the persistent player message if it exists; otherwise, send a new one.
+        # Use the stored channel (or fallback) to send/update the persistent player message.
         guild_id = voice_client.guild.id
         if guild_id in self.player_messages:
             try:
                 await self.player_messages[guild_id].edit(embed=embed, view=view)
+                logger.info("Updated persistent player message.")
             except Exception as e:
                 logger.error(f"Error editing player message: {e}")
         else:
-            # Use the stored channel from the command; fallback to system_channel or the first text channel.
+            # Determine the channel in which to send the message.
             channel = self.player_channels.get(guild_id)
             if not channel:
                 if voice_client.guild.system_channel:
@@ -127,10 +128,11 @@ class Music(commands.Cog):
             try:
                 msg = await channel.send(embed=embed, view=view)
                 self.player_messages[guild_id] = msg
+                logger.info("Sent new persistent player message.")
             except Exception as e:
                 logger.error(f"Error sending player message: {e}")
 
-        # If the original interaction is still available, update it.
+        # Update the original deferred message to let the user know the command was processed.
         if interaction:
             try:
                 await interaction.edit_original_message(content="Now playing:")
@@ -159,7 +161,7 @@ class Music(commands.Cog):
         """
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", "/home/alex/Documents/youtube_cookies.txt")
         if cookie_file and not os.path.exists(cookie_file):
-            logger.warning(f"⚠️ Cookie file not found: {cookie_file}. Continuing without it.")
+            logger.warning(f"Cookie file not found: {cookie_file}. Continuing without cookies.")
             cookie_file = None
 
         ydl_opts = {
@@ -202,6 +204,7 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
