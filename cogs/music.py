@@ -60,40 +60,40 @@ class Music(commands.Cog):
         await self.update_activity(interaction.guild.id)
         return True
 
-    @nextcord.slash_command(name="play", description="Play a song from YouTube.")
-    async def play(self, interaction: nextcord.Interaction, search: str):
-        await interaction.response.defer()
-        if not await self.ensure_voice(interaction):
-            return
+        @nextcord.slash_command(name="play", description="Play a song from YouTube.")
+        async def play(self, interaction: nextcord.Interaction, search: str):
+            await interaction.response.defer()
+            if not await self.ensure_voice(interaction):
+                return
 
-        guild_id = interaction.guild.id
-        result = await self.download_youtube_audio(search)
-        if result is None:
-            await interaction.followup.send("❌ Could not find the video.")
-            return
+            guild_id = interaction.guild.id
+            result = await self.download_youtube_audio(search)
+            if result is None:
+                await interaction.followup.send("❌ Could not find the video.")
+                return
 
-        for item in result:
-            await self.queue[guild_id].put((item["url"], item["title"]))
+            for item in result:
+                await self.queue[guild_id].put((item["url"], item["title"]))
 
-        if not interaction.guild.voice_client.is_playing():
-            await self.play_next(guild_id)
+            if not interaction.guild.voice_client.is_playing():
+                await self.play_next(guild_id)
 
-        # Extract video details
-        video_url = result[0]["url"]
-        title = result[0]["title"]
-        thumbnail_url = f"https://img.youtube.com/vi/{video_url.split('=')[-1]}/hqdefault.jpg"
-        song_duration = "Unknown"  # yt-dlp doesn't always provide duration
-        artist = "Unknown"  # yt-dlp doesn't always provide artist
+            # Extract video details
+            video_url = result[0]["url"]
+            title = result[0]["title"]
+            thumbnail_url = f"https://img.youtube.com/vi/{video_url.split('=')[-1]}/hqdefault.jpg"
+            song_duration = "Unknown"  # yt-dlp doesn't always provide duration
+            artist = "Unknown"  # yt-dlp doesn't always provide artist
 
-        # Create the embed
-        embed = Embed(title="🎵 Now Playing", color=0x3498db)
-        embed.set_thumbnail(url=thumbnail_url)
-        embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})", inline=False)
-        embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
-        embed.add_field(name="🎤 Artist", value=artist, inline=True)
-        embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
+            # Create the embed
+            embed = Embed(title="🎵 Now Playing", color=0x3498db)
+            embed.set_thumbnail(url=thumbnail_url)
+            embed.add_field(name="🎶 Song", value=f"[{title}]({video_url})", inline=False)
+            embed.add_field(name="⏳ Duration", value=f"**({song_duration})**", inline=True)
+            embed.add_field(name="🎤 Artist", value=artist, inline=True)
+            embed.set_footer(text=f"Requested by {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
 
-        await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
+            await interaction.followup.send(embed=embed, view=self.create_music_controls(guild_id))
 
     async def play_next(self, guild_id):
         """Plays the next song in the queue."""
