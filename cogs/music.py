@@ -16,68 +16,71 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+# This view defines the music controls.
 class MusicControls(nextcord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)  # Set timeout=None to make the view persistent if needed
+    def __init__(self, cog):
+        super().__init__(timeout=None)  # Persistent view (no timeout)
+        self.cog = cog
 
     @nextcord.ui.button(label="QUEUE", style=nextcord.ButtonStyle.green, custom_id="queue")
     async def queue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Replace this with your actual queue logic
-        await interaction.response.send_message("Queue functionality not implemented yet.", ephemeral=True)
+        await self.cog.show_queue(interaction)
 
     @nextcord.ui.button(label="BACK", style=nextcord.ButtonStyle.green, custom_id="back")
     async def back_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Back functionality not implemented yet.", ephemeral=True)
+        await self.cog.back_track(interaction)
 
     @nextcord.ui.button(label="⏯ Pause/Resume", style=nextcord.ButtonStyle.grey, custom_id="pause_resume")
     async def pause_resume_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Pause/Resume functionality not implemented yet.", ephemeral=True)
+        await self.cog.toggle_pause_resume(interaction)
 
     @nextcord.ui.button(label="SKIP", style=nextcord.ButtonStyle.green, custom_id="skip")
     async def skip_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Skip functionality not implemented yet.", ephemeral=True)
+        await self.cog.skip_track(interaction)
 
     @nextcord.ui.button(label="AUTOPLAY", style=nextcord.ButtonStyle.green, custom_id="autoplay")
     async def autoplay_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Autoplay functionality not implemented yet.", ephemeral=True)
+        await self.cog.toggle_autoplay(interaction)
 
     @nextcord.ui.button(label="LOOP", style=nextcord.ButtonStyle.green, custom_id="loop")
     async def loop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Loop functionality not implemented yet.", ephemeral=True)
+        await self.cog.toggle_loop(interaction)
 
     @nextcord.ui.button(label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind")
     async def rewind_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Rewind functionality not implemented yet.", ephemeral=True)
+        await self.cog.rewind_track(interaction)
 
     @nextcord.ui.button(label="🛑 STOP", style=nextcord.ButtonStyle.red, custom_id="stop")
     async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Stop functionality not implemented yet.", ephemeral=True)
+        await self.cog.stop_track(interaction)
 
     @nextcord.ui.button(label="FORWARD", style=nextcord.ButtonStyle.green, custom_id="forward")
     async def forward_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Forward functionality not implemented yet.", ephemeral=True)
+        await self.cog.forward_track(interaction)
 
     @nextcord.ui.button(label="REPLAY", style=nextcord.ButtonStyle.green, custom_id="replay")
     async def replay_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await interaction.response.send_message("Replay functionality not implemented yet.", ephemeral=True)
+        await self.cog.replay_track(interaction)
 
 
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.queue = {}  # Maps guild_id to an asyncio.Queue of songs.
-        self.player_messages = {}  # Maps guild_id to the persistent player message.
-        self.player_channels = {}  # Maps guild_id to the channel where the player message is sent.
+        self.queue = {}            # guild_id -> asyncio.Queue of song items
+        self.player_messages = {}  # guild_id -> persistent player message
+        self.player_channels = {}  # guild_id -> channel to send the persistent message
+        self.loop_mode = {}        # guild_id -> bool (True if looping current track)
+        self.autoplay_mode = {}    # guild_id -> bool (toggle autoplay)
+        self.current_track = {}    # guild_id -> current track (dict)
+        self.history = {}          # guild_id -> list of previously played tracks
 
     async def ensure_voice(self, interaction: nextcord.Interaction):
-        """Ensure the bot joins the user's voice channel."""
         if interaction.user.voice is None:
             await interaction.followup.send(
-                f"{interaction.user.display_name}, you are not in a voice channel.", 
+                f"{interaction.user.display_name}, you are not in a voice channel.",
                 ephemeral=True
             )
             return False
-
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
             await channel.connect()
@@ -87,13 +90,11 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="play", description="Play a song from YouTube.")
     async def play(self, interaction: nextcord.Interaction, search: str):
-        # Defer the response to avoid the "thinking..." state.
         await interaction.response.defer()
         if not await self.ensure_voice(interaction):
             return
 
         guild_id = interaction.guild.id
-        # Save the channel where the command was issued so the persistent message is sent there.
         self.player_channels[guild_id] = interaction.channel
 
         result = await self.download_youtube_audio(search)
@@ -101,18 +102,16 @@ class Music(commands.Cog):
             await interaction.followup.send("❌ Could not find the video.")
             return
 
-        # Enqueue each song (typically one video).
+        # Enqueue the song(s) (usually a single video)
         for item in result:
             await self.queue.setdefault(guild_id, asyncio.Queue()).put(item)
 
-        # If nothing is playing, start playback.
         if not interaction.guild.voice_client.is_playing():
             await self.play_next(guild_id, interaction)
         else:
             await interaction.followup.send(f"🎵 Added **{result[0]['title']}** to the queue.")
 
     async def play_next(self, guild_id, interaction: nextcord.Interaction = None):
-        """Retrieve the next song in the queue and play it."""
         if guild_id not in self.queue or self.queue[guild_id].empty():
             logger.info("Queue is empty, nothing to play next.")
             return
@@ -127,11 +126,9 @@ class Music(commands.Cog):
         await self.play_song(guild.voice_client, item, interaction)
 
     async def play_song(self, voice_client, item, interaction: nextcord.Interaction = None):
-        """
-        Play the song using FFmpeg and update the persistent player message with
-        an embed containing song details and music controls.
-        """
-        # Use the stream URL for playback and the webpage URL for display.
+        guild_id = voice_client.guild.id
+        self.current_track[guild_id] = item
+
         stream_url = item.get("stream_url")
         page_url = item.get("page_url")
         title = item.get("title")
@@ -142,28 +139,25 @@ class Music(commands.Cog):
             "options": "-vn"
         }
         source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
-        voice_client.play(
-            nextcord.PCMVolumeTransformer(source),
-            after=lambda e: self.bot.loop.create_task(self.play_next(voice_client.guild.id))
-        )
+
+        def after_callback(error):
+            if self.loop_mode.get(guild_id, False):
+                # Replay the same track
+                self.bot.loop.create_task(self.play_song(voice_client, item))
+            else:
+                self.bot.loop.create_task(self.play_next(guild_id))
+        voice_client.play(nextcord.PCMVolumeTransformer(source), after=after_callback)
         logger.info(f"Now playing: {title}")
 
-        # Shorten title if it is too long.
         title_display = title[:100] + "..." if len(title) > 100 else title
-
         embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.green())
         embed.add_field(name="🎵 Title", value=title_display[:1024], inline=False)
-        # Use the shorter webpage URL in the embed field to stay within limits.
         embed.add_field(name="🔗 URL", value=f"[Click Here]({page_url})", inline=False)
         embed.set_footer(text="Song By: Manu Chao | Esperanza")
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
 
-        # Use the new MusicControls view with defined callbacks
-        view = MusicControls()
-
-        # Use the stored channel (or fallback) to send/update the persistent player message.
-        guild_id = voice_client.guild.id
+        view = MusicControls(self)
         if guild_id in self.player_messages:
             try:
                 await self.player_messages[guild_id].edit(embed=embed, view=view)
@@ -171,7 +165,6 @@ class Music(commands.Cog):
             except Exception as e:
                 logger.error(f"Error editing player message: {e}")
         else:
-            # Determine the channel in which to send the message.
             channel = self.player_channels.get(guild_id)
             if not channel:
                 if voice_client.guild.system_channel:
@@ -185,7 +178,6 @@ class Music(commands.Cog):
             except Exception as e:
                 logger.error(f"Error sending player message: {e}")
 
-        # Update the original deferred message to let the user know the command was processed.
         if interaction:
             try:
                 await interaction.edit_original_message(content="Now playing:")
@@ -193,11 +185,6 @@ class Music(commands.Cog):
                 logger.error(f"Error editing original interaction message: {e}")
 
     async def download_youtube_audio(self, query):
-        """
-        Retrieves video information from YouTube (using cookies if available) and returns a list
-        of dictionaries containing the stream URL (for FFmpeg), the webpage URL (for display),
-        the title, and the thumbnail.
-        """
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", "/home/alex/Documents/youtube_cookies.txt")
         if cookie_file and not os.path.exists(cookie_file):
             logger.warning(f"Cookie file not found: {cookie_file}. Continuing without cookies.")
@@ -211,7 +198,6 @@ class Music(commands.Cog):
             "geo_bypass": True,
             "nocheckcertificate": True
         }
-
         url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
         try:
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
@@ -239,8 +225,120 @@ class Music(commands.Cog):
             logger.error(f"YouTube-DL error: {e}")
             return None
 
+    # ----- Actual functionality for the buttons -----
+
+    async def toggle_pause_resume(self, interaction: nextcord.Interaction):
+        voice_client = interaction.guild.voice_client
+        if voice_client is None:
+            await interaction.response.send_message("Not connected to a voice channel.")
+            return
+        if voice_client.is_paused():
+            voice_client.resume()
+            await interaction.response.send_message("Resumed playback.")
+        elif voice_client.is_playing():
+            voice_client.pause()
+            await interaction.response.send_message("Paused playback.")
+        else:
+            await interaction.response.send_message("Nothing is playing.")
+
+    async def skip_track(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        voice_client = interaction.guild.voice_client
+        if voice_client is None:
+            await interaction.response.send_message("Not connected to a voice channel.")
+            return
+        # Save current track to history (if available)
+        if guild_id in self.current_track:
+            self.history.setdefault(guild_id, []).append(self.current_track[guild_id])
+        voice_client.stop()
+        await interaction.response.send_message("Skipped track.")
+
+    async def stop_track(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        voice_client = interaction.guild.voice_client
+        if voice_client is None:
+            await interaction.response.send_message("Not connected to a voice channel.")
+            return
+        voice_client.stop()
+        if guild_id in self.queue:
+            while not self.queue[guild_id].empty():
+                try:
+                    self.queue[guild_id].get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+        await interaction.response.send_message("Stopped playback and cleared the queue.")
+
+    async def show_queue(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        if guild_id not in self.queue or self.queue[guild_id].empty():
+            await interaction.response.send_message("The queue is empty.")
+            return
+        # Access the internal _queue list (note: this is not an official API)
+        queue_list = list(self.queue[guild_id]._queue)
+        description = ""
+        for i, item in enumerate(queue_list, start=1):
+            description += f"{i}. {item.get('title')}\n"
+        embed = nextcord.Embed(title="Queue", description=description, color=nextcord.Color.blue())
+        await interaction.response.send_message(embed=embed)
+
+    async def toggle_loop(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        current = self.loop_mode.get(guild_id, False)
+        self.loop_mode[guild_id] = not current
+        status = "enabled" if self.loop_mode[guild_id] else "disabled"
+        await interaction.response.send_message(f"Loop mode {status}.")
+
+    async def toggle_autoplay(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        current = self.autoplay_mode.get(guild_id, False)
+        self.autoplay_mode[guild_id] = not current
+        status = "enabled" if self.autoplay_mode[guild_id] else "disabled"
+        await interaction.response.send_message(f"Autoplay {status}.")
+
+    async def rewind_track(self, interaction: nextcord.Interaction):
+        # For simplicity, rewinding restarts the current track.
+        guild_id = interaction.guild.id
+        voice_client = interaction.guild.voice_client
+        if guild_id not in self.current_track:
+            await interaction.response.send_message("No track is currently playing.")
+            return
+        item = self.current_track[guild_id]
+        voice_client.stop()
+        await self.play_song(voice_client, item, interaction)
+        await interaction.response.send_message("Rewound the track (restarted).")
+
+    async def forward_track(self, interaction: nextcord.Interaction):
+        # Here, "forward" is implemented as a skip.
+        await self.skip_track(interaction)
+
+    async def replay_track(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        voice_client = interaction.guild.voice_client
+        if guild_id not in self.current_track:
+            await interaction.response.send_message("No track is currently playing.")
+            return
+        item = self.current_track[guild_id]
+        voice_client.stop()
+        await self.play_song(voice_client, item, interaction)
+        await interaction.response.send_message("Replaying the track.")
+
+    async def back_track(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        if guild_id not in self.history or not self.history[guild_id]:
+            await interaction.response.send_message("No previous track available.")
+            return
+        previous = self.history[guild_id].pop()
+        voice_client = interaction.guild.voice_client
+        if voice_client is None:
+            await interaction.response.send_message("Not connected to a voice channel.")
+            return
+        voice_client.stop()
+        await self.play_song(voice_client, previous, interaction)
+        await interaction.response.send_message("Playing previous track.")
+
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
