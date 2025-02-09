@@ -5,7 +5,6 @@ import logging
 import os
 from dotenv import load_dotenv
 import asyncio
-import platform
 from urllib.parse import urlparse
 import time
 
@@ -28,9 +27,10 @@ class Music(commands.Cog):
             if time.monotonic() - self.last_activity_time[guild_id] > self.inactivity_timeout:
                 if guild := self.bot.get_guild(guild_id):
                     if guild.voice_client and guild.voice_client.is_connected():
-                        await guild.voice_client.disconnect()
-                        logger.info(f"Disconnected from {guild.name} due to inactivity.")
-                        self.last_activity_time.pop(guild_id, None)
+                        if not guild.voice_client.is_playing() and not self.queue:
+                            await guild.voice_client.disconnect()
+                            logger.info(f"Disconnected from {guild.name} due to inactivity.")
+                            self.last_activity_time.pop(guild_id, None)
                 return
             await asyncio.sleep(10)
 
@@ -74,16 +74,18 @@ class Music(commands.Cog):
             return
 
         try:
-            url, title = await self.download_youtube_audio(search)
-            if url is None:
+            result = await self.download_youtube_audio(search)
+            if result is None:
                 await interaction.followup.send(f"Could not download the video.")
                 return
 
-            self.queue.append((url, title))
+            for item in result:
+                self.queue.append((item["url"], item["title"]))
+
             if not interaction.guild.voice_client.is_playing():
                 await self.play_next(interaction)
             else:
-                await interaction.followup.send(f"Added {title} to the queue.")
+                await interaction.followup.send(f"Added {result[0]['title']} to the queue.")
         except Exception as e:
             logger.error(f"Error in play command: {e}")
             await interaction.followup.send("An unexpected error occurred.")
@@ -149,7 +151,6 @@ class Music(commands.Cog):
                 else:
                     return None
         return None
-   
 
     @nextcord.slash_command(name="pause", description="Pause the currently playing song.", guild_ids=[761070952674230292])
     async def pause(self, interaction: nextcord.Interaction):
