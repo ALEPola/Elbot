@@ -6,6 +6,7 @@ import os
 import re
 import asyncio
 from dotenv import load_dotenv
+import functools
 
 # Load environment variables
 load_dotenv()
@@ -16,7 +17,37 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# Updated persistent view with the new button order and without BACK and AUTOPLAY.
+# Helper function to extract YouTube info; this is blocking.
+def extract_info(query, ydl_opts, cookie_file):
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
+        if url_pattern.match(query):
+            logger.info(f"Extracting direct URL: {query}")
+            video_info = ydl.extract_info(query, download=False)
+            return [{
+                "stream_url": video_info.get("url"),
+                "page_url": video_info.get("webpage_url"),
+                "title": video_info.get("title"),
+                "thumbnail": video_info.get("thumbnail"),
+                "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
+                "uploader": video_info.get("uploader")
+            }]
+        else:
+            logger.info(f"Searching YouTube for: {query}")
+            search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
+            if search_result and "entries" in search_result and len(search_result["entries"]) > 0:
+                video_info = search_result["entries"][0]
+                return [{
+                    "stream_url": video_info.get("url"),
+                    "page_url": video_info.get("webpage_url"),
+                    "title": video_info.get("title"),
+                    "thumbnail": video_info.get("thumbnail"),
+                    "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
+                    "uploader": video_info.get("uploader")
+                }]
+    return None
+
+# Updated persistent view with buttons for controlling playback.
 class MusicControls(nextcord.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)  # Persistent view (no timeout)
@@ -54,7 +85,6 @@ class MusicControls(nextcord.ui.View):
     async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         await self.cog.stop_track(interaction)
 
-
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -89,6 +119,7 @@ class Music(commands.Cog):
         guild_id = interaction.guild.id
         self.player_channels[guild_id] = interaction.channel
 
+        # Offload the blocking extraction to another thread.
         result = await self.download_youtube_audio(search)
         if result is None:
             await interaction.followup.send("❌ Could not find the video.")
@@ -189,69 +220,42 @@ class Music(commands.Cog):
             "geo_bypass": True,
             "nocheckcertificate": True
         }
-        url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
-        try:
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                if url_pattern.match(query):
-                    logger.info(f"Extracting direct URL: {query}")
-                    video_info = ydl.extract_info(query, download=False)
-                    return [{
-                        "stream_url": video_info.get("url"),
-                        "page_url": video_info.get("webpage_url"),
-                        "title": video_info.get("title"),
-                        "thumbnail": video_info.get("thumbnail"),
-                        "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
-                        "uploader": video_info.get("uploader")
-                    }]
-                else:
-                    logger.info(f"Searching YouTube for: {query}")
-                    search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
-                    if search_result and "entries" in search_result and len(search_result["entries"]) > 0:
-                        video_info = search_result["entries"][0]
-                        return [{
-                            "stream_url": video_info.get("url"),
-                            "page_url": video_info.get("webpage_url"),
-                            "title": video_info.get("title"),
-                            "thumbnail": video_info.get("thumbnail"),
-                            "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
-                            "uploader": video_info.get("uploader")
-                        }]
-        except youtube_dl.DownloadError as e:
-            logger.error(f"YouTube-DL error: {e}")
-            return None
+        # Run the blocking extraction in a separate thread.
+        result = await asyncio.to_thread(extract_info, query, ydl_opts, cookie_file)
+        return result
 
     # ----- Button Functionality -----
 
     async def toggle_pause_resume(self, interaction: nextcord.Interaction):
         voice_client = interaction.guild.voice_client
         if voice_client is None:
-            await interaction.response.send_message("Not connected to a voice channel.")
+            await interaction.response.send_message("Not connected to a voice channel.", ephemeral=True)
             return
         if voice_client.is_paused():
             voice_client.resume()
-            await interaction.response.send_message("Resumed playback.")
+            await interaction.response.send_message("Resumed playback.", ephemeral=True)
         elif voice_client.is_playing():
             voice_client.pause()
-            await interaction.response.send_message("Paused playback.")
+            await interaction.response.send_message("Paused playback.", ephemeral=True)
         else:
-            await interaction.response.send_message("Nothing is playing.")
+            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
 
     async def skip_track(self, interaction: nextcord.Interaction):
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if voice_client is None:
-            await interaction.response.send_message("Not connected to a voice channel.")
+            await interaction.response.send_message("Not connected to a voice channel.", ephemeral=True)
             return
         if guild_id in self.current_track:
             self.history.setdefault(guild_id, []).append(self.current_track[guild_id])
         voice_client.stop()
-        await interaction.response.send_message("Skipped track.")
+        await interaction.response.send_message("Skipped track.", ephemeral=True)
 
     async def stop_track(self, interaction: nextcord.Interaction):
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if voice_client is None:
-            await interaction.response.send_message("Not connected to a voice channel.")
+            await interaction.response.send_message("Not connected to a voice channel.", ephemeral=True)
             return
         voice_client.stop()
         if guild_id in self.queue:
@@ -260,36 +264,37 @@ class Music(commands.Cog):
                     self.queue[guild_id].get_nowait()
                 except asyncio.QueueEmpty:
                     break
-        await interaction.response.send_message("Stopped playback and cleared the queue.")
+        await interaction.response.send_message("Stopped playback and cleared the queue.", ephemeral=True)
 
     async def show_queue(self, interaction: nextcord.Interaction):
         guild_id = interaction.guild.id
         if guild_id not in self.queue or self.queue[guild_id].empty():
-            await interaction.response.send_message("The queue is empty.")
+            await interaction.response.send_message("The queue is empty.", ephemeral=True)
             return
         queue_list = list(self.queue[guild_id]._queue)
         description = ""
         for i, item in enumerate(queue_list, start=1):
             description += f"{i}. {item.get('title')}\n"
         embed = nextcord.Embed(title="Queue", description=description, color=nextcord.Color.blue())
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def toggle_loop(self, interaction: nextcord.Interaction):
         guild_id = interaction.guild.id
         current = self.loop_mode.get(guild_id, False)
         self.loop_mode[guild_id] = not current
         status = "enabled" if self.loop_mode[guild_id] else "disabled"
-        await interaction.response.send_message(f"Loop mode {status}.")
+        await interaction.response.send_message(f"Loop mode {status}.", ephemeral=True)
 
     async def toggle_autoplay(self, interaction: nextcord.Interaction):
         guild_id = interaction.guild.id
         current = self.autoplay_mode.get(guild_id, False)
         self.autoplay_mode[guild_id] = not current
         status = "enabled" if self.autoplay_mode[guild_id] else "disabled"
-        await interaction.response.send_message(f"Autoplay {status}.")
+        await interaction.response.send_message(f"Autoplay {status}.", ephemeral=True)
 
     async def rewind_track(self, interaction: nextcord.Interaction):
-        await interaction.response.defer()  # Acknowledge immediately
+        # Defer the response so Discord knows you're processing the interaction.
+        await interaction.response.defer()
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if guild_id not in self.current_track:
@@ -300,23 +305,24 @@ class Music(commands.Cog):
         await self.play_song(voice_client, item, interaction)
         await interaction.followup.send("Rewound the track (restarted).", ephemeral=True)
 
-
     async def forward_track(self, interaction: nextcord.Interaction):
         await self.skip_track(interaction)
 
     async def replay_track(self, interaction: nextcord.Interaction):
+        await interaction.response.defer()
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if guild_id not in self.current_track:
-            await interaction.response.send_message("No track is currently playing.")
+            await interaction.followup.send("No track is currently playing.", ephemeral=True)
             return
         item = self.current_track[guild_id]
         voice_client.stop()
         await self.play_song(voice_client, item, interaction)
-        await interaction.response.send_message("Replaying the track.")
+        await interaction.followup.send("Replaying the track.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
