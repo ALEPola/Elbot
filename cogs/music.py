@@ -119,12 +119,21 @@ class Music(commands.Cog):
         logger.info(f"Now playing: {title}")
 
     async def download_youtube_audio(self, query):
-        """Downloads the best audio format from YouTube."""
+        """Downloads the best audio format from YouTube, using cookies for authentication."""
+        cookie_file = os.getenv('YOUTUBE_COOKIES_PATH', '/home/alex/Documents/youtube_cookies.txt')
+
+        # Check if the cookie file exists before using it
+        if not os.path.exists(cookie_file):
+            logger.error(f"❌ Cookie file not found: {cookie_file}")
+            return None
+
         ydl_opts = {
             'format': 'bestaudio',
-            'quiet': True,
+            'quiet': False,  # Debugging enabled
             'noplaylist': False,
-            'cookies': os.getenv('YOUTUBE_COOKIES_PATH', '/home/alex/Documents/youtube_cookies.txt'),
+            'cookies': cookie_file,  # Use the cookie file
+            'geo_bypass': True,  # Helps with region-locked videos
+            'nocheckcertificate': True  # Bypass SSL issues
         }
 
         url_pattern = re.compile(r'https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+')
@@ -132,16 +141,31 @@ class Music(commands.Cog):
         try:
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 if url_pattern.match(query):
+                    logger.info(f"🔎 Extracting direct URL: {query}")
                     video_info = ydl.extract_info(query, download=False)
-                    return [{"url": video_info["url"], "title": video_info["title"]}]
+                    
+                    # Ensure video_info contains a URL
+                    if "url" in video_info:
+                        logger.info(f"✅ Successfully extracted video: {video_info.get('title', 'Unknown')}")
+                        return [{"url": video_info["url"], "title": video_info.get("title", "Unknown Title")}]
+                    else:
+                        logger.error("❌ Extracted video info does not contain a URL.")
+                        return None
                 else:
+                    logger.info(f"🔍 Searching YouTube for: {query}")
                     search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
+
                     if search_result and "entries" in search_result and len(search_result["entries"]) > 0:
                         video_info = search_result["entries"][0]
+                        logger.info(f"✅ Found search result: {video_info.get('title', 'Unknown')}")
                         return [{"url": video_info["url"], "title": video_info["title"]}]
+                    else:
+                        logger.error("❌ No search results found.")
+                        return None
         except youtube_dl.DownloadError as e:
-            logger.error(f"Error extracting info from YouTube: {e}")
+            logger.error(f"❌ YouTube-DL error: {e}")
             return None
+
 
     @nextcord.slash_command(name="queue", description="Displays the current queue.")
     async def queue(self, interaction: nextcord.Interaction):
