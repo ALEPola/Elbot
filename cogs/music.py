@@ -289,15 +289,17 @@ class Music(commands.Cog):
         await interaction.response.send_message(f"Autoplay {status}.")
 
     async def rewind_track(self, interaction: nextcord.Interaction):
+        await interaction.response.defer()  # Acknowledge immediately
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if guild_id not in self.current_track:
-            await interaction.response.send_message("No track is currently playing.")
+            await interaction.followup.send("No track is currently playing.", ephemeral=True)
             return
         item = self.current_track[guild_id]
         voice_client.stop()
         await self.play_song(voice_client, item, interaction)
-        await interaction.response.send_message("Rewound the track (restarted).")
+        await interaction.followup.send("Rewound the track (restarted).", ephemeral=True)
+
 
     async def forward_track(self, interaction: nextcord.Interaction):
         await self.skip_track(interaction)
