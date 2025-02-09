@@ -84,9 +84,10 @@ class Music(commands.Cog):
         title = title[:100] + "..." if len(title) > 100 else title
 
         # ✅ FIX: Ensure embed fields are under 1024 chars
-        embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.blue())
+        embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.green())
         embed.add_field(name="🎵 Title", value=title[:1024], inline=False)
         embed.add_field(name="🔗 URL", value=f"[Click Here]({url})", inline=False)
+        embed.set_footer(text="Song By: Manu Chao | Esperanza")
 
         # Send message with controls
         view = self.create_music_controls()
@@ -95,10 +96,18 @@ class Music(commands.Cog):
     def create_music_controls(self):
         """Creates a view with music player buttons."""
         view = nextcord.ui.View()
+        view.add_item(nextcord.ui.Button(label="QUEUE", custom_id="queue", style=nextcord.ButtonStyle.green))
+        view.add_item(nextcord.ui.Button(label="BACK", custom_id="back", style=nextcord.ButtonStyle.green))
         view.add_item(nextcord.ui.Button(label="⏯ Pause/Resume", custom_id="pause_resume", style=nextcord.ButtonStyle.grey))
-        view.add_item(nextcord.ui.Button(label="⏭ Skip", custom_id="skip", style=nextcord.ButtonStyle.green))
-        view.add_item(nextcord.ui.Button(label="🛑 Stop", custom_id="stop", style=nextcord.ButtonStyle.red))
+        view.add_item(nextcord.ui.Button(label="SKIP", custom_id="skip", style=nextcord.ButtonStyle.green))
+        view.add_item(nextcord.ui.Button(label="AUTOPLAY", custom_id="autoplay", style=nextcord.ButtonStyle.green))
+        view.add_item(nextcord.ui.Button(label="LOOP", custom_id="loop", style=nextcord.ButtonStyle.green))
+        view.add_item(nextcord.ui.Button(label="REWIND", custom_id="rewind", style=nextcord.ButtonStyle.green))
+        view.add_item(nextcord.ui.Button(label="🛑 STOP", custom_id="stop", style=nextcord.ButtonStyle.red))
+        view.add_item(nextcord.ui.Button(label="FORWARD", custom_id="forward", style=nextcord.ButtonStyle.green))
+        view.add_item(nextcord.ui.Button(label="REPLAY", custom_id="replay", style=nextcord.ButtonStyle.green))
         return view
+
 
     async def download_youtube_audio(self, query):
         """Downloads the best audio format from YouTube, using cookies for authentication."""
