@@ -17,7 +17,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# Helper function to extract YouTube info; this is blocking.
 def extract_info(query, ydl_opts, cookie_file):
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
@@ -47,10 +46,9 @@ def extract_info(query, ydl_opts, cookie_file):
                 }]
     return None
 
-# Updated persistent view with buttons for controlling playback.
 class MusicControls(nextcord.ui.View):
     def __init__(self, cog):
-        super().__init__(timeout=None)  # Persistent view (no timeout)
+        super().__init__(timeout=None)  # Persistent view
         self.cog = cog
 
     @nextcord.ui.button(label="QUEUE", style=nextcord.ButtonStyle.green, custom_id="queue")
@@ -98,10 +96,7 @@ class Music(commands.Cog):
 
     async def ensure_voice(self, interaction: nextcord.Interaction):
         if interaction.user.voice is None:
-            await interaction.followup.send(
-                f"{interaction.user.display_name}, you are not in a voice channel.",
-                ephemeral=True
-            )
+            await interaction.followup.send(f"{interaction.user.display_name}, you are not in a voice channel.", ephemeral=True)
             return False
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
@@ -119,8 +114,15 @@ class Music(commands.Cog):
         guild_id = interaction.guild.id
         self.player_channels[guild_id] = interaction.channel
 
-        # Offload the blocking extraction to another thread.
-        result = await self.download_youtube_audio(search)
+        # Offload blocking extraction to a separate thread
+        result = await asyncio.to_thread(extract_info, search, {
+            "format": "bestaudio",
+            "quiet": True,
+            "noplaylist": False,
+            "cookies": None,
+            "geo_bypass": True,
+            "nocheckcertificate": True
+        }, os.getenv("YOUTUBE_COOKIES_PATH", None))
         if result is None:
             await interaction.followup.send("❌ Could not find the video.")
             return
@@ -129,7 +131,8 @@ class Music(commands.Cog):
             await self.queue.setdefault(guild_id, asyncio.Queue()).put(item)
 
         if not interaction.guild.voice_client.is_playing():
-            await self.play_next(guild_id, interaction)
+            # Schedule playback in the background so it doesn't block the response
+            asyncio.create_task(self.play_next(guild_id, interaction))
         else:
             await interaction.followup.send(f"🎵 Added **{result[0]['title']}** to the queue.")
 
@@ -157,9 +160,10 @@ class Music(commands.Cog):
         thumbnail = item.get("thumbnail")
         artist = item.get("artist") or item.get("uploader") or "Unknown Artist"
 
+        # Optimize FFmpeg buffering options for smoother playback on a Raspberry Pi
         ffmpeg_opts = {
-            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn"
+            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -thread_queue_size 1024",
+            "options": "-vn -bufsize 1024k"
         }
         source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
 
@@ -200,7 +204,12 @@ class Music(commands.Cog):
             except Exception as e:
                 logger.error(f"Error sending player message: {e}")
 
-        # The original interaction message is no longer edited to prevent an extra "Now playing:" message.
+        # Delete the original deferred response so only the persistent player message remains.
+        if interaction:
+            try:
+                await interaction.delete_original_response()
+            except Exception as e:
+                logger.error(f"Error deleting original interaction response: {e}")
 
     async def download_youtube_audio(self, query):
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", "/home/alex/Documents/youtube_cookies.txt")
@@ -216,7 +225,6 @@ class Music(commands.Cog):
             "geo_bypass": True,
             "nocheckcertificate": True
         }
-        # Run the blocking extraction in a separate thread.
         result = await asyncio.to_thread(extract_info, query, ydl_opts, cookie_file)
         return result
 
@@ -268,9 +276,7 @@ class Music(commands.Cog):
             await interaction.response.send_message("The queue is empty.", ephemeral=True)
             return
         queue_list = list(self.queue[guild_id]._queue)
-        description = ""
-        for i, item in enumerate(queue_list, start=1):
-            description += f"{i}. {item.get('title')}\n"
+        description = "\n".join(f"{i}. {item.get('title')}" for i, item in enumerate(queue_list, start=1))
         embed = nextcord.Embed(title="Queue", description=description, color=nextcord.Color.blue())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -289,7 +295,6 @@ class Music(commands.Cog):
         await interaction.response.send_message(f"Autoplay {status}.", ephemeral=True)
 
     async def rewind_track(self, interaction: nextcord.Interaction):
-        # Defer the response so Discord knows you're processing the interaction.
         await interaction.response.defer()
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
@@ -318,6 +323,8 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
+
 
 
 
