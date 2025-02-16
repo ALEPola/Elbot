@@ -23,7 +23,7 @@ async def on_ready():
 
 # Load Cogs
 if __name__ == "__main__":
-    initial_extensions = ['cogs.chat', 'cogs.music', 'cogs.dalle']  # Add your cogs here
+    initial_extensions = ['cogs.chat', 'cogs.music', 'cogs.dalle', 'localization.py', 'help.py']  # Add your cogs here
 
     for extension in initial_extensions:
         try:
