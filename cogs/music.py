@@ -200,11 +200,7 @@ class Music(commands.Cog):
             except Exception as e:
                 logger.error(f"Error sending player message: {e}")
 
-        if interaction:
-            try:
-                await interaction.edit_original_message(content="Now playing:")
-            except Exception as e:
-                logger.error(f"Error editing original interaction message: {e}")
+        # The original interaction message is no longer edited to prevent an extra "Now playing:" message.
 
     async def download_youtube_audio(self, query):
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", "/home/alex/Documents/youtube_cookies.txt")
@@ -322,6 +318,7 @@ class Music(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
