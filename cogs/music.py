@@ -51,7 +51,7 @@ def extract_info(query, ydl_opts, cookie_file):
                 }]
     return None
 
-# Updated persistent view for music controls
+# Persistent view for music controls.
 class MusicControls(nextcord.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)
@@ -185,7 +185,7 @@ class Music(commands.Cog):
         voice_client.play(transformer, after=after_callback)
         logger.info(f"Now playing: {title}")
 
-        # Build initial embed with progress bar
+        # Build the embed with progress bar.
         progress_bar = self.create_progress_bar(0, duration) if duration else "N/A"
         embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.green())
         embed.add_field(name="🎵 Title", value=title, inline=False)
@@ -196,26 +196,28 @@ class Music(commands.Cog):
             embed.set_thumbnail(url=thumbnail)
 
         view = MusicControls(self)
+
+        # Delete any previous persistent player message.
         if guild_id in self.player_messages:
             try:
-                await self.player_messages[guild_id].edit(embed=embed, view=view)
+                await self.player_messages[guild_id].delete()
+                logger.info("Deleted previous persistent player message.")
+                del self.player_messages[guild_id]
             except Exception as e:
-                logger.error(f"Error editing player message: {e}")
-        else:
-            channel = self.player_channels.get(guild_id)
-            if not channel:
-                channel = voice_client.guild.system_channel or voice_client.guild.text_channels[0]
-            try:
-                msg = await channel.send(embed=embed, view=view)
-                self.player_messages[guild_id] = msg
-            except Exception as e:
-                logger.error(f"Error sending player message: {e}")
+                logger.error(f"Error deleting previous player message: {e}")
 
-        if interaction:
-            try:
-                await interaction.edit_original_message(content="Now playing:")
-            except Exception as e:
-                logger.error(f"Error editing original interaction message: {e}")
+        # Send a new persistent player message.
+        channel = self.player_channels.get(guild_id)
+        if not channel:
+            channel = voice_client.guild.system_channel or voice_client.guild.text_channels[0]
+        try:
+            msg = await channel.send(embed=embed, view=view)
+            self.player_messages[guild_id] = msg
+            logger.info("Sent new persistent player message.")
+        except Exception as e:
+            logger.error(f"Error sending player message: {e}")
+
+        # Do not edit the original interaction message to avoid duplicate now playing messages.
 
         if duration:
             self.bot.loop.create_task(self.update_now_playing(guild_id, voice_client, duration))
@@ -271,8 +273,6 @@ class Music(commands.Cog):
         result = await asyncio.to_thread(extract_info, query, ydl_opts, cookie_file)
         return result
 
-    # ----- New Commands for Queue Management -----
-
     @nextcord.slash_command(name="remove_track", description="Remove a track from the queue by its position.")
     async def remove_track(self, interaction: nextcord.Interaction, index: int):
         guild_id = interaction.guild.id
@@ -320,8 +320,6 @@ class Music(commands.Cog):
             embed.add_field(name=f"{i}. {title}", value=f"Duration: {duration}\n[Link]({item.get('page_url')})", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # ----- Search and Select Interface -----
-
     async def search_youtube(self, query, max_results=5):
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", None)
         ydl_opts = {
@@ -360,8 +358,6 @@ class Music(commands.Cog):
         view = SearchSelectView(self, results)
         await interaction.followup.send("Select a track to add to the queue:", view=view, ephemeral=True)
 
-    # ----- Volume Control -----
-
     @nextcord.slash_command(name="volume", description="Adjust playback volume (0-150%).")
     async def volume(self, interaction: nextcord.Interaction, volume: int):
         if volume < 0 or volume > 150:
@@ -374,8 +370,6 @@ class Music(commands.Cog):
             return
         self.current_source[guild_id].volume = volume / 100.0
         await interaction.response.send_message(f"Volume set to {volume}%.", ephemeral=True)
-
-    # ----- Existing Playback Control Commands -----
 
     async def toggle_pause_resume(self, interaction: nextcord.Interaction):
         voice_client = interaction.guild.voice_client
@@ -444,7 +438,22 @@ class Music(commands.Cog):
         await self.play_song(voice_client, item, interaction)
         await interaction.followup.send("Replaying the track.", ephemeral=True)
 
-# ----- Dropdown View for Search Results -----
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        # Act only on the bot's own voice state changes.
+        if member.id != self.bot.user.id:
+            return
+
+        # When the bot disconnects from a voice channel.
+        if before.channel is not None and after.channel is None:
+            guild_id = member.guild.id
+            if guild_id in self.player_messages:
+                try:
+                    await self.player_messages[guild_id].delete()
+                    del self.player_messages[guild_id]
+                    logger.info("Deleted persistent player message because the bot disconnected from voice.")
+                except Exception as e:
+                    logger.error(f"Error deleting player message on disconnect: {e}")
 
 class SearchSelectView(nextcord.ui.View):
     def __init__(self, music_cog, results):
@@ -479,6 +488,8 @@ class SearchSelect(nextcord.ui.Select):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
+
 
 
 
