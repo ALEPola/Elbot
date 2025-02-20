@@ -115,7 +115,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="play", description="Play a song from YouTube.")
     async def play(self, interaction: nextcord.Interaction, search: str):
-        await interaction.response.defer()
+        await interaction.response.defer()  # Not ephemeral
         if not await self.ensure_voice(interaction):
             return
 
@@ -130,7 +130,9 @@ class Music(commands.Cog):
             "geo_bypass": True,
             "nocheckcertificate": True
         }
-        result = await asyncio.to_thread(extract_info, search, ydl_opts, os.getenv("YOUTUBE_COOKIES_PATH", None))
+        result = await asyncio.to_thread(
+            extract_info, search, ydl_opts, os.getenv("YOUTUBE_COOKIES_PATH", None)
+        )
         if result is None:
             await interaction.followup.send("❌ Could not find the video or unsupported service.", ephemeral=True)
             return
@@ -140,12 +142,18 @@ class Music(commands.Cog):
 
         if not interaction.guild.voice_client.is_playing():
             asyncio.create_task(self.play_next(guild_id, interaction))
+            await interaction.followup.send("Starting playback...", ephemeral=True)
         else:
-            await interaction.followup.send(f"🎵 Added **{result[0]['title']}** to the queue.", ephemeral=True)
+            await interaction.followup.send(
+                f"🎵 Added **{result[0]['title']}** to the queue.", 
+                ephemeral=True
+            )
 
     async def play_next(self, guild_id, interaction: nextcord.Interaction = None):
         if guild_id not in self.queue or self.queue[guild_id].empty():
             logger.info("Queue is empty, nothing to play next.")
+            if interaction is not None:
+                await interaction.followup.send("No more tracks in the queue.", ephemeral=True)
             return
 
         guild = self.bot.get_guild(guild_id)
@@ -218,7 +226,6 @@ class Music(commands.Cog):
             logger.error(f"Error sending player message: {e}")
 
         # Do not edit the original interaction message to avoid duplicate now playing messages.
-
         if duration:
             self.bot.loop.create_task(self.update_now_playing(guild_id, voice_client, duration))
 
@@ -438,6 +445,13 @@ class Music(commands.Cog):
         await self.play_song(voice_client, item, interaction)
         await interaction.followup.send("Replaying the track.", ephemeral=True)
 
+    async def toggle_loop(self, interaction: nextcord.Interaction):
+        guild_id = interaction.guild.id
+        current = self.loop_mode.get(guild_id, False)
+        self.loop_mode[guild_id] = not current
+        status = "enabled" if self.loop_mode[guild_id] else "disabled"
+        await interaction.response.send_message(f"Loop mode {status}.", ephemeral=True)
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         # Act only on the bot's own voice state changes.
@@ -488,6 +502,7 @@ class SearchSelect(nextcord.ui.Select):
 
 def setup(bot):
     bot.add_cog(Music(bot))
+
 
 
 
