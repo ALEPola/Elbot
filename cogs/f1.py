@@ -3,8 +3,12 @@ from nextcord.ext import commands, tasks
 import requests
 from datetime import datetime
 import pytz
+import os
+from dotenv import load_dotenv
 
-CHANNEL_ID = 1360675364271296674  # F1 updates go here
+load_dotenv()
+CHANNEL_ID = 1360675364271296674
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 class FormulaOne(commands.Cog):
     def __init__(self, bot):
@@ -12,7 +16,7 @@ class FormulaOne(commands.Cog):
         self.last_race_round = None
         self.check_race_updates.start()
 
-    @nextcord.slash_command(name="f1_next", description="Show next 3 Formula 1 races")
+    @nextcord.slash_command(name="f1_next", description="Show next 3 Formula 1 races", guild_ids=[GUILD_ID])
     async def f1_next(self, interaction: nextcord.Interaction):
         upcoming = self.get_upcoming_races(3)
         embed = nextcord.Embed(title="🏎️ Upcoming F1 Races", color=nextcord.Color.red())
@@ -29,7 +33,7 @@ class FormulaOne(commands.Cog):
         return [r for r in races if self.parse_datetime(r['date'], r['time']) > now][:count]
 
     def parse_datetime(self, date_str, time_str):
-        full_dt = f"{date_str}T{time_str.replace('Z', '')}"  # e.g. 2025-04-14T14:00:00
+        full_dt = f"{date_str}T{time_str.replace('Z', '')}"
         dt = datetime.fromisoformat(full_dt)
         return dt.replace(tzinfo=pytz.UTC)
 
@@ -48,12 +52,12 @@ class FormulaOne(commands.Cog):
             data = self.get_last_race_results()
             round_no = int(data["round"])
             if self.last_race_round == round_no:
-                return  # Already posted
+                return
             self.last_race_round = round_no
 
             channel = self.bot.get_channel(CHANNEL_ID)
             race_name = data['raceName']
-            results = data['Results'][:3]  # Top 3
+            results = data['Results'][:3]
             podium = "\n".join([
                 f"{i+1}. {r['Driver']['givenName']} {r['Driver']['familyName']} ({r['Constructor']['name']})"
                 for i, r in enumerate(results)
@@ -70,10 +74,6 @@ class FormulaOne(commands.Cog):
         except Exception as e:
             print(f"Error in F1 update loop: {e}")
 
-
-def setup(bot):
-    bot.add_cog(FormulaOne(bot))
-    
     @commands.Cog.listener()
     async def on_ready(self):
         try:
@@ -81,3 +81,7 @@ def setup(bot):
             print("✅ Synced slash commands from f1.py")
         except Exception as e:
             print(f"❌ Failed to sync commands from f1.py: {e}")
+
+def setup(bot):
+    bot.add_cog(FormulaOne(bot))
+    print("✅ Loaded f1.py successfully")
