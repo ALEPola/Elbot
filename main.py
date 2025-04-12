@@ -31,6 +31,7 @@ if __name__ == "__main__":
         'cogs.localization',
         'cogs.help',
         'cogs.f1'
+        'cogs.pingtest'
     ]  # List your cog paths here
 
     for extension in initial_extensions:
