@@ -73,3 +73,11 @@ class FormulaOne(commands.Cog):
 
 def setup(bot):
     bot.add_cog(FormulaOne(bot))
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        try:
+            await self.bot.sync_application_commands()
+            print("✅ Synced slash commands from f1.py")
+        except Exception as e:
+            print(f"❌ Failed to sync commands from f1.py: {e}")
