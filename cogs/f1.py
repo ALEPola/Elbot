@@ -7,8 +7,13 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Read the guild ID from the environment; if not set, defaults to 0 (which is invalid)
+GUILD_ID = int(os.getenv("GUILD_ID"))
+print(f"[DEBUG] GUILD_ID: {GUILD_ID}")  # Debug: Check if the GUILD_ID is loaded correctly
+
+# Replace CHANNEL_ID with your target channel's ID if you want race updates sent there.
 CHANNEL_ID = 1360675364271296674
-GUILD_ID = int(os.getenv("GUILD_ID"))  # Ensure your .env has a correct GUILD_ID
 
 class FormulaOne(commands.Cog):
     def __init__(self, bot):
@@ -19,7 +24,7 @@ class FormulaOne(commands.Cog):
     @nextcord.slash_command(
         name="f1_next",
         description="Show next 3 Formula 1 races",
-        guild_ids=[GUILD_ID]
+        guild_ids=[GUILD_ID]  # Registers the command for your specific guild for faster updating
     )
     async def f1_next(self, interaction: nextcord.Interaction):
         upcoming = self.get_upcoming_races(3)
@@ -27,13 +32,18 @@ class FormulaOne(commands.Cog):
         for race in upcoming:
             name = f"{race['raceName']} ({race['Circuit']['circuitName']})"
             date = self.parse_datetime(race['date'], race['time'])
-            embed.add_field(name=name, value=f"🗓 {date.strftime('%A, %B %d at %I:%M %p')} UTC", inline=False)
+            embed.add_field(
+                name=name,
+                value=f"🗓 {date.strftime('%A, %B %d at %I:%M %p')} UTC",
+                inline=False
+            )
         await interaction.response.send_message(embed=embed)
 
     def get_upcoming_races(self, count=3):
         res = requests.get("https://ergast.com/api/f1/current.json")
         races = res.json()['MRData']['RaceTable']['Races']
         now = datetime.utcnow()
+        # Return only races that have not started yet, up to count
         return [r for r in races if self.parse_datetime(r['date'], r['time']) > now][:count]
 
     def parse_datetime(self, date_str, time_str):
@@ -81,6 +91,7 @@ class FormulaOne(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         try:
+            # Optional: Sync slash commands for this cog to ensure registration in your guild.
             synced = await self.bot.sync_application_commands(guild_id=GUILD_ID)
             print(f"✅ Synced {len(synced)} slash commands to guild {GUILD_ID}")
         except Exception as e:
