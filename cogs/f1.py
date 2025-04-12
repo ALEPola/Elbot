@@ -7,11 +7,8 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Read the guild ID from the environment; if not set, defaults to 0 (which is invalid)
-GUILD_ID = int(os.getenv("GUILD_ID"))
-print(f"[DEBUG] GUILD_ID: {GUILD_ID}")  # Debug: Check if the GUILD_ID is loaded correctly
-
+# Read the guild ID from the environment; ensure your .env has a valid GUILD_ID (e.g., GUILD_ID=123456789012345678)
+GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 # Replace CHANNEL_ID with your target channel's ID if you want race updates sent there.
 CHANNEL_ID = 1360675364271296674
 
@@ -24,7 +21,7 @@ class FormulaOne(commands.Cog):
     @nextcord.slash_command(
         name="f1_next",
         description="Show next 3 Formula 1 races",
-        guild_ids=[GUILD_ID]  # Registers the command for your specific guild for faster updating
+        guild_ids=[GUILD_ID]  # This ensures fast registration in your specific guild
     )
     async def f1_next(self, interaction: nextcord.Interaction):
         upcoming = self.get_upcoming_races(3)
@@ -43,7 +40,6 @@ class FormulaOne(commands.Cog):
         res = requests.get("https://ergast.com/api/f1/current.json")
         races = res.json()['MRData']['RaceTable']['Races']
         now = datetime.utcnow()
-        # Return only races that have not started yet, up to count
         return [r for r in races if self.parse_datetime(r['date'], r['time']) > now][:count]
 
     def parse_datetime(self, date_str, time_str):
@@ -100,3 +96,4 @@ class FormulaOne(commands.Cog):
 def setup(bot):
     bot.add_cog(FormulaOne(bot))
     print("✅ Loaded FormulaOne cog")
+
