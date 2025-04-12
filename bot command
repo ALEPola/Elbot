@@ -138,5 +138,5 @@ Description: Makes the `deploy.sh` script executable if it’s not already.
 Final Notes
 Make sure to check the logs after performing any task like updating or restarting the bot to confirm that everything is working as expected.
 
-
+ssh alex@192.168.1.5
 cd /home/alex/ELBOT
