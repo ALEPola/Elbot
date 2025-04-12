@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 CHANNEL_ID = 1360675364271296674
-GUILD_ID = int(os.getenv("GUILD_ID"))  # Ensure your .env has a correct GUILD_ID value
+GUILD_ID = int(os.getenv("GUILD_ID"))  # Ensure your .env has a correct GUILD_ID
 
 class FormulaOne(commands.Cog):
     def __init__(self, bot):
@@ -19,7 +19,7 @@ class FormulaOne(commands.Cog):
     @nextcord.slash_command(
         name="f1_next",
         description="Show next 3 Formula 1 races",
-        guild_ids=[GUILD_ID]  # Remove guild_ids for global commands (which can take longer to propagate)
+        guild_ids=[GUILD_ID]
     )
     async def f1_next(self, interaction: nextcord.Interaction):
         upcoming = self.get_upcoming_races(3)
@@ -81,12 +81,11 @@ class FormulaOne(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         try:
-            # Optional: You can sync commands here as well to ensure this cog's commands are registered.
-            await self.bot.sync_application_commands()
-            print("✅ Synced slash commands from f1.py")
+            synced = await self.bot.sync_application_commands(guild_id=GUILD_ID)
+            print(f"✅ Synced {len(synced)} slash commands to guild {GUILD_ID}")
         except Exception as e:
-            print(f"❌ Failed to sync commands from f1.py: {e}")
+            print(f"❌ Failed to sync guild commands: {e}")
 
 def setup(bot):
     bot.add_cog(FormulaOne(bot))
-    print("✅ Loaded FormulaOne cog")   
+    print("✅ Loaded FormulaOne cog")
