@@ -11,19 +11,27 @@ DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 
 # Set up intents and bot
 intents = nextcord.Intents.default()
-intents.message_content = True  # Enables bot to read message content, which is necessary for processing commands and responding to messages
+intents.message_content = True  # Enables bot to read message content
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
     # This will force sync the slash commands across your guilds
-    await bot.sync_application_commands()  # Sync all slash commands, this might take some time and should be used cautiously in large bots
+    synced = await bot.sync_application_commands()
+    print(f'Synced {len(synced)} slash commands.')
     print(f'We have logged in as {bot.user}')
 
 # Load Cogs
 if __name__ == "__main__":
-    initial_extensions = ['cogs.chat', 'cogs.music', 'cogs.dalle', 'cogs.localization', 'cogs.help', 'cogs.f1']  # Add your cogs here
+    initial_extensions = [
+        'cogs.chat',
+        'cogs.music',
+        'cogs.dalle',
+        'cogs.localization',
+        'cogs.help',
+        'cogs.f1'
+    ]  # List your cog paths here
 
     for extension in initial_extensions:
         try:
@@ -34,6 +42,7 @@ if __name__ == "__main__":
 
 # Run the bot
 bot.run(DISCORD_BOT_TOKEN)
+
 
 
 

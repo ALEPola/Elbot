@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 CHANNEL_ID = 1360675364271296674
-GUILD_ID = int(os.getenv("GUILD_ID"))
+GUILD_ID = int(os.getenv("GUILD_ID"))  # Ensure your .env has a correct GUILD_ID value
 
 class FormulaOne(commands.Cog):
     def __init__(self, bot):
@@ -16,7 +16,11 @@ class FormulaOne(commands.Cog):
         self.last_race_round = None
         self.check_race_updates.start()
 
-    @nextcord.slash_command(name="f1_next", description="Show next 3 Formula 1 races", guild_ids=[GUILD_ID])
+    @nextcord.slash_command(
+        name="f1_next",
+        description="Show next 3 Formula 1 races",
+        guild_ids=[GUILD_ID]  # Remove guild_ids for global commands (which can take longer to propagate)
+    )
     async def f1_next(self, interaction: nextcord.Interaction):
         upcoming = self.get_upcoming_races(3)
         embed = nextcord.Embed(title="🏎️ Upcoming F1 Races", color=nextcord.Color.red())
@@ -77,6 +81,7 @@ class FormulaOne(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         try:
+            # Optional: You can sync commands here as well to ensure this cog's commands are registered.
             await self.bot.sync_application_commands()
             print("✅ Synced slash commands from f1.py")
         except Exception as e:
@@ -84,4 +89,4 @@ class FormulaOne(commands.Cog):
 
 def setup(bot):
     bot.add_cog(FormulaOne(bot))
-    print("✅ Loaded f1.py successfully")
+    print("✅ Loaded FormulaOne cog")   
