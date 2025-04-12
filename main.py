@@ -30,7 +30,7 @@ if __name__ == "__main__":
         'cogs.dalle',
         'cogs.localization',
         'cogs.help',
-        'cogs.f1'
+        'cogs.f1',
         'cogs.pingtest'
     ]  # List your cog paths here
 
