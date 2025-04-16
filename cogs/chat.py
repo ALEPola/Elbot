@@ -21,7 +21,7 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 user_chat_histories = {}
 user_last_interaction = {}
 
-# rate limit (in seconds)
+# Rate limit (in seconds)
 RATE_LIMIT_SECONDS = 5
 
 class Chat(commands.Cog):
@@ -42,7 +42,7 @@ class Chat(commands.Cog):
             await interaction.response.send_message("You're asking too frequently, please wait a moment.", ephemeral=True)
             return
 
-        # **Defer the response to avoid timeouts**
+        # Defer the response to avoid timeouts
         await interaction.response.defer()
 
         # Preprocess the user message
@@ -84,14 +84,13 @@ class Chat(commands.Cog):
             )
 
             # Extract and append the assistant's response to the chat history
-            reply = response.choices[0].message['content']  # Fixed this line
+            reply = response.choices[0].message['content']
             user_chat_histories[user_id].append({"role": "assistant", "content": reply})
 
             return reply
         except Exception as e:
             logger.error(f"Error generating OpenAI response: {e}", exc_info=True)
             return "Sorry, something went wrong while generating a response."
-
 
     def is_rate_limited(self, user_id: int) -> bool:
         """Check if the user is being rate-limited."""
@@ -106,7 +105,6 @@ class Chat(commands.Cog):
 
 def setup(bot):
     """Setup the Chat cog for the bot."""
-def setup(bot):
     bot.add_cog(Chat(bot))
 
 

@@ -6,10 +6,11 @@ from datetime import timedelta, datetime
 from dotenv import load_dotenv
 import shlex
 import shutil
+import re
 
-SUDO = shutil.which("sudo")
-SYSTEMCTL = shutil.which("systemctl")
-
+SUDO = shutil.which("sudo") or "/usr/bin/sudo"
+SYSTEMCTL = shutil.which("systemctl") or "/bin/systemctl"
+JOURNALCTL = shutil.which("journalctl") or "/bin/journalctl"
 
 load_dotenv()
 
@@ -46,7 +47,7 @@ def index():
 def action(cmd):
     if not session.get("logged_in"):
         return redirect(url_for("login"))
-    
+
     if cmd == "restart":
         subprocess.call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
     elif cmd == "start":
@@ -64,7 +65,7 @@ def action(cmd):
             lines.append(cron_line)
             new_cron = "\n".join(lines) + "\n"
             subprocess.run(f'echo "{new_cron}" | crontab -', shell=True)
-    
+
     return redirect(url_for("index"))
 
 @app.route("/api/logs")
@@ -73,7 +74,7 @@ def api_logs():
         return jsonify({"error": "unauthorized"}), 401
     try:
         output = subprocess.check_output([
-            "journalctl", "-u", "elbot.service", "-n", "100", "--no-pager", "--no-hostname"
+            JOURNALCTL, "-u", "elbot.service", "-n", "100", "--no-pager", "--no-hostname"
         ], text=True)
     except subprocess.CalledProcessError as e:
         output = f"Error fetching logs: {e}"
@@ -102,7 +103,6 @@ def api_status():
         last_update = "unknown"
     return jsonify({"status": status.capitalize(), "last_update": last_update})
 
-
 @app.route("/run-command", methods=["POST"])
 def run_command():
     if not session.get("logged_in"):
@@ -110,7 +110,8 @@ def run_command():
     data = request.get_json()
     cmd = data.get("command", "")
     try:
-        output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT, timeout=10)
+        cmd_tokens = shlex.split(cmd)
+        output = subprocess.check_output(cmd_tokens, text=True, stderr=subprocess.STDOUT, timeout=10)
     except subprocess.CalledProcessError as e:
         output = e.output
     except Exception as e:
@@ -122,15 +123,17 @@ def switch_branch():
     if not session.get("logged_in"):
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json()
-    branch = shlex.quote(data.get("branch"))
+    branch = data.get("branch", "").strip()
+    if not branch or not re.match(r"^[A-Za-z0-9_\-./]+$", branch):
+        return jsonify({"error": "Invalid branch name"}), 400
+    branch_quoted = shlex.quote(branch)
     try:
         subprocess.check_output(["git", "fetch", "origin"], cwd="/home/alex/ELBOT")
-        subprocess.check_output(["git", "checkout", branch], cwd="/home/alex/ELBOT")
+        subprocess.check_output(["git", "checkout", branch_quoted], cwd="/home/alex/ELBOT")
         subprocess.check_output([SUDO, SYSTEMCTL, "restart", "elbot.service"])
-        return jsonify({"output": f"Switched to branch '{branch}' and restarted ELBOT."})
+        return jsonify({"output": f"Switched to branch '{branch_quoted}' and restarted ELBOT."})
     except subprocess.CalledProcessError as e:
         return jsonify({"output": f"Error: {e.output}"})
-
 
 @app.route("/api/env")
 def get_env():
@@ -149,9 +152,9 @@ def webhook_deploy():
     subprocess.call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
     return jsonify({"status": "Deployed and restarted via webhook."})
 
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
 
 

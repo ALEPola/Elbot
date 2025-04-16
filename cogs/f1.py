@@ -1,15 +1,15 @@
 import nextcord
 from nextcord.ext import commands, tasks
-import requests
+import aiohttp
 from datetime import datetime
 import pytz
 import os
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
-# Read the guild ID from the environment; ensure your .env has a valid GUILD_ID (e.g., GUILD_ID=123456789012345678)
+logger = logging.getLogger(__name__)
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
-# Replace CHANNEL_ID with your target channel's ID if you want race updates sent there.
 CHANNEL_ID = 1360675364271296674
 
 class FormulaOne(commands.Cog):
@@ -21,10 +21,10 @@ class FormulaOne(commands.Cog):
     @nextcord.slash_command(
         name="f1_next",
         description="Show next 3 Formula 1 races",
-        guild_ids=[GUILD_ID]  # This ensures fast registration in your specific guild
+        guild_ids=[GUILD_ID]
     )
     async def f1_next(self, interaction: nextcord.Interaction):
-        upcoming = self.get_upcoming_races(3)
+        upcoming = await self.get_upcoming_races(3)
         embed = nextcord.Embed(title="🏎️ Upcoming F1 Races", color=nextcord.Color.red())
         for race in upcoming:
             name = f"{race['raceName']} ({race['Circuit']['circuitName']})"
@@ -36,36 +36,49 @@ class FormulaOne(commands.Cog):
             )
         await interaction.response.send_message(embed=embed)
 
-    def get_upcoming_races(self, count=3):
-        res = requests.get("https://ergast.com/api/f1/current.json")
-        races = res.json()['MRData']['RaceTable']['Races']
+    async def get_upcoming_races(self, count=3):
+        url = "https://ergast.com/api/f1/current.json"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                data = await resp.json()
+        races = data['MRData']['RaceTable']['Races']
         now = datetime.utcnow()
-        return [r for r in races if self.parse_datetime(r['date'], r['time']) > now][:count]
+        upcoming = [r for r in races if self.parse_datetime(r['date'], r['time']) > now]
+        return upcoming[:count]
 
     def parse_datetime(self, date_str, time_str):
         full_dt = f"{date_str}T{time_str.replace('Z', '')}"
         dt = datetime.fromisoformat(full_dt)
         return dt.replace(tzinfo=pytz.UTC)
 
-    def get_last_race_results(self):
-        res = requests.get("https://ergast.com/api/f1/current/last/results.json")
-        data = res.json()['MRData']['RaceTable']['Races'][0]
-        return data
+    async def get_last_race_results(self):
+        url = "https://ergast.com/api/f1/current/last/results.json"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                data = await resp.json()
+        return data['MRData']['RaceTable']['Races'][0]
 
-    def get_standings(self):
-        res = requests.get("https://ergast.com/api/f1/current/driverStandings.json")
-        return res.json()['MRData']['StandingsTable']['StandingsLists'][0]['DriverStandings']
+    async def get_standings(self):
+        url = "https://ergast.com/api/f1/current/driverStandings.json"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                data = await resp.json()
+        return data['MRData']['StandingsTable']['StandingsLists'][0]['DriverStandings']
 
     @tasks.loop(minutes=30)
     async def check_race_updates(self):
         try:
-            data = self.get_last_race_results()
+            data = await self.get_last_race_results()
             round_no = int(data["round"])
             if self.last_race_round == round_no:
                 return
             self.last_race_round = round_no
 
             channel = self.bot.get_channel(CHANNEL_ID)
+            if channel is None:
+                logger.error("Channel not found for ID: %s", CHANNEL_ID)
+                return
+
             race_name = data['raceName']
             results = data['Results'][:3]
             podium = "\n".join([
@@ -74,7 +87,7 @@ class FormulaOne(commands.Cog):
             ])
             await channel.send(f"🏎️ **{race_name}** Results:\n{podium}")
 
-            standings = self.get_standings()[:5]
+            standings = (await self.get_standings())[:5]
             leaderboard = "\n".join([
                 f"{i+1}. {d['Driver']['familyName']} - {d['points']} pts"
                 for i, d in enumerate(standings)
@@ -82,16 +95,15 @@ class FormulaOne(commands.Cog):
             await channel.send(f"📊 **Championship Standings:**\n{leaderboard}")
 
         except Exception as e:
-            print(f"Error in F1 update loop: {e}")
+            logger.error("Error in F1 update loop: %s", e)
 
     @commands.Cog.listener()
     async def on_ready(self):
         try:
-            # Optional: Sync slash commands for this cog to ensure registration in your guild.
             synced = await self.bot.sync_application_commands(guild_id=GUILD_ID)
-            print(f"✅ Synced {len(synced)} slash commands to guild {GUILD_ID}")
+            logger.info("✅ Synced %s slash commands to guild %s", len(synced), GUILD_ID)
         except Exception as e:
-            print(f"❌ Failed to sync guild commands: {e}")
+            logger.error("❌ Failed to sync guild commands: %s", e)
 
 def setup(bot):
     bot.add_cog(FormulaOne(bot))
