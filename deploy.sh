@@ -4,7 +4,7 @@
 cd /home/alex/ELBOT
 
 # Pull the latest changes from the main branch
-git pull origin Testing
+git pull origin Working
 
 # Restart the bot service
 sudo systemctl restart elbot.service
