@@ -140,3 +140,4 @@ Make sure to check the logs after performing any task like updating or restartin
 
 ssh alex@192.168.1.5
 cd /home/alex/ELBOT
+hi
