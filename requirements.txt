@@ -10,3 +10,4 @@ spotipy
 youtube-search-python
 pynacl
 apscheduler
+psutil
