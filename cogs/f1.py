@@ -69,10 +69,9 @@ class FormulaOne(commands.Cog):
     async def check_race_updates(self):
         try:
             data = await self.get_last_race_results()
+            # Always update with the latest data regardless of the round number
             round_no = int(data["round"])
-            if self.last_race_round == round_no:
-                return
-            self.last_race_round = round_no
+            self.last_race_round = round_no  # Optionally store this for future reference
 
             channel = self.bot.get_channel(CHANNEL_ID)
             if channel is None:
@@ -85,14 +84,18 @@ class FormulaOne(commands.Cog):
                 f"{i+1}. {r['Driver']['givenName']} {r['Driver']['familyName']} ({r['Constructor']['name']})"
                 for i, r in enumerate(results)
             ])
-            await channel.send(f"🏎️ **{race_name}** Results:\n{podium}")
+            result_message = f"🏎️ **{race_name} Results:**\n{podium}"
 
             standings = (await self.get_standings())[:5]
             leaderboard = "\n".join([
                 f"{i+1}. {d['Driver']['familyName']} - {d['points']} pts"
                 for i, d in enumerate(standings)
             ])
-            await channel.send(f"📊 **Championship Standings:**\n{leaderboard}")
+            standings_message = f"📊 **Championship Standings:**\n{leaderboard}"
+
+            # Send a combined message with the latest race results and standings
+            full_message = f"{result_message}\n\n{standings_message}"
+            await channel.send(full_message)
 
         except Exception as e:
             logger.error("Error in F1 update loop: %s", e)
