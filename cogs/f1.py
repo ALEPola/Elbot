@@ -109,7 +109,10 @@ class FormulaOne(commands.Cog):
     async def on_ready(self):
         try:
             synced = await self.bot.sync_application_commands(guild_id=GUILD_ID)
-            logger.info("✅ Synced %s slash commands to guild %s", len(synced), GUILD_ID)
+            if synced is None:
+                logger.info("✅ No commands were synced for guild %s", GUILD_ID)
+            else:
+                logger.info("✅ Synced %s slash commands to guild %s", len(synced), GUILD_ID)
         except Exception as e:
             logger.error("❌ Failed to sync guild commands: %s", e)
 
