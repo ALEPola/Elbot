@@ -1,20 +1,25 @@
 #!/bin/bash
+set -euo pipefail
 
-# Navigate to the bot's folder
+# 0) Free up port 8080 so nothing is left hanging on your web panel
+echo "🔄 Clearing port 8080…"
+sudo fuser -k 8080/tcp || true
+
+# 1) Navigate to the bot's folder
 cd /home/alex/ELBOT
 
-# Check for unstaged changes and stash them automatically if any exist
+# 2) Check for unstaged changes and stash them automatically if any exist
 if [ -n "$(git status --porcelain)" ]; then
     echo "🔄 Unstaged changes detected. Stashing changes..."
     git stash push -m "Auto stash before deploy"
 fi
 
-# Pull the latest changes from the Working branch
+# 3) Pull the latest changes from the Working branch
 echo "🔄 Pulling latest code from Working branch..."
 git pull origin Working
 
-# Restart the bot service
+# 4) Restart the bot service
 echo "🔁 Restarting ELBOT service..."
 sudo systemctl restart elbot.service
 
-echo "✅ ELBOT has been updated and restarted."
+echo "✅ ELBOT has been updated and restarted, and port 8080 has been cleared."
