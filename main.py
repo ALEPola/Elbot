@@ -17,7 +17,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    # Force sync slash commands across guilds
+    # Force sync slash commands across your guilds
     await bot.sync_application_commands()  
     print(f'Bot logged in as {bot.user}')
 
@@ -35,15 +35,16 @@ if __name__ == "__main__":
 from web.app import app as flask_app
 
 def run_flask():
-    # Start the Flask web server on port 8080
+    # Start the Flask web server on port 8080.
+    # Since the Flask app is set to run on all interfaces, you'll access it via http://192.168.1.5:8080
     flask_app.run(host="0.0.0.0", port=8080)
 
 if __name__ == "__main__":
-    # Start the Flask app in a background daemon thread
+    # Start the Flask web server in a background daemon thread.
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
-    # Now start the Discord bot
+    # Start your Discord bot.
     bot.run(DISCORD_BOT_TOKEN)
 
 

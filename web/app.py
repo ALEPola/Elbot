@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configure Flask to use your custom static and template folders
+# Configure Flask to use your custom static and template folders.
+# Note: Since this file is inside the web folder, we reference static as "../static"
 app = Flask(__name__, static_folder="../static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", "change_this_key")
 
@@ -70,9 +71,9 @@ def api_logs():
          output = f"Error fetching logs: {e}"
     return jsonify({"logs": output})
 
-# Run Flask only if executed directly (optional for development)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
 
 
