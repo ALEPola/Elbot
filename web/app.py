@@ -5,6 +5,11 @@ import psutil
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 import shlex
+import shutil
+
+SUDO = shutil.which("sudo")
+SYSTEMCTL = shutil.which("systemctl")
+
 
 load_dotenv()
 
@@ -41,23 +46,25 @@ def index():
 def action(cmd):
     if not session.get("logged_in"):
         return redirect(url_for("login"))
+    
     if cmd == "restart":
-        subprocess.call(["sudo", "systemctl", "restart", "elbot.service"])
+        subprocess.call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
     elif cmd == "start":
-        subprocess.call(["sudo", "systemctl", "start", "elbot.service"])
+        subprocess.call([SUDO, SYSTEMCTL, "start", "elbot.service"])
     elif cmd == "stop":
-        subprocess.call(["sudo", "systemctl", "stop", "elbot.service"])
+        subprocess.call([SUDO, SYSTEMCTL, "stop", "elbot.service"])
     elif cmd == "update":
         subprocess.call(["/home/alex/ELBOT/deploy.sh"])
     elif cmd.startswith("schedule:"):
         hour_min = cmd.split(":")[1].strip()
-        cron_line = f"{hour_min} * * * /bin/bash /home/alex/ELBOT/deploy.sh && sudo systemctl restart elbot.service"
+        cron_line = f"{hour_min} * * * /bin/bash /home/alex/ELBOT/deploy.sh && {SUDO} {SYSTEMCTL} restart elbot.service"
         result = subprocess.run("crontab -l 2>/dev/null", shell=True, capture_output=True, text=True)
         lines = result.stdout.splitlines() if result.stdout else []
         if cron_line not in lines:
             lines.append(cron_line)
             new_cron = "\n".join(lines) + "\n"
             subprocess.run(f'echo "{new_cron}" | crontab -', shell=True)
+    
     return redirect(url_for("index"))
 
 @app.route("/api/logs")
@@ -88,12 +95,13 @@ def api_status():
     if not session.get("logged_in"):
         return jsonify({"error": "unauthorized"}), 401
     try:
-        status = subprocess.check_output(["systemctl", "is-active", "elbot.service"], text=True).strip()
+        status = subprocess.check_output([SYSTEMCTL, "is-active", "elbot.service"], text=True).strip()
         last_update = subprocess.check_output(["git", "log", "-1", "--format=%cd"], text=True).strip()
     except subprocess.CalledProcessError:
         status = "unknown"
         last_update = "unknown"
     return jsonify({"status": status.capitalize(), "last_update": last_update})
+
 
 @app.route("/run-command", methods=["POST"])
 def run_command():
@@ -118,10 +126,11 @@ def switch_branch():
     try:
         subprocess.check_output(["git", "fetch", "origin"], cwd="/home/alex/ELBOT")
         subprocess.check_output(["git", "checkout", branch], cwd="/home/alex/ELBOT")
-        subprocess.check_output(["sudo", "systemctl", "restart", "elbot.service"])
+        subprocess.check_output([SUDO, SYSTEMCTL, "restart", "elbot.service"])
         return jsonify({"output": f"Switched to branch '{branch}' and restarted ELBOT."})
     except subprocess.CalledProcessError as e:
         return jsonify({"output": f"Error: {e.output}"})
+
 
 @app.route("/api/env")
 def get_env():
@@ -137,8 +146,9 @@ def webhook_deploy():
     if token != WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 403
     subprocess.call(["/home/alex/ELBOT/deploy.sh"])
-    subprocess.call(["sudo", "systemctl", "restart", "elbot.service"])
+    subprocess.call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
     return jsonify({"status": "Deployed and restarted via webhook."})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
