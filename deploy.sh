@@ -23,3 +23,4 @@ echo "🔁 Restarting ELBOT service..."
 sudo systemctl restart elbot.service
 
 echo "✅ ELBOT has been updated and restarted, and port 8080 has been cleared."
+

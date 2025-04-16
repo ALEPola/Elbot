@@ -187,6 +187,9 @@ Awaiting input...
         .then(data => {
           document.getElementById('logOutput').textContent =
             data.logs;
+        })
+        .catch(() => {
+          document.getElementById('logOutput').textContent = "Failed to load logs.";
         });
     }, 10000);
 
@@ -224,9 +227,11 @@ Awaiting input...
       .getElementById('commandForm')
       .addEventListener('submit', e => {
         e.preventDefault();
-        const cmd = document.getElementById(
-          'commandInput'
-        ).value;
+        const cmd = document.getElementById('commandInput').value.trim();
+        if (!cmd) {
+          document.getElementById('commandOutput').textContent = "Please enter a command.";
+          return;
+        }
         fetch('/run-command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -286,7 +291,6 @@ Awaiting input...
         });
       });
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<!-- Bootstrap JS Bundle with Popper -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
