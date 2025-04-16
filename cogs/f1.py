@@ -42,7 +42,8 @@ class FormulaOne(commands.Cog):
             async with session.get(url) as resp:
                 data = await resp.json()
         races = data['MRData']['RaceTable']['Races']
-        now = datetime.utcnow()
+        # Make 'now' timezone-aware
+        now = datetime.utcnow().replace(tzinfo=pytz.UTC)
         upcoming = [r for r in races if self.parse_datetime(r['date'], r['time']) > now]
         return upcoming[:count]
 
