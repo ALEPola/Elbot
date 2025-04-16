@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+# Specify static and template folders for the futuristic design
+app = Flask(__name__, static_folder="static", template_folder="web/templates")
 app.secret_key = os.getenv("FLASK_SECRET", "change_this_key")
 
 # Set credentials either via environment variables or by default.

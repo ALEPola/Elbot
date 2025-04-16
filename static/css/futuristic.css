@@ -1,0 +1,69 @@
+/* Use the futuristic font */
+body, .navbar, .container, .control-card, .alert {
+    font-family: 'Orbitron', sans-serif;
+  }
+  
+  /* Accent color for neon effect */
+  :root {
+    --futuristic-accent: #39FF14; /* Neon green */
+    /* You can swap in a different color, e.g. #00FFFF for aqua, #BC13FE for purple, etc. */
+  }
+  
+  .navbar-brand {
+    letter-spacing: 2px;
+  }
+  
+  .navbar-brand .accent {
+    color: var(--futuristic-accent);
+  }
+  
+  .futuristic-heading {
+    letter-spacing: 1px;
+    color: var(--futuristic-accent);
+  }
+  
+  /* Card-like container for controls */
+  .control-card {
+    background-color: #1A1A1A;
+    border-radius: 8px;
+    box-shadow: 0 0 12px rgba(57, 255, 20, 0.2);
+  }
+  
+  /* Universal neon button styling */
+  .btn-neon {
+    background-color: var(--futuristic-accent);
+    border: none;
+    color: #000;
+    text-transform: uppercase;
+    transition: box-shadow 0.3s ease;
+  }
+  
+  .btn-neon:hover {
+    box-shadow: 0 0 15px var(--futuristic-accent);
+  }
+  
+  /* Different variations of neon buttons */
+  .btn-neon-danger {
+    background-color: #FF0066; /* Pinkish Red */
+  }
+  
+  .btn-neon-danger:hover {
+    box-shadow: 0 0 15px #FF0066;
+  }
+  
+  .btn-neon-warning {
+    background-color: #FFC300; /* Bright Yellow */
+  }
+  
+  .btn-neon-warning:hover {
+    box-shadow: 0 0 15px #FFC300;
+  }
+  
+  .btn-neon-primary {
+    background-color: #00A2FF; /* Bright Blue */
+  }
+  
+  .btn-neon-primary:hover {
+    box-shadow: 0 0 15px #00A2FF;
+  }
+  
