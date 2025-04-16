@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Specify static and template folders for the futuristic design
-app = Flask(__name__, static_folder="static", template_folder="web/templates")
+# Configure Flask to use your custom static and template folders
+app = Flask(__name__, static_folder="../static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", "change_this_key")
 
-# Set credentials either via environment variables or by default.
+# Set credentials (default: username ALE, password ALEXIS00)
 USERNAME = os.getenv("WEB_USERNAME", "ALE")
 PASSWORD = os.getenv("WEB_PASSWORD", "ALEXIS00")
 
@@ -70,7 +70,9 @@ def api_logs():
          output = f"Error fetching logs: {e}"
     return jsonify({"logs": output})
 
+# Run Flask only if executed directly (optional for development)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
 
