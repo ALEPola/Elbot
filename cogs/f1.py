@@ -48,9 +48,13 @@ class FormulaOne(commands.Cog):
         return upcoming[:count]
 
     def parse_datetime(self, date_str, time_str):
-        full_dt = f"{date_str}T{time_str.replace('Z', '')}"
-        dt = datetime.fromisoformat(full_dt)
-        return dt.replace(tzinfo=pytz.UTC)
+        # Ensure the time string ends with "Z" (UTC) and then build an ISO string with an explicit offset.
+        # If not, append "+00:00" to ensure the result is aware.
+        if not time_str.endswith("Z"):
+            time_str += "Z"
+        # Remove the trailing "Z" and add an explicit UTC offset.
+        full_dt = f"{date_str}T{time_str[:-1]}+00:00"
+        return datetime.fromisoformat(full_dt)
 
     async def get_last_race_results(self):
         url = "https://ergast.com/api/f1/current/last/results.json"
