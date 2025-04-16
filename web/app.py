@@ -36,7 +36,15 @@ def logout():
 def index():
     if not session.get("logged_in"):
         return redirect(url_for("login"))
-    return render_template("index.html")
+    try:
+        output = subprocess.check_output(
+            ["journalctl", "-u", "elbot.service", "-n", "100", "--no-pager", "--no-hostname"],
+            text=True
+        )
+    except subprocess.CalledProcessError as e:
+        output = f"Error fetching logs: {e}"
+    return render_template("index.html", logs=output)
+
 
 @app.route("/action/<cmd>")
 def action(cmd):
