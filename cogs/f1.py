@@ -1,3 +1,4 @@
+# cogs/f1.py
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -6,11 +7,11 @@ from nextcord.ext import commands, tasks
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
-# — Hardcoded from your .env —
+# — Hardcoded from your .env —
 GUILD_ID   = 761070952674230292
 CHANNEL_ID = 951059416466214932
 
-# Use the host’s local time for scheduling (ensure your Pi is set to America/New_York)
+# Eastern Time (handles EST/EDT)
 LOCAL_TZ = ZoneInfo("America/New_York")
 
 async def get_next_race_from_official():
@@ -32,7 +33,6 @@ async def get_next_race_from_official():
 
         month_day = date_cell.get_text(strip=True)  # e.g. "Apr 20"
         try:
-            # parse “Apr 20 2025” as a local datetime at midnight
             dt = datetime.strptime(f"{month_day} {year}", "%b %d %Y")
             dt = dt.replace(tzinfo=LOCAL_TZ)
         except ValueError:
@@ -43,20 +43,18 @@ async def get_next_race_from_official():
                 "name":     name_cell.get_text(strip=True),
                 "datetime": dt.strftime("%A, %b %d %I:%M %p %Z")
             }
-
     return None
 
 class F1Cog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # schedule for 12:00 local time daily, but we check weekday inside
         self.weekly_update.start()
 
-    @tasks.loop(time=time(hour=12))  
+    # Runs at 12:00 server‑local time every day; we check Sunday inside
+    @tasks.loop(time=time(hour=12))
     async def weekly_update(self):
         now = datetime.now(LOCAL_TZ)
-        # only run on Sundays
-        if now.weekday() != 6:
+        if now.weekday() != 6:  # only Sundays
             return
 
         channel = self.bot.get_channel(CHANNEL_ID)
@@ -76,7 +74,8 @@ class F1Cog(commands.Cog):
     async def before_weekly(self):
         await self.bot.wait_until_ready()
 
-    @commands.slash_command(
+    # Use nextcord.slash_command here
+    @nextcord.slash_command(
         name="f1_next",
         description="Get the next F1 race from the official site",
         guild_ids=[GUILD_ID]
@@ -94,7 +93,8 @@ class F1Cog(commands.Cog):
 
 def setup(bot):
     bot.add_cog(F1Cog(bot))
-    print("✅ Loaded F1Cog (official-site scraper)")
+    print("✅ Loaded F1Cog (official‑site scraper)")
+
 
 
 
