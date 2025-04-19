@@ -3,6 +3,7 @@ from nextcord.ext import commands
 import openai
 import os
 from dotenv import load_dotenv
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -26,7 +27,8 @@ class ImageCog(commands.Cog):
         await interaction.response.defer()  # To show loading
 
         try:
-            response = openai.images.generate(
+            response = await asyncio.to_thread(
+                openai.images.generate,
                 model="dall-e-3",  # DALL·E 3 model
                 prompt=prompt,
                 size="1024x1024",  # Best size for square image

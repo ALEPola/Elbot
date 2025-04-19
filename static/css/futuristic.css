@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
 /* Use the futuristic font */
 body, .navbar, .container, .control-card, .alert {
     font-family: 'Orbitron', sans-serif;
@@ -66,4 +68,3 @@ body, .navbar, .container, .control-card, .alert {
   .btn-neon-primary:hover {
     box-shadow: 0 0 15px #00A2FF;
   }
-  

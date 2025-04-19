@@ -201,8 +201,13 @@ Awaiting input...
           document.getElementById('cpu').textContent = data.cpu;
           document.getElementById('ram').textContent = data.ram;
           document.getElementById('disk').textContent = data.disk;
-          document.getElementById('uptime').textContent =
-            data.uptime;
+          document.getElementById('uptime').textContent = data.uptime;
+        })
+        .catch(() => {
+          document.getElementById('cpu').textContent = '--';
+          document.getElementById('ram').textContent = '--';
+          document.getElementById('disk').textContent = '--';
+          document.getElementById('uptime').textContent = 'Error';
         });
     }, 10000);
 
@@ -259,9 +264,7 @@ Awaiting input...
         })
           .then(res => res.json())
           .then(data => {
-            document.getElementById(
-              'branchOutput'
-            ).textContent = data.output;
+            document.getElementById('branchOutput').textContent = data.error || data.output;
           });
       });
 

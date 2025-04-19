@@ -32,21 +32,27 @@
     {% endwith %}
 
     <div class="mb-3">
+      <label for="username" class="form-label">Username</label>
       <input
         type="text"
+        id="username"
         name="username"
         class="form-control"
         placeholder="Username"
         required
+        autofocus
       />
     </div>
     <div class="mb-3">
+      <label for="password" class="form-label">Password</label>
       <input
         type="password"
+        id="password"
         name="password"
         class="form-control"
         placeholder="Password"
         required
+        autocomplete="current-password"
       />
     </div>
     <button type="submit" class="btn btn-neon btn-neon-primary w-100">
