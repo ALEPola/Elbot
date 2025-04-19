@@ -28,7 +28,7 @@ def run_flask():
 
 if __name__ == "__main__":
     # 5) Load your Cogs
-    for ext in ('cogs.chat','cogs.music','cogs.dalle','cogs.localization','cogs.help','cogs.f1'):
+    for ext in ('cogs.chat','cogs.music','cogs.dalle','cogs.localization','cogs.help','cogs.f1','cogs.pingptest'):
         try:
             bot.load_extension(ext)
             print(f'Loaded {ext}')

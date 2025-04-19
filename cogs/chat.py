@@ -1,7 +1,6 @@
 import os
 import logging
 import time
-
 import nextcord
 from nextcord.ext import commands
 from nextcord import SlashOption
@@ -56,13 +55,17 @@ class ChatCog(commands.Cog):
             )
             return
         user_last_interaction[user_id] = now
+
         await interaction.response.defer()
         text = message.strip()
         sentiment = TextBlob(text).sentiment
         logger.info(f"User {user_id} sentiment: {sentiment}")
         if sentiment.polarity < -0.5:
-            await interaction.followup.send("It seems like you're upset. How can I help?")
+            await interaction.followup.send(
+                "It seems like you're upset. How can I help?"
+            )
             return
+
         try:
             resp = await client.responses.acreate(
                 model=OPENAI_MODEL,
@@ -72,12 +75,13 @@ class ChatCog(commands.Cog):
         except Exception:
             logger.error("OpenAI error while creating response.", exc_info=True)
             content = "⚠️ Oops, something went wrong with the AI."
+
         await interaction.followup.send(content)
 
-    def setup(bot: commands.Bot):
-        bot.add_cog(ChatCog(bot))
-        logger.info("✅ Loaded ChatCog")
 
+def setup(bot: commands.Bot):
+    bot.add_cog(ChatCog(bot))
+    logger.info("✅ Loaded ChatCog")
 
 
 
