@@ -11,3 +11,5 @@ youtube-search-python
 pynacl
 apscheduler
 psutil
+beautifulsoup4
+asyncio
