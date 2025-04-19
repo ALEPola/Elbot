@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import asyncio
 import nextcord
 from nextcord.ext import commands
 from nextcord import SlashOption
@@ -67,14 +68,18 @@ class ChatCog(commands.Cog):
             return
 
         try:
-            resp = await client.responses.acreate(
-                model=OPENAI_MODEL,
-                input=text
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: client.responses.create(
+                    model=OPENAI_MODEL,
+                    input=text
+                )
             )
             content = resp.output_text
         except Exception:
             logger.error("OpenAI error while creating response.", exc_info=True)
-            content = "⚠️ Oops, something went wrong with the AI."
+            content = "⚠️ Oops, something went wrong with the Chat Bot."
 
         await interaction.followup.send(content)
 
