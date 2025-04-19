@@ -14,3 +14,7 @@ psutil
 beautifulsoup4
 asyncio
 icalendar
+flask
+flask-sock
+psutil
+python-dotenv

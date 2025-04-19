@@ -4,296 +4,185 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ELBOT Control Center</title>
-  <!-- Bootstrap CSS -->
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
-  <!-- Futuristic neon theme -->
-  <link
-    rel="stylesheet"
-    href="{{ url_for('static', filename='futuristic.css') }}"
-  />
+
+  <!-- Bootstrap + Chart.js -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='futuristic.css') }}"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
-  <!-- Header -->
-  <h1 class="futuristic-heading">ELBOT</h1>
-  <div class="mb-3">
-    <span
-      id="botStatus"
-      class="status-badge bg-success text-white"
-    >
-      Status: Running
-    </span>
-    <span class="ms-3 text-muted" id="lastUpdate">
-      Last Update: --
-    </span>
-  </div>
+<body data-theme="neon">
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark bg-dark px-3">
+    <span class="navbar-brand futuristic-heading">ELBOT</span>
+    <button class="btn btn-sm btn-neon" id="themeToggle">Toggle Theme</button>
+  </nav>
 
-  <!-- Control Buttons -->
-  <div class="control-card p-3 mb-4">
-    <div class="row g-3">
-      <div class="col-md-3">
-        <a
-          href="/action/start"
-          class="btn btn-neon btn-neon-primary w-100"
-        >
-          Start
-        </a>
+  <div class="container py-3">
+    <!-- Status row -->
+    <div class="d-flex align-items-center mb-3">
+      <span id="botStatus" class="status-badge bg-success text-white me-3">Status: --</span>
+      <span id="lastUpdate" class="text-muted me-auto">Last Update: --</span>
+      <a href="/logout" class="btn btn-neon btn-neon-danger">Logout</a>
+    </div>
+
+    <!-- Control buttons -->
+    <div class="control-card p-3 mb-4">
+      <div class="row g-3 text-center">
+        <div class="col-md-3"><a href="/action/start"   class="btn btn-neon btn-neon-primary w-100">Start</a></div>
+        <div class="col-md-3"><a href="/action/stop"    class="btn btn-neon btn-neon-danger w-100">Stop</a></div>
+        <div class="col-md-3"><a href="/action/restart" class="btn btn-neon btn-neon-warning w-100">Restart</a></div>
+        <div class="col-md-3"><a href="/action/update"  class="btn btn-neon btn-neon-primary w-100">Update</a></div>
       </div>
-      <div class="col-md-3">
-        <a
-          href="/action/stop"
-          class="btn btn-neon btn-neon-danger w-100"
-        >
-          Stop
-        </a>
-      </div>
-      <div class="col-md-3">
-        <a
-          href="/action/restart"
-          class="btn btn-neon btn-neon-warning w-100"
-        >
-          Restart
-        </a>
-      </div>
-      <div class="col-md-3">
-        <a
-          href="/action/update"
-          class="btn btn-neon btn-neon-primary w-100"
-        >
-          Update
-        </a>
-      </div>
+    </div>
+
+    <!-- Live system chart -->
+    <div class="control-card p-3 mb-4">
+      <h5 class="section-header">System Usage</h5>
+      <canvas id="cpuChart" height="100"></canvas>
+    </div>
+
+    <!-- Live logs -->
+    <div class="control-card p-3 mb-4">
+      <h5 class="section-header">Logs</h5>
+      <pre class="log-box" id="logOutput" style="height:300px; overflow:auto;">Connecting …</pre>
+    </div>
+
+    <!-- Command Runner -->
+    <div class="section-header">Command Runner</div>
+    <div class="control-card p-3 mb-4">
+      <form id="commandForm">
+        <div class="mb-3">
+          <input type="text" class="form-control" id="commandInput" placeholder="Enter shell command…"/>
+        </div>
+        <button type="submit" class="btn btn-neon btn-neon-primary">Run Command</button>
+      </form>
+      <pre class="mt-3 log-box" id="commandOutput">Waiting for input…</pre>
+    </div>
+
+    <!-- Git Branch Switcher -->
+    <div class="section-header">Git Branch</div>
+    <div class="control-card p-3 mb-4">
+      <form id="branchForm">
+        <div class="row g-2">
+          <div class="col-md-8"><select class="form-select" id="branchSelect"></select></div>
+          <div class="col-md-4"><button type="submit" class="btn btn-neon btn-neon-primary w-100">Switch Branch</button></div>
+        </div>
+      </form>
+      <pre class="mt-3 log-box" id="branchOutput">Current branch: --</pre>
+    </div>
+
+    <!-- Environment Variables -->
+    <div class="section-header">Environment Variables</div>
+    <div class="control-card p-3 mb-4">
+      <pre class="log-box" id="envOutput">Loading…</pre>
+    </div>
+
+    <!-- Auto‑Restart Scheduler -->
+    <div class="section-header">Auto‑Restart Scheduler</div>
+    <div class="control-card p-3 mb-4">
+      <form id="scheduleForm">
+        <div class="row g-2">
+          <div class="col-md-5">
+            <input type="text" id="scheduleTime" class="form-control" placeholder="HH MM (e.g., 3 0)"/>
+          </div>
+          <div class="col-md-4">
+            <button type="submit" class="btn btn-neon btn-neon-primary w-100">Set Restart Time</button>
+          </div>
+        </div>
+      </form>
+      <pre class="mt-3 log-box" id="scheduleOutput">Awaiting input…</pre>
     </div>
   </div>
 
-  <!-- Logs -->
-  <div class="section-header">Logs</div>
-  <div class="control-card p-3 mb-4">
-    <pre class="log-box" id="logOutput">Loading logs...</pre>
-  </div>
+<!-- Scripts -->
+<script>
+  /* Theme toggle */
+  const savedTheme = localStorage.getItem('theme') || 'neon';
+  document.body.dataset.theme = savedTheme;
+  document.getElementById('themeToggle').onclick = () => {
+      const t = document.body.dataset.theme === 'neon' ? 'dark' : 'neon';
+      document.body.dataset.theme = t;
+      localStorage.setItem('theme', t);
+  };
 
-  <!-- System Monitor -->
-  <div class="section-header">System Monitor</div>
-  <div class="control-card p-3 mb-4">
-    <div class="row">
-      <div class="col-md-3">
-        <strong>CPU Usage:</strong> <span id="cpu">--</span>%
-      </div>
-      <div class="col-md-3">
-        <strong>RAM Usage:</strong> <span id="ram">--</span>%
-      </div>
-      <div class="col-md-3">
-        <strong>Disk Usage:</strong> <span id="disk">--</span>%
-      </div>
-      <div class="col-md-3">
-        <strong>Uptime:</strong> <span id="uptime">--</span>
-      </div>
-    </div>
-  </div>
+  /* WebSocket log stream */
+  const logBox = document.getElementById('logOutput');
+  const ws = new WebSocket(`ws://${location.host}/ws/logs`);
+  ws.onmessage = e => { logBox.textContent += e.data + "\\n"; logBox.scrollTop = logBox.scrollHeight; };
+  ws.onerror = () => logBox.textContent += '\\n[log stream error]';
 
-  <!-- Command Runner -->
-  <div class="section-header">Command Runner</div>
-  <div class="control-card p-3 mb-4">
-    <form id="commandForm">
-      <div class="mb-3">
-        <input
-          type="text"
-          class="form-control"
-          id="commandInput"
-          placeholder="Enter shell command..."
-        />
-      </div>
-      <button type="submit" class="btn btn-neon btn-neon-primary">
-        Run Command
-      </button>
-    </form>
-    <pre class="mt-3 log-box" id="commandOutput">
-Waiting for input...
-    </pre>
-  </div>
+  /* Chart.js live CPU */
+  const ctx = document.getElementById('cpuChart');
+  const cpuChart = new Chart(ctx,{
+      type:'line',
+      data:{labels:[],datasets:[{label:'CPU %',data:[],borderColor:'#39FF14',tension:0.3}]},
+      options:{responsive:true,animation:false,scales:{y:{min:0,max:100}}}
+  });
+  setInterval(async()=>{
+      const r = await fetch('/api/system'); if(!r.ok) return;
+      const {cpu} = await r.json();
+      const t = new Date().toLocaleTimeString();
+      cpuChart.data.labels.push(t);
+      cpuChart.data.datasets[0].data.push(cpu);
+      if(cpuChart.data.labels.length>60){
+        cpuChart.data.labels.shift();
+        cpuChart.data.datasets[0].data.shift();
+      }
+      cpuChart.update();
+  },3000);
 
-  <!-- Git Branch Switcher -->
-  <div class="section-header">Git Branch</div>
-  <div class="control-card p-3 mb-4">
-    <form id="branchForm">
-      <div class="row g-2">
-        <div class="col-md-8">
-          <select class="form-select" id="branchSelect">
-            <option>main</option>
-            <option>Working</option>
-            <option>Testing</option>
-            <option>before-apr12th</option>
-          </select>
-        </div>
-        <div class="col-md-4">
-          <button
-            type="submit"
-            class="btn btn-neon btn-neon-primary w-100"
-          >
-            Switch Branch
-          </button>
-        </div>
-      </div>
-    </form>
-    <pre class="mt-3 log-box" id="branchOutput">
-Current branch: --
-    </pre>
-  </div>
+  /* Initial bot status */
+  fetch('/api/status')
+    .then(r=>r.json())
+    .then(j=>{
+      const badge=document.getElementById('botStatus');
+      badge.textContent='Status: '+j.status;
+      badge.className='status-badge '+(j.status==='Running'?'bg-success':'bg-danger')+' text-white';
+    });
 
-  <!-- Environment Variables -->
-  <div class="section-header">Environment Variables</div>
-  <div class="control-card p-3 mb-4">
-    <pre class="log-box" id="envOutput">
-Loading environment variables...
-    </pre>
-  </div>
-
-  <!-- Auto-Restart Scheduler -->
-  <div class="section-header">Auto-Restart Scheduler</div>
-  <div class="control-card p-3 mb-4">
-    <form id="scheduleForm">
-      <div class="row g-2">
-        <div class="col-md-5">
-          <input
-            type="text"
-            id="scheduleTime"
-            class="form-control"
-            placeholder="HH MM (e.g., 3 0 for 3:00 AM)"
-          />
-        </div>
-        <div class="col-md-4">
-          <button
-            type="submit"
-            class="btn btn-neon btn-neon-primary w-100"
-          >
-            Set Restart Time
-          </button>
-        </div>
-      </div>
-    </form>
-    <pre class="mt-3 log-box" id="scheduleOutput">
-Awaiting input...
-    </pre>
-  </div>
-
-  <!-- Scripts -->
-  <script>
-    // Log auto-refresh
-    setInterval(() => {
-      fetch('/api/logs')
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('logOutput').textContent =
-            data.logs;
-        })
-        .catch(() => {
-          document.getElementById('logOutput').textContent = "Failed to load logs.";
-        });
-    }, 10000);
-
-    // System stats auto-refresh
-    setInterval(() => {
-      fetch('/api/system')
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('cpu').textContent = data.cpu;
-          document.getElementById('ram').textContent = data.ram;
-          document.getElementById('disk').textContent = data.disk;
-          document.getElementById('uptime').textContent = data.uptime;
-        })
-        .catch(() => {
-          document.getElementById('cpu').textContent = '--';
-          document.getElementById('ram').textContent = '--';
-          document.getElementById('disk').textContent = '--';
-          document.getElementById('uptime').textContent = 'Error';
-        });
-    }, 10000);
-
-    // Initial bot status
-    fetch('/api/status')
-      .then(res => res.json())
-      .then(data => {
-        const badge = document.getElementById('botStatus');
-        badge.textContent = 'Status: ' + data.status;
-        badge.className =
-          'status-badge ' +
-          (data.status === 'Running'
-            ? 'bg-success'
-            : 'bg-danger') +
-          ' text-white';
-        document.getElementById('lastUpdate').textContent =
-          'Last Update: ' + data.last_update;
+  /* Command runner */
+  document.getElementById('commandForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const cmd=document.getElementById('commandInput').value.trim();
+      if(!cmd) return;
+      fetch('/run-command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})})
+      .then(r=>r.json()).then(j=>{
+        document.getElementById('commandOutput').textContent=j.output;
       });
+  });
 
-    // Command Runner
-    document
-      .getElementById('commandForm')
-      .addEventListener('submit', e => {
-        e.preventDefault();
-        const cmd = document.getElementById('commandInput').value.trim();
-        if (!cmd) {
-          document.getElementById('commandOutput').textContent = "Please enter a command.";
-          return;
-        }
-        fetch('/run-command', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: cmd })
-        })
-          .then(res => res.json())
-          .then(data => {
-            document.getElementById('commandOutput').textContent =
-              data.output;
-          });
+  /* Load branches */
+  fetch('/api/branches').then(r=>r.json()).then(j=>{
+      const sel=document.getElementById('branchSelect');
+      sel.innerHTML="";
+      j.branches.forEach(b=>sel.insertAdjacentHTML('beforeend',`<option>${b}</option>`));
+  });
+  /* Branch switch */
+  document.getElementById('branchForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const branch=document.getElementById('branchSelect').value;
+      fetch('/switch-branch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({branch})})
+      .then(r=>r.json()).then(j=>{
+        document.getElementById('branchOutput').textContent=j.error||j.output;
       });
+  });
 
-    // Git Branch Switcher
-    document
-      .getElementById('branchForm')
-      .addEventListener('submit', e => {
-        e.preventDefault();
-        const branch = document.getElementById(
-          'branchSelect'
-        ).value;
-        fetch('/switch-branch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ branch })
-        })
-          .then(res => res.json())
-          .then(data => {
-            document.getElementById('branchOutput').textContent = data.error || data.output;
-          });
-      });
+  /* Environment variables */
+  fetch('/api/env').then(r=>r.json()).then(j=>{
+      const txt=Object.entries(j).map(([k,v])=>`${k}: ${v}`).join('\\n');
+      document.getElementById('envOutput').textContent=txt;
+  });
 
-    // Load environment variables
-    fetch('/api/env')
-      .then(res => res.json())
-      .then(data => {
-        const entries = Object.entries(data)
-          .map(([key, val]) => `${key}: ${val}`)
-          .join('\n');
-        document.getElementById('envOutput').textContent =
-          entries;
+  /* Scheduler */
+  document.getElementById('scheduleForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const t=document.getElementById('scheduleTime').value.trim();
+      if(!t) return;
+      fetch(`/action/schedule:${t}`).then(()=>{
+        document.getElementById('scheduleOutput').textContent=`Restart scheduled for ${t}`;
       });
-
-    // Auto-Restart Scheduler
-    document
-      .getElementById('scheduleForm')
-      .addEventListener('submit', e => {
-        e.preventDefault();
-        const time = document.getElementById(
-          'scheduleTime'
-        ).value.trim();
-        fetch(`/action/schedule:${time}`).then(() => {
-          document.getElementById(
-            'scheduleOutput'
-          ).textContent = `Restart scheduled for ${time}`;
-        });
-      });
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
