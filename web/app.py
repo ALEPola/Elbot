@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 import subprocess
 import os
 import psutil
@@ -38,9 +38,12 @@ GIT_DIR = "/home/alex/ELBOT"
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("username") == USERNAME and request.form.get("password") == PASSWORD:
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if username == USERNAME and password == PASSWORD:
             session["logged_in"] = True
             return redirect(url_for("index"))
+        flash("Invalid credentials", "danger")
     return render_template("login.html")
 
 @app.route("/logout")
@@ -166,6 +169,7 @@ def webhook_deploy():
 # Dev runner
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8081, debug=True)
+
 
 
 
