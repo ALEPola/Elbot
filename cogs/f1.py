@@ -1,107 +1,141 @@
+# cogs/f1.py
+
 import aiohttp
 from icalendar import Calendar
 import nextcord
 from nextcord.ext import commands, tasks
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-# — Hardcoded from your .env —
-GUILD_ID   = 761070952674230292
-CHANNEL_ID = 951059416466214932
+GUILD_ID    = 761070952674230292
+CHANNEL_ID  = 951059416466214932
+LOCAL_TZ    = ZoneInfo("America/New_York")
+ICS_URL     = "https://ics.ecal.com/ecal-sub/6803ebf123ccd40008c9e980/Formula%201.ics"
 
-# Eastern Time (handles EST/EDT automatically)
-LOCAL_TZ = ZoneInfo("America/New_York")
+# In‑memory subscriber list (persist this to disk for real bots)
+subscribers = set()
 
-# Your ICS calendar URL (webcal converted to https)
-ICS_URL = "https://ics.ecal.com/ecal-sub/6803ebf123ccd40008c9e980/Formula%201.ics"
-
-
-async def get_next_race_from_ics():
+async def get_upcoming_events(limit=5):
+    """Return a sorted list of (dt, summary) for the next `limit` Grand Prix events."""
     async with aiohttp.ClientSession() as sess:
         resp = await sess.get(ICS_URL)
-        text = await resp.text()
+        cal  = Calendar.from_ical(await resp.text())
 
-    cal = Calendar.from_ical(text)
-    now = datetime.now(LOCAL_TZ)
+    now      = datetime.now(LOCAL_TZ)
     upcoming = []
-
     for comp in cal.walk():
         if comp.name != "VEVENT":
             continue
-
-        summary = str(comp.get("SUMMARY", "")).strip()
-        # Only consider actual Grand Prix events
-        if "grand prix" not in summary.lower():
+        summary = str(comp.get("SUMMARY", "")).lower()
+        if "grand prix" not in summary:
             continue
-
         dt = comp.get("DTSTART").dt
         if isinstance(dt, datetime):
             dt = dt.astimezone(LOCAL_TZ)
         else:
             dt = datetime(dt.year, dt.month, dt.day, tzinfo=LOCAL_TZ)
-
         if dt > now:
-            upcoming.append((dt, summary))
+            upcoming.append((dt, comp.get("SUMMARY")))
 
-    if not upcoming:
-        return None
+    upcoming.sort(key=lambda x: x[0])
+    return upcoming[:limit]
 
-    dt, name = sorted(upcoming, key=lambda x: x[0])[0]
-    return {
-        "name":     name,
-        "datetime": dt.strftime("%A, %b %d %I:%M %p %Z")
-    }
-
+def format_countdown(dt):
+    """Return a dd:hh:mm string until dt."""
+    delta = dt - datetime.now(LOCAL_TZ)
+    days = delta.days
+    hours, rem = divmod(delta.seconds, 3600)
+    minutes = rem // 60
+    return f"{days}d {hours}h {minutes}m"
 
 class F1Cog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Schedule the loop for 12:00 local time every day
         self.weekly_update.start()
+        self.reminder_loop.start()
 
     @tasks.loop(time=time(hour=12))
     async def weekly_update(self):
-        now = datetime.now(LOCAL_TZ)
-        # Only run on Sundays
-        if now.weekday() != 6:
+        # only Sundays
+        if datetime.now(LOCAL_TZ).weekday() != 6:
             return
-
-        channel = self.bot.get_channel(CHANNEL_ID)
-        if not channel:
+        ch = self.bot.get_channel(CHANNEL_ID)
+        events = await get_upcoming_events(1)
+        if not events:
+            await ch.send("⚠️ No upcoming Grand Prix found.")
             return
-
-        race = await get_next_race_from_ics()
-        if race:
-            await channel.send(
-                f"🏁 **Next F1 Race:** {race['name']}\n"
-                f"📅 **When:** {race['datetime']}"
-            )
-        else:
-            await channel.send("⚠️ Couldn’t find the next Grand Prix in the ICS feed.")
+        dt, name = events[0]
+        await ch.send(f"🏁 **Next F1 Race:** {name}\n📅 **When:** {dt.strftime('%A, %b %d %I:%M %p %Z')}")
 
     @weekly_update.before_loop
     async def before_weekly(self):
         await self.bot.wait_until_ready()
 
+    @tasks.loop(minutes=30)
+    async def reminder_loop(self):
+        """Every 30m check if any race is ~1 h away, DM subs."""
+        events = await get_upcoming_events(limit=3)
+        now = datetime.now(LOCAL_TZ)
+        for dt, name in events:
+            if 0 < (dt - now) <= timedelta(hours=1):
+                for user_id in list(subscribers):
+                    user = await self.bot.fetch_user(user_id)
+                    await user.send(f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}")
+
+    @reminder_loop.before_loop
+    async def before_reminders(self):
+        await self.bot.wait_until_ready()
+
     @nextcord.slash_command(
-        name="f1_next",
-        description="Get the next F1 Grand Prix from the ICS calendar",
+        name="f1_schedule",
+        description="Show the next N F1 races",
         guild_ids=[GUILD_ID]
     )
-    async def f1_next(self, interaction: nextcord.Interaction):
+    async def f1_schedule(self, interaction: nextcord.Interaction,
+                         count: int = nextcord.SlashOption(name="count", description="How many races?", required=False, default=5)):
         await interaction.response.defer()
-        race = await get_next_race_from_ics()
-        if race:
-            await interaction.followup.send(
-                f"🏁 **Next F1 Race:** {race['name']}\n"
-                f"📅 **When:** {race['datetime']}"
-            )
-        else:
-            await interaction.followup.send("⚠️ Couldn’t find the next Grand Prix in the ICS feed.")
+        events = await get_upcoming_events(count)
+        embed = nextcord.Embed(title=f"Next {len(events)} Grands Prix", color=0xE10600)
+        for dt, name in events:
+            embed.add_field(name=name, value=dt.strftime("%A, %b %d %I:%M %p %Z"), inline=False)
+        await interaction.followup.send(embed=embed)
+
+    @nextcord.slash_command(
+        name="f1_countdown",
+        description="Show a countdown until the next F1 race",
+        guild_ids=[GUILD_ID]
+    )
+    async def f1_countdown(self, interaction: nextcord.Interaction):
+        await interaction.response.defer()
+        events = await get_upcoming_events(1)
+        if not events:
+            return await interaction.followup.send("⚠️ No upcoming Grand Prix found.")
+        dt, name = events[0]
+        countdown = format_countdown(dt)
+        await interaction.followup.send(f"⏱ **{name}** starts in {countdown}")
+
+    @nextcord.slash_command(
+        name="f1_subscribe",
+        description="Subscribe to 1h‑before race reminders",
+        guild_ids=[GUILD_ID]
+    )
+    async def f1_subscribe(self, interaction: nextcord.Interaction):
+        subscribers.add(interaction.user.id)
+        await interaction.response.send_message("✅ You’ll get race reminders!", ephemeral=True)
+
+    @nextcord.slash_command(
+        name="f1_unsubscribe",
+        description="Stop race reminders",
+        guild_ids=[GUILD_ID]
+    )
+    async def f1_unsubscribe(self, interaction: nextcord.Interaction):
+        subscribers.discard(interaction.user.id)
+        await interaction.response.send_message("🛑 You’ve been unsubscribed.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(F1Cog(bot))
-    print("✅ Loaded F1Cog (ICS calendar)")
+    print("✅ Loaded F1Cog (extended with schedule, countdown & reminders)")
+
 
 
 
