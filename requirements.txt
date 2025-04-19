@@ -13,3 +13,4 @@ apscheduler
 psutil
 beautifulsoup4
 asyncio
+icalendar

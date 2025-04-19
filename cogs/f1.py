@@ -1,99 +1,104 @@
 # cogs/f1.py
 
 import aiohttp
-from bs4 import BeautifulSoup
+from icalendar import Calendar
 import nextcord
 from nextcord.ext import commands, tasks
-from datetime import datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# — Hardcoded from your .env —
+# — Hardcoded from your .env —
 GUILD_ID   = 761070952674230292
 CHANNEL_ID = 951059416466214932
 
-# Eastern Time (handles EST/EDT)
+# Eastern Time (will handle EST/EDT automatically)
 LOCAL_TZ = ZoneInfo("America/New_York")
 
-async def get_next_race_from_official():
-    year = datetime.now(LOCAL_TZ).year
-    url = f"https://www.formula1.com/en/racing/{year}.html"
+ICS_URL = "https://ics.ecal.com/ecal-sub/6803ebf123ccd40008c9e980/Formula%201.ics"
+
+
+async def get_next_race_from_ics():
     async with aiohttp.ClientSession() as sess:
-        resp = await sess.get(url)
-        html = await resp.text()
+        resp = await sess.get(ICS_URL)
+        text = await resp.text()
 
-    soup = BeautifulSoup(html, "html.parser")
-    rows = soup.select("table.race-listing tbody tr")
+    cal = Calendar.from_ical(text)
     now = datetime.now(LOCAL_TZ)
+    upcoming = []
 
-    for tr in rows:
-        date_cell = tr.select_one("td.date")
-        name_cell = tr.select_one("td.event a")
-        if not (date_cell and name_cell):
-            continue
+    for component in cal.walk():
+        if component.name == "VEVENT":
+            dt = component.get("DTSTART").dt
+            # ensure it's a datetime:
+            if isinstance(dt, datetime):
+                dt = dt.astimezone(LOCAL_TZ)
+            else:
+                # it's a date: make it midnight local
+                dt = datetime(dt.year, dt.month, dt.day, tzinfo=LOCAL_TZ)
 
-        month_day = date_cell.get_text(strip=True)  # e.g. "Apr 20"
-        try:
-            dt = datetime.strptime(f"{month_day} {year}", "%b %d %Y")
-            dt = dt.replace(tzinfo=LOCAL_TZ)
-        except ValueError:
-            continue
+            if dt > now:
+                summary = component.get("SUMMARY")
+                upcoming.append((dt, str(summary)))
 
-        if dt > now:
-            return {
-                "name":     name_cell.get_text(strip=True),
-                "datetime": dt.strftime("%A, %b %d %I:%M %p %Z")
-            }
-    return None
+    if not upcoming:
+        return None
+
+    # pick the soonest
+    dt, name = sorted(upcoming, key=lambda x: x[0])[0]
+    return {
+        "name":     name,
+        "datetime": dt.strftime("%A, %b %d %I:%M %p %Z")
+    }
+
 
 class F1Cog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # run daily at noon local time, but only post on Sunday
         self.weekly_update.start()
 
-    # Runs at 12:00 server‑local time every day; we check Sunday inside
-    @tasks.loop(time=time(hour=12))
+    @tasks.loop(time=datetime.now(LOCAL_TZ).replace(hour=12, minute=0, second=0).timetz())
     async def weekly_update(self):
         now = datetime.now(LOCAL_TZ)
-        if now.weekday() != 6:  # only Sundays
+        if now.weekday() != 6:  # Sunday
             return
 
         channel = self.bot.get_channel(CHANNEL_ID)
         if not channel:
             return
 
-        race = await get_next_race_from_official()
+        race = await get_next_race_from_ics()
         if race:
             await channel.send(
                 f"🏁 **Next F1 Race:** {race['name']}\n"
                 f"📅 **When:** {race['datetime']}"
             )
         else:
-            await channel.send("⚠️ Couldn’t find the next race on the official site.")
+            await channel.send("⚠️ Couldn’t find the next race in the ICS feed.")
 
     @weekly_update.before_loop
     async def before_weekly(self):
         await self.bot.wait_until_ready()
 
-    # Use nextcord.slash_command here
     @nextcord.slash_command(
         name="f1_next",
-        description="Get the next F1 race from the official site",
+        description="Get the next F1 race from the ICS calendar",
         guild_ids=[GUILD_ID]
     )
     async def f1_next(self, interaction: nextcord.Interaction):
         await interaction.response.defer()
-        race = await get_next_race_from_official()
+        race = await get_next_race_from_ics()
         if race:
             await interaction.followup.send(
                 f"🏁 **Next F1 Race:** {race['name']}\n"
                 f"📅 **When:** {race['datetime']}"
             )
         else:
-            await interaction.followup.send("⚠️ Couldn’t find the next race on the official site.")
+            await interaction.followup.send("⚠️ Couldn’t find the next race in the ICS feed.")
 
 def setup(bot):
     bot.add_cog(F1Cog(bot))
-    print("✅ Loaded F1Cog (official‑site scraper)")
+    print("✅ Loaded F1Cog (ICS calendar)")
 
 
 
