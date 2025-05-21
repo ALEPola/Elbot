@@ -311,6 +311,16 @@ class Music(commands.Cog):
             logger.info("Queue is empty, nothing to play next.")
             if interaction is not None:
                 await interaction.followup.send("No more tracks in the queue.", ephemeral=True)
+
+            # Remove the player message after a delay if the queue is empty
+            if guild_id in self.player_messages:
+                await asyncio.sleep(30)  # Wait for 30 seconds before removing the message
+                try:
+                    await self.player_messages[guild_id].delete()
+                    del self.player_messages[guild_id]
+                    logger.info("Removed persistent player message after queue ended.")
+                except Exception as e:
+                    logger.error(f"Error removing player message: {e}")
             return
 
         guild = self.bot.get_guild(guild_id)
@@ -364,25 +374,24 @@ class Music(commands.Cog):
 
         view = MusicControls(self)
 
-        # Delete any previous persistent player message.
+        # Update the existing persistent player message instead of creating a new one.
         if guild_id in self.player_messages:
             try:
-                await self.player_messages[guild_id].delete()
-                logger.info("Deleted previous persistent player message.")
-                del self.player_messages[guild_id]
+                await self.player_messages[guild_id].edit(embed=embed, view=view)
+                logger.info("Updated persistent player message.")
             except Exception as e:
-                logger.error(f"Error deleting previous player message: {e}")
-
-        # Send a new persistent player message.
-        channel = self.player_channels.get(guild_id)
-        if not channel:
-            channel = voice_client.guild.system_channel or voice_client.guild.text_channels[0]
-        try:
-            msg = await channel.send(embed=embed, view=view)
-            self.player_messages[guild_id] = msg
-            logger.info("Sent new persistent player message.")
-        except Exception as e:
-            logger.error(f"Error sending player message: {e}")
+                logger.error(f"Error updating player message: {e}")
+        else:
+            # Send a new persistent player message if none exists.
+            channel = self.player_channels.get(guild_id)
+            if not channel:
+                channel = voice_client.guild.system_channel or voice_client.guild.text_channels[0]
+            try:
+                msg = await channel.send(embed=embed, view=view)
+                self.player_messages[guild_id] = msg
+                logger.info("Sent new persistent player message.")
+            except Exception as e:
+                logger.error(f"Error sending player message: {e}")
 
         # Do not edit the original interaction message to avoid duplicate now playing messages.
         if item.get("duration"):
