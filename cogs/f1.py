@@ -26,6 +26,9 @@ SUBSCRIBERS_FILE = "subscribers.json"
 if not GUILD_ID or not CHANNEL_ID or not ICS_URL:
     raise RuntimeError("Missing required environment variables: GUILD_ID, CHANNEL_ID, or ICS_URL.")
 
+# Define the local timezone
+LOCAL_TZ = ZoneInfo("America/New_York")
+
 # In‑memory subscriber list (persist this to disk for real bots)
 # Load subscribers from file
 try:

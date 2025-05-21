@@ -18,19 +18,26 @@ fi
 echo "🔄 Pulling latest code from Working branch..."
 git pull origin Working
 
-# 4) Install or update dependencies
+# 4) Set up and activate the virtual environment
+echo "📦 Setting up virtual environment..."
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
+fi
+source venv/bin/activate
+
+# 5) Install or update dependencies
 echo "📦 Installing/updating dependencies..."
 pip install -r requirements.txt
 
-# 5) Run unit tests
+# 6) Run unit tests
 echo "🧪 Running unit tests..."
 pytest --maxfail=1 --disable-warnings
 
-# 6) Restart the bot service
+# 7) Restart the bot service
 echo "🔁 Restarting ELBOT service..."
 sudo systemctl restart elbot.service
 
-# 7) Check the status of the bot service
+# 8) Check the status of the bot service
 echo "✅ Checking bot service status..."
 sudo systemctl status elbot.service --no-pager
 
