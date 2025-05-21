@@ -48,6 +48,21 @@ def format_countdown(dt):
     minutes = rem // 60
     return f"{days}d {hours}h {minutes}m"
 
+# Helper function to format event details
+def format_event_details(events):
+    """Format a list of events into a string or embed fields."""
+    formatted_events = []
+    for dt, name in events:
+        formatted_events.append((name, dt.strftime("%A, %b %d %I:%M %p %Z")))
+    return formatted_events
+
+# Helper function to notify subscribers
+async def notify_subscribers(bot, subscribers, message):
+    """Send a message to all subscribers."""
+    for user_id in list(subscribers):
+        user = await bot.fetch_user(user_id)
+        await user.send(message)
+
 class F1Cog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -73,14 +88,13 @@ class F1Cog(commands.Cog):
 
     @tasks.loop(minutes=30)
     async def reminder_loop(self):
-        """Every 30m check if any race is ~1 h away, DM subs."""
+        """Every 30m check if any race is ~1 h away, DM subs."""
         events = await get_upcoming_events(limit=3)
         now = datetime.now(LOCAL_TZ)
         for dt, name in events:
             if 0 < (dt - now) <= timedelta(hours=1):
-                for user_id in list(subscribers):
-                    user = await self.bot.fetch_user(user_id)
-                    await user.send(f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}")
+                message = f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}"
+                await notify_subscribers(self.bot, subscribers, message)
 
     @reminder_loop.before_loop
     async def before_reminders(self):
@@ -95,9 +109,9 @@ class F1Cog(commands.Cog):
                          count: int = nextcord.SlashOption(name="count", description="How many races?", required=False, default=5)):
         await interaction.response.defer()
         events = await get_upcoming_events(count)
-        embed = nextcord.Embed(title=f"Next {len(events)} Grands Prix", color=0xE10600)
-        for dt, name in events:
-            embed.add_field(name=name, value=dt.strftime("%A, %b %d %I:%M %p %Z"), inline=False)
+        embed = nextcord.Embed(title=f"Next {len(events)} Grands Prix", color=0xE10600)
+        for name, details in format_event_details(events):
+            embed.add_field(name=name, value=details, inline=False)
         await interaction.followup.send(embed=embed)
 
     @nextcord.slash_command(
