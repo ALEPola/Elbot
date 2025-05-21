@@ -1,3 +1,9 @@
+"""
+MusicCog: A cog for managing music playback and related commands.
+
+This cog provides commands to play, pause, skip, and manage music queues in a Discord server.
+"""
+
 import nextcord
 from nextcord.ext import commands
 import yt_dlp as youtube_dl
@@ -18,6 +24,17 @@ logging.basicConfig(
 )
 
 def extract_info(query, ydl_opts, cookie_file):
+    """
+    Extract video information from a query using youtube_dl.
+
+    Args:
+        query (str): The search query or URL.
+        ydl_opts (dict): Options for youtube_dl.
+        cookie_file (str): Path to the cookies file.
+
+    Returns:
+        tuple: A tuple containing the video information and an error message (if any).
+    """
     # Quick check for additional services
     if "spotify" in query.lower() or "soundcloud" in query.lower():
         logger.info("Spotify/SoundCloud integration not yet implemented. Please use a YouTube link.")
@@ -55,50 +72,141 @@ def extract_info(query, ydl_opts, cookie_file):
 
 # Helper function to clear and refill a queue
 def update_queue(queue, new_items):
+    """
+    Update the queue with new items.
+
+    Args:
+        queue (asyncio.Queue): The queue to update.
+        new_items (list): The new items to add to the queue.
+    """
     queue._queue.clear()
     for item in new_items:
         queue._queue.append(item)
 
 # Persistent view for music controls.
 class MusicControls(nextcord.ui.View):
+    """
+    Persistent view for music controls.
+
+    Attributes:
+        cog (Music): The Music cog instance.
+    """
+
     def __init__(self, cog):
+        """
+        Initialize the MusicControls view.
+
+        Args:
+            cog (Music): The Music cog instance.
+        """
         super().__init__(timeout=None)
         self.cog = cog
 
     @nextcord.ui.button(label="QUEUE", style=nextcord.ButtonStyle.green, custom_id="queue")
     async def queue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Show the queue details.
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.queue_details(interaction)
 
     @nextcord.ui.button(label="⏯ Pause/Resume", style=nextcord.ButtonStyle.grey, custom_id="pause_resume")
     async def pause_resume_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Toggle pause/resume for the current track.
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.toggle_pause_resume(interaction)
 
     @nextcord.ui.button(label="SKIP", style=nextcord.ButtonStyle.green, custom_id="skip")
     async def skip_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Skip the current track.
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.skip_track(interaction)
 
     @nextcord.ui.button(label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind")
     async def rewind_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Rewind the current track (restart).
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.rewind_track(interaction)
 
     @nextcord.ui.button(label="FORWARD", style=nextcord.ButtonStyle.green, custom_id="forward")
     async def forward_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Forward the current track (skip ahead).
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.forward_track(interaction)
 
     @nextcord.ui.button(label="REPLAY", style=nextcord.ButtonStyle.green, custom_id="replay")
     async def replay_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Replay the current track.
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.replay_track(interaction)
 
     @nextcord.ui.button(label="LOOP", style=nextcord.ButtonStyle.green, custom_id="loop")
     async def loop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Toggle loop mode for the current track.
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.toggle_loop(interaction)
 
     @nextcord.ui.button(label="🛑 STOP", style=nextcord.ButtonStyle.red, custom_id="stop")
     async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        """
+        Stop the current track and clear the queue.
+
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.cog.stop_track(interaction)
 
 class Music(commands.Cog):
+    """
+    A cog for managing music playback and related commands.
+
+    Attributes:
+        bot (commands.Bot): The bot instance.
+        queue (dict): A dictionary mapping guild IDs to their music queues.
+        locks (dict): A dictionary mapping guild IDs to asyncio locks for thread-safe operations.
+    """
+
     def __init__(self, bot):
+        """
+        Initialize the MusicCog.
+
+        Args:
+            bot (commands.Bot): The bot instance.
+        """
         self.bot = bot
         self.queue = {}            # guild_id -> asyncio.Queue of song items
         self.player_messages = {}  # guild_id -> persistent player message
@@ -112,11 +220,29 @@ class Music(commands.Cog):
         self.locks = {}            # guild_id -> asyncio.Lock for thread-safe operations
 
     def get_lock(self, guild_id):
+        """
+        Get or create an asyncio lock for a specific guild.
+
+        Args:
+            guild_id (int): The ID of the guild.
+
+        Returns:
+            asyncio.Lock: The lock for the guild.
+        """
         if guild_id not in self.locks:
             self.locks[guild_id] = asyncio.Lock()
         return self.locks[guild_id]
 
     async def ensure_voice(self, interaction: nextcord.Interaction):
+        """
+        Ensure the user is in a voice channel and the bot is connected to it.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+
+        Returns:
+            bool: True if the bot is connected to a voice channel, False otherwise.
+        """
         if interaction.user.voice is None:
             await interaction.followup.send(f"{interaction.user.display_name}, you are not in a voice channel.", ephemeral=True)
             return False
@@ -131,6 +257,13 @@ class Music(commands.Cog):
     @nextcord.slash_command(name="play", description="Play a song from YouTube.")
     @cooldown(1, 5, BucketType.guild)
     async def play(self, interaction: nextcord.Interaction, search: str):
+        """
+        Play a song or add it to the queue.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            query (str): The search query or URL of the song.
+        """
         await interaction.response.defer()  # Not ephemeral
         if not await self.ensure_voice(interaction):
             return
@@ -167,6 +300,13 @@ class Music(commands.Cog):
                 )
 
     async def play_next(self, guild_id, interaction: nextcord.Interaction = None):
+        """
+        Play the next track in the queue.
+
+        Args:
+            guild_id (int): The ID of the guild.
+            interaction (nextcord.Interaction, optional): The interaction object. Defaults to None.
+        """
         if guild_id not in self.queue or self.queue[guild_id].empty():
             logger.info("Queue is empty, nothing to play next.")
             if interaction is not None:
@@ -183,6 +323,14 @@ class Music(commands.Cog):
         await self.play_song(guild.voice_client, item, interaction)
 
     async def play_song(self, voice_client, item, interaction: nextcord.Interaction = None):
+        """
+        Play a specific song.
+
+        Args:
+            voice_client (nextcord.VoiceClient): The voice client.
+            item (dict): The song item containing information like title, URL, etc.
+            interaction (nextcord.Interaction, optional): The interaction object. Defaults to None.
+        """
         guild_id = voice_client.guild.id
         self.current_track[guild_id] = item
         self.track_start_time[guild_id] = time.time()
@@ -241,6 +389,17 @@ class Music(commands.Cog):
             self.bot.loop.create_task(self.update_now_playing(guild_id, voice_client, item.get("duration")))
 
     def create_progress_bar(self, elapsed, total, length=20):
+        """
+        Create a progress bar string.
+
+        Args:
+            elapsed (float): The elapsed time in seconds.
+            total (float): The total time in seconds.
+            length (int, optional): The length of the progress bar. Defaults to 20.
+
+        Returns:
+            str: The progress bar string.
+        """
         if total <= 0:
             return "N/A"
         progress = min(elapsed / total, 1.0)
@@ -251,12 +410,27 @@ class Music(commands.Cog):
         return f"{elapsed_str} [{bar}] {total_str}"
 
     def format_time(self, seconds):
+        """
+        Format time in seconds to a string.
+
+        Args:
+            seconds (float): The time in seconds.
+
+        Returns:
+            str: The formatted time string.
+        """
         minutes = int(seconds // 60)
         seconds = int(seconds % 60)
         return f"{minutes:02d}:{seconds:02d}"
 
     # Optimize update_now_playing method
     async def update_now_playing(self, guild_id, voice_client, total_duration):
+        """
+        Update the now playing message for a guild.
+
+        Args:
+            guild_id (int): The ID of the guild.
+        """
         last_update = 0
         while voice_client.is_playing():
             elapsed = time.time() - self.track_start_time.get(guild_id, time.time())
@@ -279,6 +453,15 @@ class Music(commands.Cog):
             await asyncio.sleep(1)
 
     async def download_youtube_audio(self, query):
+        """
+        Download YouTube audio using youtube_dl.
+
+        Args:
+            query (str): The search query or URL.
+
+        Returns:
+            list: A list of downloaded audio files.
+        """
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", None)
         if cookie_file and not os.path.exists(cookie_file):
             logger.warning(f"Cookie file not found: {cookie_file}. Continuing without cookies.")
@@ -297,6 +480,13 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="remove_track", description="Remove a track from the queue by its position.")
     async def remove_track(self, interaction: nextcord.Interaction, index: int):
+        """
+        Remove a track from the queue by its position.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            index (int): The position of the track to remove.
+        """
         guild_id = interaction.guild.id
         if guild_id not in self.queue or self.queue[guild_id].empty():
             await interaction.response.send_message("The queue is empty.", ephemeral=True)
@@ -311,6 +501,14 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="move_track", description="Move a track to a new position in the queue.")
     async def move_track(self, interaction: nextcord.Interaction, from_index: int, to_index: int):
+        """
+        Move a track to a new position in the queue.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            from_index (int): The current position of the track.
+            to_index (int): The new position for the track.
+        """
         guild_id = interaction.guild.id
         if guild_id not in self.queue or self.queue[guild_id].empty():
             await interaction.response.send_message("The queue is empty.", ephemeral=True)
@@ -326,6 +524,12 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="queue_details", description="Show detailed queue information.")
     async def queue_details(self, interaction: nextcord.Interaction):
+        """
+        Show detailed queue information.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         guild_id = interaction.guild.id
         if guild_id not in self.queue or self.queue[guild_id].empty():
             await interaction.response.send_message("The queue is empty.", ephemeral=True)
@@ -339,6 +543,16 @@ class Music(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def search_youtube(self, query, max_results=5):
+        """
+        Search YouTube for a query.
+
+        Args:
+            query (str): The search query.
+            max_results (int, optional): The maximum number of results to return. Defaults to 5.
+
+        Returns:
+            list: A list of search results.
+        """
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", None)
         ydl_opts = {
             "format": "bestaudio",
@@ -368,6 +582,13 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="search", description="Search for a track and select one to queue.")
     async def search(self, interaction: nextcord.Interaction, query: str):
+        """
+        Search for a track and select one to queue.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            query (str): The search query.
+        """
         await interaction.response.defer(ephemeral=True)
         results = await self.search_youtube(query, max_results=5)
         if not results:
@@ -378,6 +599,13 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="volume", description="Adjust playback volume (0-150%).")
     async def volume(self, interaction: nextcord.Interaction, volume: int):
+        """
+        Adjust playback volume.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            volume (int): The volume level (0-150).
+        """
         if volume < 0 or volume > 150:
             await interaction.response.send_message("Volume must be between 0 and 150.", ephemeral=True)
             return
@@ -390,6 +618,12 @@ class Music(commands.Cog):
         await interaction.response.send_message(f"Volume set to {volume}%.", ephemeral=True)
 
     async def toggle_pause_resume(self, interaction: nextcord.Interaction):
+        """
+        Toggle pause/resume for the current track.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         voice_client = interaction.guild.voice_client
         if voice_client is None:
             await interaction.response.send_message("Not connected to a voice channel.", ephemeral=True)
@@ -404,6 +638,12 @@ class Music(commands.Cog):
             await interaction.response.send_message("Nothing is playing.", ephemeral=True)
 
     async def skip_track(self, interaction: nextcord.Interaction):
+        """
+        Skip the currently playing track.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if voice_client is None:
@@ -415,6 +655,12 @@ class Music(commands.Cog):
         await interaction.response.send_message("Skipped track.", ephemeral=True)
 
     async def stop_track(self, interaction: nextcord.Interaction):
+        """
+        Stop the current track and clear the queue.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if voice_client is None:
@@ -430,6 +676,12 @@ class Music(commands.Cog):
         await interaction.response.send_message("Stopped playback and cleared the queue.", ephemeral=True)
 
     async def rewind_track(self, interaction: nextcord.Interaction):
+        """
+        Rewind the current track (restart).
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await interaction.response.defer()
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
@@ -442,9 +694,21 @@ class Music(commands.Cog):
         await interaction.followup.send("Rewound the track (restarted).", ephemeral=True)
 
     async def forward_track(self, interaction: nextcord.Interaction):
+        """
+        Forward the current track (skip ahead).
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await self.skip_track(interaction)
 
     async def replay_track(self, interaction: nextcord.Interaction):
+        """
+        Replay the current track.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await interaction.response.defer()
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
@@ -457,6 +721,12 @@ class Music(commands.Cog):
         await interaction.followup.send("Replaying the track.", ephemeral=True)
 
     async def toggle_loop(self, interaction: nextcord.Interaction):
+        """
+        Toggle loop mode for the current track.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         guild_id = interaction.guild.id
         current = self.loop_mode.get(guild_id, False)
         self.loop_mode[guild_id] = not current
@@ -465,6 +735,14 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        """
+        Listen to voice state updates.
+
+        Args:
+            member (nextcord.Member): The member whose voice state changed.
+            before (nextcord.VoiceState): The previous voice state.
+            after (nextcord.VoiceState): The new voice state.
+        """
         # Act only on the bot's own voice state changes.
         if member.id != self.bot.user.id:
             return
@@ -483,6 +761,12 @@ class Music(commands.Cog):
     # Clean up guild-specific data when bot leaves a guild
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
+        """
+        Clean up guild-specific data when the bot leaves a guild.
+
+        Args:
+            guild (nextcord.Guild): The guild that the bot left.
+        """
         guild_id = guild.id
         if guild_id in self.queue:
             del self.queue[guild_id]
@@ -506,18 +790,49 @@ class Music(commands.Cog):
             del self.locks[guild_id]
 
 class SearchSelectView(nextcord.ui.View):
+    """
+    View for selecting a search result.
+
+    Attributes:
+        music_cog (Music): The Music cog instance.
+        results (list): The list of search results.
+    """
+
     def __init__(self, music_cog, results):
+        """
+        Initialize the SearchSelectView.
+
+        Args:
+            music_cog (Music): The Music cog instance.
+            results (list): The list of search results.
+        """
         super().__init__(timeout=30)
         self.music_cog = music_cog
         self.results = results
         self.add_item(SearchSelect(self.results))
 
     async def on_timeout(self):
+        """
+        Disable all select options when the view times out.
+        """
         for child in self.children:
             child.disabled = True
 
 class SearchSelect(nextcord.ui.Select):
+    """
+    Select menu for choosing a track from search results.
+
+    Attributes:
+        results (list): The list of search results.
+    """
+
     def __init__(self, results):
+        """
+        Initialize the SearchSelect menu.
+
+        Args:
+            results (list): The list of search results.
+        """
         options = []
         for i, item in enumerate(results):
             label = item.get("title")[:100]
@@ -527,6 +842,12 @@ class SearchSelect(nextcord.ui.Select):
         super().__init__(placeholder="Select a track...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: nextcord.Interaction):
+        """
+        Handle the selection of a track.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         index = int(self.values[0])
         selected_track = self.view.results[index]
         guild_id = interaction.guild.id
@@ -537,6 +858,12 @@ class SearchSelect(nextcord.ui.Select):
         self.view.stop()
 
 def setup(bot):
+    """
+    Set up the MusicCog.
+
+    Args:
+        bot (commands.Bot): The bot instance.
+    """
     bot.add_cog(Music(bot))
 
 

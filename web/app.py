@@ -34,6 +34,17 @@ app.config.update(
 
 sock = Sock(app)  # WebSocket support
 
+# Global variables for bot data
+bot_data = {
+    "start_time": datetime.now(),
+    "logs": [],
+    "commands": {
+        "f1": True,
+        "music": True,
+        "chat": True
+    }
+}
+
 # ╔════════════════════════════════════════════╗
 # ☰  AUTH  ════════════════════════════════════
 # ╚════════════════════════════════════════════╝
@@ -138,6 +149,46 @@ def api_status():
     except subprocess.CalledProcessError:
         active = "unknown"
     return jsonify(status=active.capitalize())
+
+@app.route("/status")
+def status():
+    """Return bot status and system information."""
+    uptime = datetime.now() - bot_data["start_time"]
+    memory = psutil.virtual_memory()
+    cpu = psutil.cpu_percent()
+    disk = psutil.disk_usage("/")
+    return jsonify({
+        "uptime": str(uptime),
+        "memory": {
+            "total": memory.total // (1024 ** 3),
+            "used": memory.used // (1024 ** 3),
+            "percent": memory.percent
+        },
+        "cpu": cpu,
+        "disk": {
+            "total": disk.total // (1024 ** 3),
+            "used": disk.used // (1024 ** 3),
+            "percent": disk.percent
+        }
+    })
+
+@app.route("/logs")
+def logs():
+    """Return the latest bot logs."""
+    return jsonify({"logs": bot_data["logs"][-50:]})
+
+@app.route("/commands")
+def commands():
+    """Return the status of bot commands."""
+    return jsonify(bot_data["commands"])
+
+@app.route("/toggle_command/<command>", methods=["POST"])
+def toggle_command(command):
+    """Enable or disable a specific command."""
+    if command in bot_data["commands"]:
+        bot_data["commands"][command] = not bot_data["commands"][command]
+        return jsonify({"status": "success", "command": command, "enabled": bot_data["commands"][command]}), 200
+    return jsonify({"status": "error", "message": "Command not found."}), 404
 
 # dev runner
 if __name__ == "__main__":

@@ -29,7 +29,20 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_last_interaction = {}
 
 class ChatCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    """
+    A cog for managing chat-related commands and interactions.
+
+    Attributes:
+        bot (commands.Bot): The bot instance.
+    """
+
+    def __init__(self, bot):
+        """
+        Initialize the ChatCog.
+
+        Args:
+            bot (commands.Bot): The bot instance.
+        """
         self.bot = bot
 
     @nextcord.slash_command(
@@ -46,6 +59,13 @@ class ChatCog(commands.Cog):
             required=True
         )
     ):
+        """
+        Respond to a user's message in a conversational manner.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            message (str): The user's message to the bot.
+        """
         user_id = interaction.user.id
         now = time.monotonic()
         last = user_last_interaction.get(user_id, 0)
@@ -85,6 +105,12 @@ class ChatCog(commands.Cog):
 
 
 def setup(bot: commands.Bot):
+    """
+    Set up the ChatCog.
+
+    Args:
+        bot (commands.Bot): The bot instance.
+    """
     bot.add_cog(ChatCog(bot))
     logger.info("✅ Loaded ChatCog")
 

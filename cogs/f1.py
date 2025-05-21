@@ -1,3 +1,9 @@
+"""
+F1Cog: A cog for managing Formula 1-related commands and reminders.
+
+This cog provides commands to display F1 schedules, countdowns, and manage race reminders.
+"""
+
 # cogs/f1.py
 
 import aiohttp
@@ -6,17 +12,43 @@ import nextcord
 from nextcord.ext import commands, tasks
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
+import json
+import os
+from dotenv import load_dotenv
 
-GUILD_ID    = 761070952674230292
-CHANNEL_ID  = 951059416466214932
-LOCAL_TZ    = ZoneInfo("America/New_York")
-ICS_URL     = "https://ics.ecal.com/ecal-sub/6803ebf123ccd40008c9e980/Formula%201.ics"
+load_dotenv()
+
+GUILD_ID    = int(os.getenv("GUILD_ID", "0"))
+CHANNEL_ID  = int(os.getenv("CHANNEL_ID", "0"))
+ICS_URL     = os.getenv("ICS_URL", "")
+SUBSCRIBERS_FILE = "subscribers.json"
+
+if not GUILD_ID or not CHANNEL_ID or not ICS_URL:
+    raise RuntimeError("Missing required environment variables: GUILD_ID, CHANNEL_ID, or ICS_URL.")
 
 # In‑memory subscriber list (persist this to disk for real bots)
-subscribers = set()
+# Load subscribers from file
+try:
+    with open(SUBSCRIBERS_FILE, "r") as f:
+        subscribers = set(json.load(f))
+except (FileNotFoundError, json.JSONDecodeError):
+    subscribers = set()
+
+# Save subscribers to file
+def save_subscribers():
+    with open(SUBSCRIBERS_FILE, "w") as f:
+        json.dump(list(subscribers), f)
 
 async def get_upcoming_events(limit=5):
-    """Return a sorted list of (dt, summary) for the next `limit` Grand Prix events."""
+    """
+    Fetch and return a sorted list of upcoming Formula 1 events.
+
+    Args:
+        limit (int): The maximum number of events to return.
+
+    Returns:
+        list: A list of tuples containing the event datetime and summary.
+    """
     async with aiohttp.ClientSession() as sess:
         resp = await sess.get(ICS_URL)
         cal  = Calendar.from_ical(await resp.text())
@@ -41,7 +73,15 @@ async def get_upcoming_events(limit=5):
     return upcoming[:limit]
 
 def format_countdown(dt):
-    """Return a dd:hh:mm string until dt."""
+    """
+    Format a countdown string until the given datetime.
+
+    Args:
+        dt (datetime): The target datetime.
+
+    Returns:
+        str: A formatted string in the format 'dd:hh:mm'.
+    """
     delta = dt - datetime.now(LOCAL_TZ)
     days = delta.days
     hours, rem = divmod(delta.seconds, 3600)
@@ -64,13 +104,32 @@ async def notify_subscribers(bot, subscribers, message):
         await user.send(message)
 
 class F1Cog(commands.Cog):
+    """
+    A cog for managing Formula 1-related commands and reminders.
+
+    Attributes:
+        bot (commands.Bot): The bot instance.
+        start_time (datetime): The time when the cog was initialized.
+    """
+
     def __init__(self, bot):
+        """
+        Initialize the F1Cog.
+
+        Args:
+            bot (commands.Bot): The bot instance.
+        """
         self.bot = bot
         self.weekly_update.start()
         self.reminder_loop.start()
 
     @tasks.loop(time=time(hour=12))
     async def weekly_update(self):
+        """
+        Send a weekly update about the next F1 race to the designated channel.
+
+        This task runs every Sunday at 12 PM.
+        """
         # only Sundays
         if datetime.now(LOCAL_TZ).weekday() != 6:
             return
@@ -84,11 +143,16 @@ class F1Cog(commands.Cog):
 
     @weekly_update.before_loop
     async def before_weekly(self):
+        """
+        Wait until the bot is ready before starting the weekly update task.
+        """
         await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=30)
     async def reminder_loop(self):
-        """Every 30m check if any race is ~1 h away, DM subs."""
+        """
+        Check every 30 minutes if any race is ~1 hour away and DM subscribers.
+        """
         events = await get_upcoming_events(limit=3)
         now = datetime.now(LOCAL_TZ)
         for dt, name in events:
@@ -98,6 +162,9 @@ class F1Cog(commands.Cog):
 
     @reminder_loop.before_loop
     async def before_reminders(self):
+        """
+        Wait until the bot is ready before starting the reminder loop.
+        """
         await self.bot.wait_until_ready()
 
     @nextcord.slash_command(
@@ -105,8 +172,14 @@ class F1Cog(commands.Cog):
         description="Show the next N F1 races",
         guild_ids=[GUILD_ID]
     )
-    async def f1_schedule(self, interaction: nextcord.Interaction,
-                         count: int = nextcord.SlashOption(name="count", description="How many races?", required=False, default=5)):
+    async def f1_schedule(self, interaction: nextcord.Interaction, count: int = 5):
+        """
+        Display the schedule for the next N Formula 1 races.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+            count (int): The number of races to display (default is 5).
+        """
         await interaction.response.defer()
         events = await get_upcoming_events(count)
         embed = nextcord.Embed(title=f"Next {len(events)} Grands Prix", color=0xE10600)
@@ -120,6 +193,12 @@ class F1Cog(commands.Cog):
         guild_ids=[GUILD_ID]
     )
     async def f1_countdown(self, interaction: nextcord.Interaction):
+        """
+        Display a countdown until the next Formula 1 race.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         await interaction.response.defer()
         events = await get_upcoming_events(1)
         if not events:
@@ -130,11 +209,18 @@ class F1Cog(commands.Cog):
 
     @nextcord.slash_command(
         name="f1_subscribe",
-        description="Subscribe to 1h‑before race reminders",
+        description="Subscribe to 1h-before race reminders",
         guild_ids=[GUILD_ID]
     )
     async def f1_subscribe(self, interaction: nextcord.Interaction):
+        """
+        Subscribe the user to 1-hour-before race reminders.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         subscribers.add(interaction.user.id)
+        save_subscribers()
         await interaction.response.send_message("✅ You’ll get race reminders!", ephemeral=True)
 
     @nextcord.slash_command(
@@ -143,10 +229,23 @@ class F1Cog(commands.Cog):
         guild_ids=[GUILD_ID]
     )
     async def f1_unsubscribe(self, interaction: nextcord.Interaction):
+        """
+        Unsubscribe the user from race reminders.
+
+        Args:
+            interaction (nextcord.Interaction): The interaction object.
+        """
         subscribers.discard(interaction.user.id)
+        save_subscribers()
         await interaction.response.send_message("🛑 You’ve been unsubscribed.", ephemeral=True)
 
 def setup(bot):
+    """
+    Set up the F1Cog.
+
+    Args:
+        bot (commands.Bot): The bot instance.
+    """
     bot.add_cog(F1Cog(bot))
     print("✅ Loaded F1Cog (extended with schedule, countdown & reminders)")
 

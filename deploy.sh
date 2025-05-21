@@ -18,9 +18,21 @@ fi
 echo "🔄 Pulling latest code from Working branch..."
 git pull origin Working
 
-# 4) Restart the bot service
+# 4) Install or update dependencies
+echo "📦 Installing/updating dependencies..."
+pip install -r requirements.txt
+
+# 5) Run unit tests
+echo "🧪 Running unit tests..."
+pytest --maxfail=1 --disable-warnings
+
+# 6) Restart the bot service
 echo "🔁 Restarting ELBOT service..."
 sudo systemctl restart elbot.service
 
-echo "✅ ELBOT has been updated and restarted, and port 8080 has been cleared."
+# 7) Check the status of the bot service
+echo "✅ Checking bot service status..."
+sudo systemctl status elbot.service --no-pager
+
+echo "🎉 Deployment completed successfully!"
 
