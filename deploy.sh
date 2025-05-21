@@ -33,6 +33,9 @@ pip install -r requirements.txt
 echo "🧪 Running unit tests..."
 pytest --maxfail=1 --disable-warnings
 
+# 6.5) Kill any standalone bot processes
+pkill -f main.py || true
+
 # 7) Restart the bot service
 echo "🔁 Restarting ELBOT service..."
 sudo systemctl restart elbot.service
