@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import nextcord
 from nextcord.ext import commands
+import logging
 
 # 1) Load .env first
 load_dotenv()
@@ -15,11 +16,36 @@ intents = nextcord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("elbot.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("ELBOT")
+
 @bot.event
 async def on_ready():
     # 3) Sync *guild* commands for instant availability
     await bot.sync_application_commands(guild_id=GUILD_ID)
     print(f'✅ Logged in as {bot.user}')
+
+# Global error handler
+@bot.event
+async def on_command_error(ctx, error):
+    """Handle errors globally for commands."""
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send("❌ Command not found. Use `!help` to see available commands.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Missing required argument. Please check the command usage.")
+    elif isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"⏳ This command is on cooldown. Try again in {round(error.retry_after, 2)} seconds.")
+    else:
+        logger.error(f"Unhandled error: {error}", exc_info=True)
+        await ctx.send("❌ An unexpected error occurred. Please contact the admin.")
 
 def run_flask():
     # 4) Disable the reloader so you don’t spin up two processes
