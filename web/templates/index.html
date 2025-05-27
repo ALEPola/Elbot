@@ -111,11 +111,25 @@
         </div>
       </div>
 
+      <!-- Bot Management Controls -->
+      <div class="text-center my-4">
+        <form action="/bot/manage" method="POST">
+          <button name="action" value="start" class="btn btn-success mx-2">Start Bot</button>
+          <button name="action" value="stop" class="btn btn-danger mx-2">Stop Bot</button>
+          <button name="action" value="restart" class="btn btn-warning mx-2">Restart Bot</button>
+        </form>
+      </div>
+
       <!-- Last Update -->
       <div class="col-xxl-10">
         <div class="last-update">
           <p>Last Update: <span id="last-update">Fetching...</span></p>
         </div>
+      </div>
+
+      <!-- Theme Switcher -->
+      <div class="text-center my-4">
+        <button class="btn btn-primary" id="themeSwitcher">Switch Theme</button>
       </div>
 
     </div>
@@ -211,6 +225,15 @@
           document.getElementById('last-update').textContent = new Date().toLocaleString();
       })
       .catch(error => console.error('Error fetching last update:', error));
+
+  /* ---- THEME SWITCHER ---- */
+  const themeSwitcher = document.getElementById('themeSwitcher');
+  themeSwitcher.addEventListener('click', () => {
+    const currentTheme = document.body.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.body.setAttribute('data-theme', newTheme);
+    document.getElementById('themeStylesheet').setAttribute('href', `/static/css/${newTheme}.css`);
+  });
 </script>
 
 <style>

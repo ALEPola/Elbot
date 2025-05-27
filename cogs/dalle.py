@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import asyncio
 
 # Load environment variables
-load_dotenv()
+load_dotenv()  # Load environment variables from .env file
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 GUILD_ID = int(os.getenv('GUILD_ID'))  # Make sure to load and convert to an integer

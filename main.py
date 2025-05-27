@@ -8,7 +8,7 @@ import sys
 import atexit
 
 # 1) Load .env first
-load_dotenv()
+load_dotenv()  # Load environment variables from .env file
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 GUILD_ID          = int(os.getenv('GUILD_ID',   '0'))
 # …any other env vars…

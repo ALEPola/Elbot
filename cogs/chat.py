@@ -9,7 +9,7 @@ from textblob import TextBlob
 from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+load_dotenv()  # Load environment variables from .env file
 
 logging.basicConfig(
     level=logging.INFO,

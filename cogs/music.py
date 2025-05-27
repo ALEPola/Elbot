@@ -16,8 +16,10 @@ from dotenv import load_dotenv
 import functools
 from nextcord.ext.commands import cooldown, BucketType
 import json
+import random
+from nextcord.ext.commands import has_permissions
 
-load_dotenv()
+load_dotenv()  # Load environment variables from .env file
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -746,6 +748,68 @@ class Music(commands.Cog):
         self.loop_mode[guild_id] = not current
         status = "enabled" if self.loop_mode[guild_id] else "disabled"
         await interaction.response.send_message(f"Loop mode {status}.", ephemeral=True)
+
+    @commands.command(name="shuffle")
+    async def shuffle_queue(self, ctx):
+        """
+        Shuffle the current music queue.
+        """
+        if not self.queue._queue:
+            await ctx.send("The queue is empty! Nothing to shuffle.")
+            return
+
+        random.shuffle(self.queue._queue)
+        await ctx.send("🔀 The queue has been shuffled!")
+
+    @commands.command(name="reorder")
+    async def reorder_queue(self, ctx, old_index: int, new_index: int):
+        """
+        Reorder a song in the queue.
+
+        Args:
+            old_index (int): The current position of the song.
+            new_index (int): The new position for the song.
+        """
+        if old_index < 1 or new_index < 1 or old_index > len(self.queue._queue) or new_index > len(self.queue._queue):
+            await ctx.send("Invalid indices! Please provide valid positions in the queue.")
+            return
+
+        song = self.queue._queue.pop(old_index - 1)
+        self.queue._queue.insert(new_index - 1, song)
+        await ctx.send(f"🔄 Moved song to position {new_index}.")
+
+    @commands.command(name="save_playlist")
+    async def save_playlist(self, ctx, name: str):
+        """
+        Save the current queue as a playlist.
+
+        Args:
+            name (str): The name of the playlist.
+        """
+        if not self.queue._queue:
+            await ctx.send("The queue is empty! Nothing to save.")
+            return
+
+        playlist = list(self.queue._queue)
+        with open(f"{name}.json", "w") as f:
+            json.dump(playlist, f)
+        await ctx.send(f"💾 Playlist '{name}' has been saved.")
+
+    @commands.command(name="load_playlist")
+    async def load_playlist(self, ctx, name: str):
+        """
+        Load a playlist into the queue.
+
+        Args:
+            name (str): The name of the playlist.
+        """
+        try:
+            with open(f"{name}.json", "r") as f:
+                playlist = json.load(f)
+            update_queue(self.queue, playlist)
+            await ctx.send(f"📂 Playlist '{name}' has been loaded into the queue.")
+        except FileNotFoundError:
+            await ctx.send(f"❌ Playlist '{name}' not found.")
 
     # Clean up guild-specific data when bot leaves a guild
     @commands.Cog.listener()

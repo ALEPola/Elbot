@@ -203,6 +203,66 @@ def toggle_command(command):
         return jsonify({"status": "success", "command": command, "enabled": bot_data["commands"][command]}), 200
     return jsonify({"status": "error", "message": "Command not found."}), 404
 
+@app.route("/bot/manage", methods=["POST"])
+def manage_bot():
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+
+    action = request.form.get("action")
+    if action == "start":
+        subprocess.run([SUDO, SYSTEMCTL, "start", "elbot.service"])
+        flash("Bot started successfully!", "success")
+    elif action == "stop":
+        subprocess.run([SUDO, SYSTEMCTL, "stop", "elbot.service"])
+        flash("Bot stopped successfully!", "warning")
+    elif action == "restart":
+        subprocess.run([SUDO, SYSTEMCTL, "restart", "elbot.service"])
+        flash("Bot restarted successfully!", "info")
+    else:
+        flash("Invalid action!", "danger")
+
+    return redirect(url_for("index"))
+
+@app.route("/bot/logs")
+def bot_logs():
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+
+    logs = subprocess.check_output([JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"]).decode("utf-8")
+    return render_template("logs.html", logs=logs)
+
+@app.route("/bot/analytics")
+def bot_analytics():
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+
+    uptime = datetime.now() - bot_data["start_time"]
+    return render_template("analytics.html", uptime=uptime, commands=bot_data["commands"])
+
+@app.route("/health")
+def health_check():
+    """Health check endpoint to monitor the status of the web service and bot."""
+    bot_status = "running" if psutil.pid_exists(os.getpid()) else "stopped"
+    return jsonify({
+        "web_service": "running",
+        "bot_status": bot_status,
+        "uptime": str(datetime.now() - bot_data["start_time"])
+    })
+
+@app.route("/metrics")
+def metrics():
+    """Metrics endpoint to provide resource usage and command stats."""
+    cpu_usage = psutil.cpu_percent()
+    memory_info = psutil.virtual_memory()
+    memory_usage = memory_info.used // (1024 * 1024)  # Convert to MB
+
+    return jsonify({
+        "cpu_usage": cpu_usage,
+        "memory_usage": memory_usage,
+        "command_stats": bot_data["commands"],
+        "uptime": str(datetime.now() - bot_data["start_time"])
+    })
+
 # dev runner
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8081, debug=False)

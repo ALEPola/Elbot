@@ -12,12 +12,14 @@ import nextcord
 from nextcord.ext import commands, tasks
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
+from pytz import timezone
 import json
 import os
 from dotenv import load_dotenv
 import logging
+from cachetools import TTLCache
 
-load_dotenv()
+load_dotenv()  # Load environment variables from .env file
 
 GUILD_ID    = int(os.getenv("GUILD_ID", "0"))
 CHANNEL_ID  = int(os.getenv("CHANNEL_ID", "0"))
@@ -132,6 +134,19 @@ class F1Cog(commands.Cog):
         self.bot = bot
         self.weekly_update.start()
         self.reminder_loop.start()
+        self.schedule_cache = TTLCache(maxsize=10, ttl=3600)  # Cache for 1 hour
+
+    async def get_cached_schedule(self):
+        """
+        Retrieve the F1 schedule from the cache or fetch it if not cached.
+        """
+        if "schedule" in self.schedule_cache:
+            return self.schedule_cache["schedule"]
+
+        # Fetch schedule and cache it
+        schedule = await get_upcoming_events(limit=10)
+        self.schedule_cache["schedule"] = schedule
+        return schedule
 
     @tasks.loop(time=time(hour=12))
     async def weekly_update(self):
@@ -140,16 +155,27 @@ class F1Cog(commands.Cog):
 
         This task runs every Sunday at 12 PM.
         """
-        # only Sundays
-        if datetime.now(LOCAL_TZ).weekday() != 6:
-            return
-        ch = self.bot.get_channel(CHANNEL_ID)
-        events = await get_upcoming_events(1)
-        if not events:
-            await ch.send("⚠️ No upcoming Grand Prix found.")
-            return
-        dt, name = events[0]
-        await ch.send(f"🏁 **Next F1 Race:** {name}\n📅 **When:** {dt.strftime('%A, %b %d %I:%M %p %Z')}")
+        try:
+            # only Sundays
+            if datetime.now(LOCAL_TZ).weekday() != 6:
+                return
+
+            ch = self.bot.get_channel(CHANNEL_ID)
+            if not ch:
+                logger.error("Channel not found. Please check the CHANNEL_ID.")
+                return
+
+            events = await get_upcoming_events(1)
+            if not events:
+                await ch.send("⚠️ No upcoming Grand Prix found.")
+                return
+
+            dt, name = events[0]
+            await ch.send(f"🏁 **Next F1 Race:** {name}\n📅 **When:** {dt.strftime('%A, %b %d %I:%M %p %Z')}")
+            logger.info(f"Weekly update sent for race: {name} on {dt}")
+
+        except Exception as e:
+            logger.error(f"Error in weekly_update task: {e}")
 
     @weekly_update.before_loop
     async def before_weekly(self):
@@ -169,8 +195,13 @@ class F1Cog(commands.Cog):
             for dt, name in events:
                 time_difference = dt - now
                 if timedelta(seconds=0) < time_difference <= timedelta(hours=1):
-                    message = f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}"
-                    await notify_subscribers(self.bot, subscribers, message)
+                    for subscriber in subscribers:
+                        user_tz = timezone(subscriber.get('timezone', 'UTC'))
+                        localized_time = dt.astimezone(user_tz)
+                        message = (
+                            f"⏰ Reminder: **{name}** starts in ~1h at {localized_time.strftime('%I:%M %p %Z')}"
+                        )
+                        await notify_subscriber(self.bot, subscriber, message)
                     logger.info(f"Reminder sent for event {name} at {dt}")
         except Exception as e:
             logger.error(f"Error in reminder_loop: {e}")
@@ -253,6 +284,42 @@ class F1Cog(commands.Cog):
         subscribers.discard(interaction.user.id)
         save_subscribers()
         await interaction.response.send_message("🛑 You’ve been unsubscribed.", ephemeral=True)
+
+    @commands.command(name="set_reminder")
+    async def set_reminder(self, ctx, interval: str, timezone: str = 'UTC'):
+        """
+        Set a recurring reminder with a specified interval (e.g., daily, weekly).
+
+        Args:
+            ctx (commands.Context): The context object.
+            interval (str): The reminder interval ('daily' or 'weekly').
+            timezone (str): The time zone for the reminder (default is 'UTC').
+        """
+        valid_intervals = ['daily', 'weekly']
+        if interval not in valid_intervals:
+            await ctx.send("Invalid interval! Please choose 'daily' or 'weekly'.")
+            return
+
+        # Save the user's preference
+        subscribers[ctx.author.id] = {
+            'interval': interval,
+            'timezone': timezone
+        }
+        await ctx.send(f"✅ Reminder set to {interval} in {timezone} time zone.")
+
+    @commands.command(name="cancel_reminder")
+    async def cancel_reminder(self, ctx):
+        """
+        Cancel a recurring reminder.
+
+        Args:
+            ctx (commands.Context): The context object.
+        """
+        if ctx.author.id in subscribers:
+            del subscribers[ctx.author.id]
+            await ctx.send("❌ Your reminder has been canceled.")
+        else:
+            await ctx.send("You don't have any active reminders.")
 
     def _error(self, loop, context):
         """
