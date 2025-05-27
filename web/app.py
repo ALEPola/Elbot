@@ -27,7 +27,7 @@ app = Flask(
 )
 app.secret_key = os.getenv("FLASK_SECRET", "change_this_key")
 app.config.update(
-    SESSION_COOKIE_SECURE=False,   # flip True behind HTTPS
+    SESSION_COOKIE_SECURE=True,  # Secure cookies for HTTPS
     SESSION_COOKIE_HTTPONLY=True,
     PERMANENT_SESSION_LIFETIME=timedelta(days=7)
 )
@@ -84,6 +84,8 @@ def ws_logs(ws):
     try:
         for line in iter(proc.stdout.readline, ""):
             ws.send(line.rstrip())
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
     finally:
         proc.terminate()
 
@@ -95,27 +97,32 @@ def action(cmd):
     if not session.get("logged_in"):
         return redirect(url_for("login"))
 
-    match cmd:
-        case "start":   subprocess.call([SUDO, SYSTEMCTL, "start", "elbot.service"])
-        case "stop":    subprocess.call([SUDO, SYSTEMCTL, "stop", "elbot.service"])
-        case "restart": subprocess.call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
-        case "update":  subprocess.call([f"{REPO_DIR}/deploy.sh"])
-        case s if s.startswith("schedule:"):
-            try:
-                minute, hour = s.split(":",1)[1].split()
-                cron = (
-                    f"{minute} {hour} * * * /bin/bash {REPO_DIR}/deploy.sh && "
-                    f"{SUDO} {SYSTEMCTL} restart elbot.service"
-                )
-                existing = subprocess.run("crontab -l || true", shell=True,
-                                          capture_output=True, text=True).stdout
-                if cron not in existing:
-                    subprocess.run(f'(echo "{existing}"; echo "{cron}") | crontab -', shell=True)
-                flash("Restart scheduled", "success")
-            except ValueError:
-                flash("Bad schedule format", "danger")
-        case _:
-            flash("Unknown action", "danger")
+    try:
+        match cmd:
+            case "start":   subprocess.check_call([SUDO, SYSTEMCTL, "start", "elbot.service"])
+            case "stop":    subprocess.check_call([SUDO, SYSTEMCTL, "stop", "elbot.service"])
+            case "restart": subprocess.check_call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
+            case "update":  subprocess.check_call([f"{REPO_DIR}/deploy.sh"], shell=True)
+            case s if s.startswith("schedule:"):
+                try:
+                    minute, hour = s.split(":",1)[1].split()
+                    cron = (
+                        f"{minute} {hour} * * * /bin/bash {REPO_DIR}/deploy.sh && "
+                        f"{SUDO} {SYSTEMCTL} restart elbot.service"
+                    )
+                    existing = subprocess.run("crontab -l || true", shell=True,
+                                              capture_output=True, text=True).stdout
+                    if cron not in existing:
+                        subprocess.run(f'(echo "{existing}"; echo "{cron}") | crontab -', shell=True)
+                    flash("Restart scheduled", "success")
+                except ValueError:
+                    flash("Bad schedule format", "danger")
+            case _:
+                flash("Unknown action", "danger")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Subprocess error: {e}")
+        flash("Action failed", "danger")
+
     return redirect(url_for("index"))
 
 # ╔════════════════════════════════════════════╗
@@ -192,7 +199,7 @@ def toggle_command(command):
 
 # dev runner
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8081, debug=True)
+    app.run(host="0.0.0.0", port=8081, debug=False)
 
 
 
