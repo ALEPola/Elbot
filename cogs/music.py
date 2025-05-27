@@ -341,7 +341,17 @@ class Music(commands.Cog):
             item (dict): The song item containing information like title, URL, etc.
             interaction (nextcord.Interaction, optional): The interaction object. Defaults to None.
         """
-        guild_id = voice_client.guild.id
+        guild_id = interaction.guild.id if interaction else voice_client.guild.id
+
+        # Initialize player message if not already set
+        if guild_id not in self.player_messages:
+            try:
+                embed = nextcord.Embed(title="Now Playing", description="Loading...", color=0x00ff00)
+                msg = await interaction.channel.send(embed=embed) if interaction else None
+                self.player_messages[guild_id] = msg
+            except Exception as e:
+                logger.error(f"Error initializing player message: {e}")
+
         self.current_track[guild_id] = item
         self.track_start_time[guild_id] = time.time()
 
@@ -393,9 +403,8 @@ class Music(commands.Cog):
             except Exception as e:
                 logger.error(f"Error sending player message: {e}")
 
-        # Do not edit the original interaction message to avoid duplicate now playing messages.
-        if item.get("duration"):
-            self.bot.loop.create_task(self.update_now_playing(guild_id, voice_client, item.get("duration")))
+        # Update the now playing message
+        await self.update_now_playing(guild_id, voice_client, item['duration'])
 
     def create_progress_bar(self, elapsed, total, length=20):
         """
@@ -459,7 +468,15 @@ class Music(commands.Cog):
                     except Exception as e:
                         logger.error(f"Error updating progress bar: {e}")
                 last_update = elapsed
-            await asyncio.sleep(1)
+
+        # Cleanup player message when playback stops
+        if guild_id in self.player_messages:
+            try:
+                await self.player_messages[guild_id].delete()
+                del self.player_messages[guild_id]
+                logger.info("Removed persistent player message after playback stopped.")
+            except Exception as e:
+                logger.error(f"Error removing player message: {e}")
 
     async def download_youtube_audio(self, query):
         """
