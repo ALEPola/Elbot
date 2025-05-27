@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import nextcord
 from nextcord.ext import commands
 import logging
+import sys
+import atexit
 
 # 1) Load .env first
 load_dotenv()
@@ -26,6 +28,24 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("ELBOT")
+
+LOCK_FILE = '/tmp/elbot.lock'
+
+def ensure_single_instance():
+    if os.path.exists(LOCK_FILE):
+        print("Another instance of the bot is already running.")
+        sys.exit(1)
+    with open(LOCK_FILE, 'w') as lock:
+        lock.write(str(os.getpid()))
+
+    def cleanup():
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+
+    atexit.register(cleanup)
+
+# Ensure only one instance runs
+ensure_single_instance()
 
 @bot.event
 async def on_ready():
