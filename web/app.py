@@ -72,6 +72,12 @@ def index():
         return redirect(url_for("login"))
     return render_template("index.html")
 
+@app.route("/admin")
+def admin():
+    if not session.get("logged_in") or session.get("role") != "admin":
+        return redirect(url_for("login"))
+    return render_template("admin.html")
+
 # ╔════════════════════════════════════════════╗
 # ☰  WEBSOCKET  – live journal logs            
 # ╚════════════════════════════════════════════╝

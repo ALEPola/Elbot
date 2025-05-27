@@ -15,6 +15,7 @@ import time
 from dotenv import load_dotenv
 import functools
 from nextcord.ext.commands import cooldown, BucketType
+import json
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
+QUEUE_FILE = "queue.json"
 
 def extract_info(query, ydl_opts, cookie_file):
     """
@@ -219,6 +222,13 @@ class Music(commands.Cog):
         self.current_source = {}   # guild_id -> reference to the volume transformer
         self.locks = {}            # guild_id -> asyncio.Lock for thread-safe operations
 
+        # Load queue from file
+        try:
+            with open(QUEUE_FILE, "r") as f:
+                self.queue = json.load(f)
+        except FileNotFoundError:
+            self.queue = {}
+
     def get_lock(self, guild_id):
         """
         Get or create an asyncio lock for a specific guild.
@@ -331,6 +341,7 @@ class Music(commands.Cog):
 
         item = await self.queue[guild_id].get()
         await self.play_song(guild.voice_client, item, interaction)
+        await self.save_queue()
 
     async def play_song(self, voice_client, item, interaction: nextcord.Interaction = None):
         """
@@ -741,31 +752,6 @@ class Music(commands.Cog):
         self.loop_mode[guild_id] = not current
         status = "enabled" if self.loop_mode[guild_id] else "disabled"
         await interaction.response.send_message(f"Loop mode {status}.", ephemeral=True)
-
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        """
-        Listen to voice state updates.
-
-        Args:
-            member (nextcord.Member): The member whose voice state changed.
-            before (nextcord.VoiceState): The previous voice state.
-            after (nextcord.VoiceState): The new voice state.
-        """
-        # Act only on the bot's own voice state changes.
-        if member.id != self.bot.user.id:
-            return
-
-        # When the bot disconnects from a voice channel.
-        if before.channel is not None and after.channel is None:
-            guild_id = member.guild.id
-            if guild_id in self.player_messages:
-                try:
-                    await self.player_messages[guild_id].delete()
-                    del self.player_messages[guild_id]
-                    logger.info("Deleted persistent player message because the bot disconnected from voice.")
-                except Exception as e:
-                    logger.error(f"Error deleting player message on disconnect: {e}")
 
     # Clean up guild-specific data when bot leaves a guild
     @commands.Cog.listener()
