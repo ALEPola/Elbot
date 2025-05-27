@@ -19,3 +19,4 @@ flask-sock
 psutil
 python-dotenv
 pytest
+transformers
