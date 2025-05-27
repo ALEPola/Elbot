@@ -44,3 +44,14 @@ jobs:
         source venv/bin/activate
         sudo systemctl restart elbot.service
         EOF
+
+    - name: Verify Docker secrets
+      run: |
+        if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_PASSWORD" ]; then
+          echo "Error: DOCKER_USERNAME or DOCKER_PASSWORD environment variable is not set. Ensure these secrets are configured in the repository settings."
+          exit 1
+        fi
+
+    - name: Scan Docker image for vulnerabilities
+      run: |
+        docker scan elbot:latest || exit 1
