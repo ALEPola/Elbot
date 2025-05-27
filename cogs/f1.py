@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 import json
 import os
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
 
@@ -100,11 +101,17 @@ def format_event_details(events):
     return formatted_events
 
 # Helper function to notify subscribers
+logger = logging.getLogger("F1Cog")
+
 async def notify_subscribers(bot, subscribers, message):
     """Send a message to all subscribers."""
     for user_id in list(subscribers):
-        user = await bot.fetch_user(user_id)
-        await user.send(message)
+        try:
+            user = await bot.fetch_user(user_id)
+            await user.send(message)
+            logger.info(f"Notification sent to user {user_id}: {message}")
+        except Exception as e:
+            logger.error(f"Failed to send notification to user {user_id}: {e}")
 
 class F1Cog(commands.Cog):
     """
@@ -156,13 +163,17 @@ class F1Cog(commands.Cog):
         """
         Check every 30 minutes if any race is ~1 hour away and DM subscribers.
         """
-        events = await get_upcoming_events(limit=3)
-        now = datetime.now(LOCAL_TZ)
-        for dt, name in events:
-            time_difference = dt - now
-            if timedelta(seconds=0) < time_difference <= timedelta(hours=1):
-                message = f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}"
-                await notify_subscribers(self.bot, subscribers, message)
+        try:
+            events = await get_upcoming_events(limit=3)
+            now = datetime.now(LOCAL_TZ)
+            for dt, name in events:
+                time_difference = dt - now
+                if timedelta(seconds=0) < time_difference <= timedelta(hours=1):
+                    message = f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}"
+                    await notify_subscribers(self.bot, subscribers, message)
+                    logger.info(f"Reminder sent for event {name} at {dt}")
+        except Exception as e:
+            logger.error(f"Error in reminder_loop: {e}")
 
     @reminder_loop.before_loop
     async def before_reminders(self):
