@@ -159,7 +159,7 @@ class F1Cog(commands.Cog):
         events = await get_upcoming_events(limit=3)
         now = datetime.now(LOCAL_TZ)
         for dt, name in events:
-            if 0 < (dt - now) <= timedelta(hours=1):
+            if timedelta(seconds=0) < (dt - now) <= timedelta(hours=1):
                 message = f"⏰ Reminder: **{name}** starts in ~1h at {dt.strftime('%I:%M %p %Z')}"
                 await notify_subscribers(self.bot, subscribers, message)
 
