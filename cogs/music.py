@@ -454,23 +454,17 @@ class Music(commands.Cog):
         last_update = 0
         while voice_client.is_playing():
             elapsed = time.time() - self.track_start_time.get(guild_id, time.time())
-            if elapsed - last_update >= 10:  # Update every 10 seconds instead of 5
+            if elapsed - last_update >= 15:  # Update every 15 seconds instead of 10
                 progress_bar = self.create_progress_bar(elapsed, total_duration)
                 if guild_id in self.player_messages:
                     try:
                         embed = self.player_messages[guild_id].embeds[0]
-                        new_embed = nextcord.Embed.from_dict(embed.to_dict())
-                        for i, field in enumerate(new_embed.fields):
-                            if field.name == "⏱ Progress":
-                                new_embed.set_field_at(i, name="⏱ Progress", value=progress_bar, inline=False)
-                                break
-                        else:
-                            new_embed.add_field(name="⏱ Progress", value=progress_bar, inline=False)
-                        await self.player_messages[guild_id].edit(embed=new_embed)
+                        embed.set_field_at(1, name="Progress", value=progress_bar, inline=False)
+                        await self.player_messages[guild_id].edit(embed=embed)
+                        last_update = elapsed
                     except Exception as e:
-                        logger.error(f"Error updating progress bar: {e}")
-                last_update = elapsed
-            await asyncio.sleep(1)
+                        logger.error(f"Failed to update now playing message: {e}")
+            await asyncio.sleep(5)
 
     async def download_youtube_audio(self, query):
         """
