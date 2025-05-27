@@ -358,7 +358,7 @@ class Music(commands.Cog):
         stream_url = item.get("stream_url")
         ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn"
+            "options": "-vn -threads 1"  # Limit threads to 1 for better performance on Raspberry Pi
         }
         source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
         transformer = nextcord.PCMVolumeTransformer(source, volume=0.5)  # Default to 50% volume
@@ -452,7 +452,7 @@ class Music(commands.Cog):
         last_update = 0
         while voice_client.is_playing():
             elapsed = time.time() - self.track_start_time.get(guild_id, time.time())
-            if elapsed - last_update >= 5:  # Update every 5 seconds
+            if elapsed - last_update >= 10:  # Update every 10 seconds instead of 5
                 progress_bar = self.create_progress_bar(elapsed, total_duration)
                 if guild_id in self.player_messages:
                     try:
