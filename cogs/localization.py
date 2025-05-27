@@ -56,9 +56,9 @@ class Localization(commands.Cog):
         user_languages[interaction.user.id] = language
         await interaction.response.send_message(f"Language set to {language}.", ephemeral=True)
 
-# Example usage
-localization = Localization()
-print(localization.translate("greeting", "es"))
+# Ensure the Localization cog is initialized with the required 'bot' argument in the main bot file.
+# Example:
+# bot.add_cog(Localization(bot))
 
 def setup(bot):
     bot.add_cog(Localization(bot))

@@ -20,3 +20,4 @@ psutil
 python-dotenv
 pytest
 transformers
+cachetools
