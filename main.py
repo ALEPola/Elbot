@@ -49,9 +49,15 @@ ensure_single_instance()
 
 @bot.event
 async def on_ready():
-    # 3) Sync *guild* commands for instant availability
-    await bot.sync_application_commands(guild_id=GUILD_ID)
-    print(f'✅ Logged in as {bot.user}')
+    if GUILD_ID == 0:
+        logger.warning("GUILD_ID is not set or invalid. Skipping command sync.")
+    else:
+        try:
+            # 3) Sync *guild* commands for instant availability
+            await bot.sync_application_commands(guild_id=GUILD_ID)
+            print(f'✅ Logged in as {bot.user}')
+        except Exception as e:
+            logger.error(f"Failed to sync commands: {e}", exc_info=True)
 
 # Global error handler
 @bot.event
@@ -70,7 +76,7 @@ async def on_command_error(ctx, error):
 def run_flask():
     # 4) Disable the reloader so you don’t spin up two processes
     from web.app import app as flask_app
-    flask_app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    flask_app.run(host="0.0.0.0", port=8081, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     # 5) Load your Cogs

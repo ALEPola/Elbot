@@ -163,6 +163,7 @@ This ensures the bot is running correctly.
 
 ssh alex@192.168.1.5
 cd ~/ELBOT
+source venv/bin/activate
 chmod +x deploy.sh
 ./deploy.sh
 

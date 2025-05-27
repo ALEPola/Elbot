@@ -19,7 +19,10 @@ class PingTest(commands.Cog):
         for guild in self.bot.guilds:
             print(f" - {guild.name} ({guild.id})")
         synced = await self.bot.sync_application_commands()
-        print(f"✅ Synced {len(synced)} global slash commands")
+        if synced is None:
+            print("⚠️ No global slash commands were synced.")
+        else:
+            print(f"✅ Synced {len(synced)} global slash commands")
 
 def setup(bot):
     bot.add_cog(PingTest(bot))
