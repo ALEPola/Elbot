@@ -3,96 +3,96 @@ set -euo pipefail
 
 echo "🚀 Starting ELBOT deployment..."
 
-# Parameterize branch name
 BRANCH="Working"
+BOT_DIR="/home/alex/ELBOT"
+BACKUP_DIR="$BOT_DIR/backup_$(date +%Y%m%d_%H%M%S)"
+LOG_DIR="/var/log/elbot"
 
-# 0) Free up ports
-echo "🔄 Clearing ports..."
+# 0) Free up web port
+echo "🔄 Freeing up port 8080..."
 sudo fuser -k 8080/tcp || true
 
-# 1) Navigate to the bot's folder
-cd /home/alex/ELBOT
-
-# Backup current code and .env
-BACKUP_DIR="/home/alex/ELBOT/backup_$(date +%Y%m%d_%H%M%S)"
-echo "🗄️ Backing up current code and .env to $BACKUP_DIR..."
+# 1) Make backup
+echo "🗄️ Backing up to $BACKUP_DIR..."
 mkdir -p "$BACKUP_DIR"
-rsync -av --exclude "backup_*" --exclude "venv" /home/alex/ELBOT/ "$BACKUP_DIR" --delete
-cp /home/alex/ELBOT/.env "$BACKUP_DIR" 2>/dev/null || true
+rsync -av --exclude "backup_*" --exclude "venv" "$BOT_DIR/" "$BACKUP_DIR"
 
-# Rotate logs
-LOG_DIR="/var/log/elbot"
-if [ ! -d "$LOG_DIR" ]; then
-    echo "📝 Creating log directory: $LOG_DIR"
-    mkdir -p "$LOG_DIR"
+# 2) Validate Git repo
+cd "$BOT_DIR"
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo "❌ Not a valid Git repository."
+    exit 1
 fi
 
-# 2) Handle git changes
-if [ -n "$(git status --porcelain)" ]; then
+# 3) Stash changes safely
+if [[ -n "$(git status --porcelain)" ]]; then
     echo "🔄 Stashing local changes..."
-    git stash push -m "Auto stash before deploy $(date)"
+    git stash push -m "Pre-deploy stash $(date)" || echo "⚠️ Nothing to stash."
 fi
 
-# 3) Pull latest changes
-echo "⬇️ Pulling latest code from branch '$BRANCH'..."
-git pull origin "$BRANCH"  # Changed from Working to main to match documentation
+# 4) Checkout branch safely
+git fetch origin "$BRANCH"
+git checkout "$BRANCH" || {
+    echo "❌ Failed to checkout $BRANCH"
+    exit 1
+}
 
-# 4) Set up virtual environment
-echo "🔧 Setting up virtual environment..."
+# 5) Pull updates
+echo "⬇️ Pulling from $BRANCH..."
+git pull origin "$BRANCH"
+
+# 6) Virtual environment
+echo "🔧 Activating Python environment..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 source venv/bin/activate
 
-# 5) Install dependencies
-echo "📦 Installing dependencies..."
+# 7) Install dependencies
+echo "📦 Installing Python dependencies..."
 pip install --upgrade pip
-pip install -r requirements.txt 2>&1 | grep -v ".pyc$" || true
+pip install -r requirements.txt
 
-# 6) Run tests
+# 8) Run tests
 echo "🧪 Running tests..."
 if ! python -m pytest --maxfail=1 --disable-warnings; then
-    echo "❌ Error during deployment at step: Running tests"
-    echo "🔄 Rolling back to previous state..."
-    rsync -av --exclude "venv" "$BACKUP_DIR/" /home/alex/ELBOT/ --delete
+    echo "❌ Tests failed. Rolling back..."
+    rsync -av "$BACKUP_DIR/" "$BOT_DIR/" --delete
     exit 1
 fi
 
-# 7) Stop services
-echo "🛑 Stopping services..."
+# 9) Stop services
+echo "🛑 Stopping ELBOT services..."
 sudo systemctl stop elbot.service || true
 sudo systemctl stop elbot-web.service || true
 
-# 8) Update service files
-echo "📄 Updating service files..."
+# 10) Deploy systemd services
+echo "📄 Deploying service files..."
 sudo cp elbot.service /etc/systemd/system/
 sudo cp elbot-web.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# 9) Start services
+# 11) Start services
 echo "🚀 Starting services..."
 sudo systemctl start elbot.service
 sudo systemctl start elbot-web.service
 
-# 10) Health check
-echo "🔍 Performing health check..."
-sleep 5  # Give services time to start
-
-# Check bot service
+# 12) Health checks
+sleep 4
 if ! systemctl is-active --quiet elbot.service; then
-    echo "❌ Bot service failed to start! Rolling back..."
-    rsync -av --exclude "venv" "$BACKUP_DIR/" /home/alex/ELBOT/ --delete
+    echo "❌ ELBOT failed to start. Rolling back..."
+    rsync -av "$BACKUP_DIR/" "$BOT_DIR/" --delete
     sudo systemctl restart elbot.service
     exit 1
 fi
 
-# Check web service
 if ! systemctl is-active --quiet elbot-web.service; then
-    echo "❌ Web service failed to start! Rolling back..."
-    rsync -av --exclude "venv" "$BACKUP_DIR/" /home/alex/ELBOT/ --delete
+    echo "❌ Web panel failed to start. Rolling back..."
+    rsync -av "$BACKUP_DIR/" "$BOT_DIR/" --delete
     sudo systemctl restart elbot-web.service
     exit 1
 fi
 
-echo "✅ Deployment completed successfully."
+echo "✅ Deployment complete and services running."
+
 
