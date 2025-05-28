@@ -6,6 +6,7 @@ from flask_sock import Sock
 import subprocess, os, psutil, shutil, re
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # ── system binaries ───────────────────────────
 SUDO       = shutil.which("sudo")       or "/usr/bin/sudo"
@@ -45,14 +46,22 @@ bot_data = {
     }
 }
 
+# Hash the password for secure storage
+PASSWORD_HASH = generate_password_hash(PASSWORD)
+
+# Function to check username and password
+def authenticate(username, password):
+    return username == USERNAME and check_password_hash(PASSWORD_HASH, password)
+
 # ╔════════════════════════════════════════════╗
 # ☰  AUTH  ════════════════════════════════════
 # ╚════════════════════════════════════════════╝
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if (request.form.get("username") == USERNAME and
-            request.form.get("password") == PASSWORD):
+        username = request.form["username"]
+        password = request.form["password"]
+        if authenticate(username, password):
             session["logged_in"] = True
             # Assuming successful login grants admin role for this application's scope
             session["role"] = "admin"

@@ -14,123 +14,29 @@
 
   <!-- Navbar -->
   <nav class="navbar navbar-dark bg-dark px-3">
-    <span class="navbar-brand futuristic-heading fs-4">ELBOT</span>
-    <button class="btn btn-sm btn-neon" id="themeToggle">Toggle Theme</button>
+    <a class="navbar-brand futuristic-heading fs-4" href="/">ELBOT</a>
+    <div>
+      <a href="/logs" class="btn btn-sm btn-neon mx-1">Logs</a>
+      <a href="/analytics" class="btn btn-sm btn-neon mx-1">Analytics</a>
+      <a href="/logout" class="btn btn-sm btn-neon mx-1">Logout</a>
+    </div>
   </nav>
 
-  <!-- Navigation Links -->
-  <div class="container-xl my-2">
-    <div class="row g-4 justify-content-center">
-      <div class="col-xxl-10">
-        <div class="d-flex justify-content-center">
-          <a href="/status" class="btn btn-neon btn-neon-primary mx-2">Bot Status</a>
-          <a href="/logs" class="btn btn-neon btn-neon-primary mx-2">Logs</a>
-          <a href="/commands" class="btn btn-neon btn-neon-primary mx-2">Command Management</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Fixed‑width grid container -->
+  <!-- Main Content -->
   <div class="container-xl my-4">
     <div class="row g-4 justify-content-center">
 
       <!-- Status + Controls -->
       <div class="col-xxl-10">
         <div class="control-card text-center">
-          <div class="d-flex align-items-center mb-3">
-            <span id="botStatus" class="status-badge bg-success text-white me-3">Status: --</span>
-            <span id="lastUpdate" class="text-muted me-auto">Last Update: --</span>
-            <a href="/logout" class="btn btn-neon btn-neon-danger btn-sm">Logout</a>
-          </div>
-          <div class="row g-3">
-            <div class="col-md-3"><a href="/action/start"   class="btn btn-neon btn-neon-primary w-100 fw-bold">Start</a></div>
-            <div class="col-md-3"><a href="/action/stop"    class="btn btn-neon btn-neon-danger  w-100 fw-bold">Stop</a></div>
-            <div class="col-md-3"><a href="/action/restart" class="btn btn-neon btn-neon-warning w-100 fw-bold">Restart</a></div>
-            <div class="col-md-3"><a href="/action/update"  class="btn btn-neon btn-neon-primary w-100 fw-bold">Update</a></div>
+          <h2 class="futuristic-heading">Welcome to ELBOT Control Center</h2>
+          <p>Manage your bot and view its status here.</p>
+          <div class="d-flex justify-content-center mt-3">
+            <a href="/status" class="btn btn-neon btn-neon-primary mx-2">Bot Status</a>
+            <a href="/logs" class="btn btn-neon btn-neon-primary mx-2">Logs</a>
+            <a href="/commands" class="btn btn-neon btn-neon-primary mx-2">Command Management</a>
           </div>
         </div>
-      </div>
-
-      <!-- System chart -->
-      <div class="col-xxl-10">
-        <div class="control-card">
-          <h5 class="section-header">System Usage</h5>
-          <canvas id="cpuChart" height="100"></canvas>
-        </div>
-      </div>
-
-      <!-- Logs -->
-      <div class="col-xxl-10">
-        <div class="control-card">
-          <h5 class="section-header">Logs</h5>
-          <pre id="logOutput" class="log-box" style="height:280px;">Connecting …</pre>
-        </div>
-      </div>
-
-      <!-- Command Runner -->
-      <div class="col-xl-6 col-xxl-5">
-        <div class="control-card">
-          <h5 class="section-header">Command Runner</h5>
-          <form id="commandForm">
-            <input class="form-control mb-2" id="commandInput" placeholder="Enter shell command…">
-            <button class="btn btn-neon btn-neon-primary w-100">Run</button>
-          </form>
-          <pre id="commandOutput" class="log-box mt-3">Waiting for input…</pre>
-        </div>
-      </div>
-
-      <!-- Git Branch -->
-      <div class="col-xl-6 col-xxl-5">
-        <div class="control-card">
-          <h5 class="section-header">Git Branch</h5>
-          <form id="branchForm" class="row g-2">
-            <div class="col-8"><select id="branchSelect" class="form-select"></select></div>
-            <div class="col-4"><button class="btn btn-neon btn-neon-primary w-100">Switch</button></div>
-          </form>
-          <pre id="branchOutput" class="log-box mt-3">Current branch: --</pre>
-        </div>
-      </div>
-
-      <!-- Environment -->
-      <div class="col-xl-6 col-xxl-5">
-        <div class="control-card">
-          <h5 class="section-header">Environment Variables</h5>
-          <pre id="envOutput" class="log-box">Loading…</pre>
-        </div>
-      </div>
-
-      <!-- Scheduler -->
-      <div class="col-xl-6 col-xxl-5">
-        <div class="control-card">
-          <h5 class="section-header">Auto‑Restart Scheduler</h5>
-          <form id="scheduleForm" class="row g-2">
-            <div class="col-8"><input id="scheduleTime" class="form-control" placeholder="HH MM (e.g., 3 0)"></div>
-            <div class="col-4"><button class="btn btn-neon btn-neon-primary w-100">Set</button></div>
-          </form>
-          <pre id="scheduleOutput" class="log-box mt-3">Awaiting input…</pre>
-        </div>
-      </div>
-
-      <!-- Bot Management Controls -->
-      <div class="text-center my-4">
-        <form action="/bot/manage" method="POST">
-          <button name="action" value="start" class="btn btn-success mx-2">Start Bot</button>
-          <button name="action" value="stop" class="btn btn-danger mx-2">Stop Bot</button>
-          <button name="action" value="restart" class="btn btn-warning mx-2">Restart Bot</button>
-        </form>
-      </div>
-
-      <!-- Last Update -->
-      <div class="col-xxl-10">
-        <div class="last-update">
-          <p>Last Update: <span id="last-update">Fetching...</span></p>
-        </div>
-      </div>
-
-      <!-- Theme Switcher -->
-      <div class="text-center my-4">
-        <button class="btn btn-primary" id="themeSwitcher">Switch Theme</button>
       </div>
 
     </div>
