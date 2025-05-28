@@ -918,7 +918,43 @@ def setup(bot):
         bot (commands.Bot): The bot instance.
     """
     bot.add_cog(Music(bot))
-#test
+
+    @nextcord.slash_command(name="moan", description="Play a moan sound effect")
+    @cooldown(1, 5, BucketType.user)  # Limit usage to once every 5 seconds per user
+    async def moan(self, interaction: nextcord.Interaction):
+        """Play a moan sound effect in the voice channel"""
+        if not interaction.user.voice:
+            await interaction.response.send_message("You need to be in a voice channel to use this command!", ephemeral=True)
+            return
+
+        # Path to your moan sound effect
+        sound_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sounds", "moan.mp3")
+        
+        if not os.path.exists(sound_path):
+            await interaction.response.send_message("Sound effect file not found! Please contact the bot administrator.", ephemeral=True)
+            return
+
+        # Connect to the voice channel if not already connected
+        if not interaction.guild.voice_client:
+            try:
+                channel = interaction.user.voice.channel
+                await channel.connect()
+            except Exception as e:
+                await interaction.response.send_message(f"Could not connect to voice channel: {str(e)}", ephemeral=True)
+                return
+
+        voice_client = interaction.guild.voice_client
+
+        # Stop current playback if any
+        if voice_client.is_playing():
+            voice_client.stop()
+
+        # Play the sound effect
+        try:
+            voice_client.play(nextcord.FFmpegPCMAudio(sound_path))
+            await interaction.response.send_message("😏", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Error playing sound: {str(e)}", ephemeral=True)
 
 
 
