@@ -7,7 +7,12 @@ Type=simple
 User=alex
 WorkingDirectory=/home/alex/ELBOT
 ExecStart=/home/alex/ELBOT/venv/bin/python /home/alex/ELBOT/main.py
-Restart=on-failure
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+CPUQuota=40%
+MemoryMax=384M
 EnvironmentFile=/home/alex/ELBOT/.env
 
 [Install]
