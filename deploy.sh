@@ -3,6 +3,9 @@ set -euo pipefail
 
 echo "🚀 Starting ELBOT deployment..."
 
+# Parameterize branch name
+BRANCH="Working"
+
 # 0) Free up ports
 echo "🔄 Clearing ports..."
 sudo fuser -k 8080/tcp || true
@@ -19,9 +22,9 @@ cp /home/alex/ELBOT/.env "$BACKUP_DIR" 2>/dev/null || true
 
 # Rotate logs
 LOG_DIR="/var/log/elbot"
-if [ -d "$LOG_DIR" ]; then
-    echo "📝 Rotating logs..."
-    ls -1t $LOG_DIR/*.log 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+if [ ! -d "$LOG_DIR" ]; then
+    echo "📝 Creating log directory: $LOG_DIR"
+    mkdir -p "$LOG_DIR"
 fi
 
 # 2) Handle git changes
@@ -31,8 +34,8 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 # 3) Pull latest changes
-echo "⬇️ Pulling latest code..."
-git pull origin main  # Changed from Working to main to match documentation
+echo "⬇️ Pulling latest code from branch '$BRANCH'..."
+git pull origin "$BRANCH"  # Changed from Working to main to match documentation
 
 # 4) Set up virtual environment
 echo "🔧 Setting up virtual environment..."
@@ -48,11 +51,12 @@ pip install -r requirements.txt 2>&1 | grep -v ".pyc$" || true
 
 # 6) Run tests
 echo "🧪 Running tests..."
-python -m pytest --maxfail=1 --disable-warnings || {
-    echo "❌ Tests failed! Rolling back..."
+if ! python -m pytest --maxfail=1 --disable-warnings; then
+    echo "❌ Error during deployment at step: Running tests"
+    echo "🔄 Rolling back to previous state..."
     rsync -av --exclude "venv" "$BACKUP_DIR/" /home/alex/ELBOT/ --delete
     exit 1
-}
+fi
 
 # 7) Stop services
 echo "🛑 Stopping services..."
@@ -90,5 +94,5 @@ if ! systemctl is-active --quiet elbot-web.service; then
     exit 1
 fi
 
-echo "✅ Deployment completed successfully!"
+echo "✅ Deployment completed successfully."
 

@@ -19,7 +19,7 @@ function Log {
 Log "🚀 Starting ELBOT deployment..."
 
 # Function to validate environment
-function Validate-Environment {
+function Test-Env {
     Log "🔍 Validating environment..."
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         throw "Git is not installed or not available in PATH. Please install Git and try again."
@@ -69,7 +69,7 @@ function Cleanup {
 }
 
 # Function to rotate logs
-function Set-LogRotation {
+function Invoke-LogRotation {
     param([string]$logDir, [int]$maxLogs = 5)
     Log "📝 Rotating logs in $logDir..."
     if (Test-Path $logDir) {
@@ -97,10 +97,15 @@ function Test-ServiceHealth {
 }
 
 # Function to manage services
-function Control-Services {
+function Set-ServiceState {
     param([string[]]$services, [string]$action)
     foreach ($service in $services) {
         Log "🛠️ $action service: $service..."
+        $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+        if (-not $svc) {
+            Log "⚠️ Service '$service' does not exist. Skipping."
+            continue
+        }
         if ($action -eq 'stop') {
             Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
         } elseif ($action -eq 'start') {
@@ -111,17 +116,23 @@ function Control-Services {
 
 # Optional parameters
 param(
-    [string]$Branch = "main",  # Default branch to deploy
+    [string]$Branch = "Working",  # Default branch to deploy
     [switch]$SkipTests          # Option to skip running tests
 )
 
 try {
     # Validate environment
-    Validate-Environment
+    Test-Env
 
     # Rotate logs
     $logDir = "C:\Logs\ELBOT"
-    Set-LogRotation -logDir $logDir -maxLogs 5
+    Invoke-LogRotation -logDir $logDir -maxLogs 5
+
+    # Ensure log directory exists
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+        Log "📝 Created log directory: $logDir"
+    }
 
     # Create backup
     $backupDir = Backup-Project
@@ -157,10 +168,10 @@ try {
 
     # Stop services
     $services = @("elbot", "elbot-web")
-    Control-Services -services $services -action 'stop'
+    Set-ServiceState -services $services -action 'stop'
 
     # Start services
-    Control-Services -services $services -action 'start'
+    Set-ServiceState -services $services -action 'start'
 
     # Perform health checks
     foreach ($service in $services) {
@@ -171,7 +182,7 @@ try {
     Log "ℹ️ Web interface available at http://localhost:8080"
 
 } catch {
-    Log "❌ Error during deployment: $_"
+    Log "❌ Error during deployment at step: $_.InvocationInfo.ScriptLineNumber"
     Restore-FromBackup $backupDir
     Log "🔄 Rolled back to previous state"
     exit 1
