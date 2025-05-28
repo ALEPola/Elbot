@@ -1,1 +1,18 @@
+cat <<EOF > .gitignore
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+venv/
+
+# Logs
+*.log
+/var/log/elbot/
+EOF
+
+git add .gitignore
+git commit -m "Add .gitignore for virtualenv and cache cleanup"
+git push origin Working
 

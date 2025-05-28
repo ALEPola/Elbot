@@ -35,9 +35,7 @@ fi
 
 # 3) Pull latest changes
 echo "⬇️ Pulling latest code from branch '$BRANCH'..."
-git fetch origin "$BRANCH"
-git checkout "$BRANCH"
-git pull origin "$BRANCH"
+git pull origin "$BRANCH"  # Changed from Working to main to match documentation
 
 # 4) Set up virtual environment
 echo "🔧 Setting up virtual environment..."
