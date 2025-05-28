@@ -70,9 +70,23 @@ sudo systemctl disable elbot.service
 
 ### 3.1 View Logs for the Bot
 ```bash
-journalctl -u elbot.service --no-pager | tail -50
+sudo journalctl -u elbot.service --no-pager | tail -50
 ```
 **Description**: Displays the latest 50 lines of logs for ELBOT.
+
+#### 3.1.1 View Live Logs
+```bash
+sudo journalctl -u elbot.service -f
+```
+**Description**: Follows the log output live (like `tail -f`).
+
+#### 3.1.2 View Today's Logs
+```bash
+sudo journalctl -u elbot.service --since today --no-pager
+```
+**Description**: Shows all logs from today.
+
+> **Note:** If you see "No journal files were found", ensure `systemd-journald` is running and persistent logging is enabled on your system.
 
 ### 3.2 Monitor System Resources
 ```bash
@@ -156,7 +170,7 @@ chmod +x deploy.sh
 
 Make sure to check ELBOT logs after running deployments or restarting, using:
 ```bash
-journalctl -u elbot.service --no-pager | tail -50
+sudo journalctl -u elbot.service --no-pager | tail -50
 ```
 
 This ensures the bot is running correctly.
