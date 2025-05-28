@@ -1,6 +1,17 @@
 [Unit]
 Description=Auto-update ELBOT
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
+User=alex
+WorkingDirectory=/home/alex/ELBOT
+Environment=PATH=/home/alex/ELBOT/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/home/alex/ELBOT/deploy.sh
+StandardOutput=append:/var/log/elbot/auto-update.log
+StandardError=append:/var/log/elbot/auto-update.log
+
+# Ensure the service is marked as failed if deploy.sh exits with non-zero status
+SuccessExitStatus=0
+RemainAfterExit=yes

@@ -1,9 +1,17 @@
 [Unit]
 Description=Run ELBOT auto-update every 30 minutes
+Requires=elbot-update.service
 
 [Timer]
+# Start 5 minutes after boot
 OnBootSec=5min
+# Run every 30 minutes
 OnUnitActiveSec=30min
+# Add some randomization to prevent exact timing
+RandomizedDelaySec=60
+
+# Keep a persistent state of when we last ran
+Persistent=true
 
 [Install]
 WantedBy=timers.target

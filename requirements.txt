@@ -1,23 +1,32 @@
-nextcord
-openai
-textblob
-pillow
-aiohttp
-python-dotenv
-httpx
-yt-dlp
-spotipy
-youtube-search-python
-pynacl
-apscheduler
-psutil
-beautifulsoup4
-asyncio
-icalendar
-flask
-flask-sock
-psutil
-python-dotenv
-pytest
-transformers
-cachetools
+# Discord and Bot Dependencies
+nextcord>=2.4.0
+python-dotenv>=1.0.0
+
+# AI and NLP
+openai>=0.27.0
+textblob>=0.17.1
+transformers>=4.28.1
+
+# Media and File Handling
+pillow>=9.5.0
+yt-dlp>=2023.3.4
+spotipy>=2.22.1
+youtube-search-python>=1.6.6
+pynacl>=1.5.0
+
+# Web and API
+flask>=2.3.2
+flask-sock>=0.6.0
+aiohttp>=3.8.4
+httpx>=0.24.1
+beautifulsoup4>=4.12.2
+
+# Task Scheduling and System
+apscheduler>=3.10.1
+psutil>=5.9.5
+asyncio>=3.4.3
+icalendar>=5.0.4
+cachetools>=5.3.0
+
+# Testing
+pytest>=7.3.1

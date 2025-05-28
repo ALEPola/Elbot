@@ -6,6 +6,7 @@ from nextcord.ext import commands
 import logging
 import sys
 import atexit
+import tempfile
 
 # 1) Load .env first
 load_dotenv()  # Load environment variables from .env file
@@ -29,20 +30,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ELBOT")
 
-LOCK_FILE = '/tmp/elbot.lock'
+LOCK_FILE = os.path.join(tempfile.gettempdir(), 'elbot.lock')
 
 def ensure_single_instance():
-    if os.path.exists(LOCK_FILE):
-        print("Another instance of the bot is already running.")
-        sys.exit(1)
-    with open(LOCK_FILE, 'w') as lock:
-        lock.write(str(os.getpid()))
-
-    def cleanup():
+    try:
         if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
+            with open(LOCK_FILE, 'r') as lock:
+                pid = int(lock.read().strip())
+                # Check if process with stored PID is still running
+                try:
+                    os.kill(pid, 0)  # Doesn't kill the process, just checks if it exists
+                    print(f"Another instance of the bot is already running (PID: {pid}).")
+                    sys.exit(1)
+                except OSError:  # Process is not running
+                    os.remove(LOCK_FILE)  # Clean up stale lock file
+                    
+        with open(LOCK_FILE, 'w') as lock:
+            lock.write(str(os.getpid()))
 
-    atexit.register(cleanup)
+        def cleanup():
+            if os.path.exists(LOCK_FILE):
+                os.remove(LOCK_FILE)
+
+        atexit.register(cleanup)
+    except Exception as e:
+        logger.error(f"Error managing lock file: {e}")
+        # Continue running even if lock file management fails
+        pass
 
 # Ensure only one instance runs
 ensure_single_instance()

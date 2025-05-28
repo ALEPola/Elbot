@@ -33,36 +33,38 @@ class HelpCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: nextcord.Interaction):
-        if interaction.custom_id == "music_help":
-            embed = nextcord.Embed(
-                title="Music Commands",
-                description="List of music-related commands:",
-                color=0x00ff00
-            )
-            embed.add_field(name="/play <song>", value="Play a song from YouTube.", inline=False)
-            embed.add_field(name="/queue", value="View the current music queue.", inline=False)
-            embed.add_field(name="/skip", value="Skip the current song.", inline=False)
-            await interaction.response.edit_message(embed=embed, view=HelpView())
+        # Check if the interaction is a component interaction before accessing custom_id
+        if interaction.type == nextcord.InteractionType.component:
+            if interaction.custom_id == "music_help":
+                embed = nextcord.Embed(
+                    title="Music Commands",
+                    description="List of music-related commands:",
+                    color=0x00ff00
+                )
+                embed.add_field(name="/play <song>", value="Play a song from YouTube.", inline=False)
+                embed.add_field(name="/queue", value="View the current music queue.", inline=False)
+                embed.add_field(name="/skip", value="Skip the current song.", inline=False)
+                await interaction.response.edit_message(embed=embed, view=HelpView())
 
-        elif interaction.custom_id == "f1_help":
-            embed = nextcord.Embed(
-                title="F1 Commands",
-                description="List of F1-related commands:",
-                color=0x00ff00
-            )
-            embed.add_field(name="/f1_schedule", value="View the upcoming F1 schedule.", inline=False)
-            embed.add_field(name="/f1_reminders", value="Manage F1 race reminders.", inline=False)
-            await interaction.response.edit_message(embed=embed, view=HelpView())
+            elif interaction.custom_id == "f1_help":
+                embed = nextcord.Embed(
+                    title="F1 Commands",
+                    description="List of F1-related commands:",
+                    color=0x00ff00
+                )
+                embed.add_field(name="/f1_schedule", value="View the upcoming F1 schedule.", inline=False)
+                embed.add_field(name="/f1_reminders", value="Manage F1 race reminders.", inline=False)
+                await interaction.response.edit_message(embed=embed, view=HelpView())
 
-        elif interaction.custom_id == "general_help":
-            embed = nextcord.Embed(
-                title="General Commands",
-                description="List of general bot commands:",
-                color=0x00ff00
-            )
-            embed.add_field(name="/ping", value="Check the bot's latency.", inline=False)
-            embed.add_field(name="/help", value="Get help with bot commands.", inline=False)
-            await interaction.response.edit_message(embed=embed, view=HelpView())
+            elif interaction.custom_id == "general_help":
+                embed = nextcord.Embed(
+                    title="General Commands",
+                    description="List of general bot commands:",
+                    color=0x00ff00
+                )
+                embed.add_field(name="/ping", value="Check the bot's latency.", inline=False)
+                embed.add_field(name="/help", value="Get help with bot commands.", inline=False)
+                await interaction.response.edit_message(embed=embed, view=HelpView())
 
     @nextcord.slash_command(name="feedback", description="Submit feedback or report a bug.")
     async def feedback(self, interaction: nextcord.Interaction, *, message: str):

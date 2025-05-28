@@ -10,11 +10,11 @@ from email.mime.multipart import MIMEMultipart
 
 logger = logging.getLogger("diagnostic")
 
-ADMIN_EMAIL = "admin@example.com"
-SMTP_SERVER = "smtp.example.com"
-SMTP_PORT = 587
-SMTP_USERNAME = "your_username"
-SMTP_PASSWORD = "your_password"
+ADMIN_EMAIL = "admin@example.com"  # TODO: Replace with the actual admin email address
+SMTP_SERVER = "smtp.example.com"  # TODO: Replace with your SMTP server address
+SMTP_PORT = 587  # TODO: Verify the correct SMTP port (587 is common for TLS)
+SMTP_USERNAME = "your_username"  # TODO: Replace with your SMTP username
+SMTP_PASSWORD = "your_password"  # TODO: Replace with your SMTP password or use environment variables for security
 
 class DiagnosticCog(commands.Cog):
     def __init__(self, bot):

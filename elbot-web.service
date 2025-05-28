@@ -1,0 +1,16 @@
+[Unit]
+Description=ELBOT Web Interface
+After=network.target
+
+[Service]
+Type=simple
+User=alex
+WorkingDirectory=/home/alex/ELBOT
+ExecStart=/home/alex/ELBOT/venv/bin/python /home/alex/ELBOT/web/app.py
+Restart=on-failure
+EnvironmentFile=/home/alex/ELBOT/.env
+# Add environment variable for development/production
+Environment=FLASK_ENV=production
+
+[Install]
+WantedBy=multi-user.target

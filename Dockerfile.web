@@ -1,12 +1,9 @@
-# Dockerfile for ELBOT
-# Use Python image for better security practices
-
-# Build stage
+# Web service Dockerfile
 FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /build
 
-# Copy only requirements first to leverage Docker cache
+# Copy requirements first for better caching
 COPY requirements.txt .
 
 # Install build dependencies and compile requirements
@@ -31,8 +28,9 @@ USER elbot
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 
-# Copy application code
-COPY --chown=elbot:elbot . /app/
+# Copy web application code
+COPY --chown=elbot:elbot web/ /app/web/
+COPY --chown=elbot:elbot static/ /app/static/
 
 # Create necessary directories with correct permissions
 RUN mkdir -p /app/logs && \
@@ -41,12 +39,15 @@ RUN mkdir -p /app/logs && \
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    FLASK_ENV=production \
     PATH="/app:$PATH"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import nextcord; exit(0)"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
+
+# Expose port
+EXPOSE 8080
 
 # Command to run
-CMD ["python", "main.py"]
-# Tip: Rebuild this image regularly to get the latest security patches.
+CMD ["python", "web/app.py"]

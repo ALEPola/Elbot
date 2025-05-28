@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    volumes:
+      - .env:/app/.env:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      - web
+    networks:
+      - elbot-network
+
+  web:
+    build: 
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8080:8080"
+    volumes:
+      - .env:/app/.env:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - elbot-network
+
+networks:
+  elbot-network:
+    driver: bridge

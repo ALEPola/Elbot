@@ -14,7 +14,7 @@ JOURNALCTL = shutil.which("journalctl") or "/bin/journalctl"
 
 # ── env & constants ──────────────────────────
 load_dotenv()
-REPO_DIR      = "/home/alex/ELBOT"
+REPO_DIR      = os.getenv("REPO_DIR", "/home/alex/ELBOT")
 USERNAME       = os.getenv("WEB_USERNAME", "ALE")
 PASSWORD       = os.getenv("WEB_PASSWORD", "ALEXIS00")
 WEBHOOK_TOKEN  = os.getenv("WEBHOOK_TOKEN", "securetoken")
@@ -54,6 +54,8 @@ def login():
         if (request.form.get("username") == USERNAME and
             request.form.get("password") == PASSWORD):
             session["logged_in"] = True
+            # Assuming successful login grants admin role for this application's scope
+            session["role"] = "admin"
             return redirect(url_for("index"))
         flash("Invalid credentials", "danger")
     return render_template("login.html")
@@ -105,10 +107,14 @@ def action(cmd):
 
     try:
         match cmd:
-            case "start":   subprocess.check_call([SUDO, SYSTEMCTL, "start", "elbot.service"])
-            case "stop":    subprocess.check_call([SUDO, SYSTEMCTL, "stop", "elbot.service"])
-            case "restart": subprocess.check_call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
-            case "update":  subprocess.check_call([f"{REPO_DIR}/deploy.sh"], shell=True)
+            case "start":
+                subprocess.check_call([SUDO, SYSTEMCTL, "start", "elbot.service"])
+            case "stop":
+                subprocess.check_call([SUDO, SYSTEMCTL, "stop", "elbot.service"])
+            case "restart":
+                subprocess.check_call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
+            case "update":
+                subprocess.check_call([f"{REPO_DIR}/deploy.sh"], shell=True)
             case s if s.startswith("schedule:"):
                 try:
                     minute, hour = s.split(":",1)[1].split()
@@ -128,6 +134,10 @@ def action(cmd):
     except subprocess.CalledProcessError as e:
         logger.error(f"Subprocess error: {e}")
         flash("Action failed", "danger")
+    except Exception as e:
+        # Catch any other unexpected errors during action execution
+        logger.error(f"Unexpected error during action: {e}")
+        flash("An unexpected error occurred", "danger")
 
     return redirect(url_for("index"))
 
