@@ -40,7 +40,8 @@ source venv/bin/activate
 
 # 5) Install or update dependencies
 echo "📦 Installing/updating dependencies..."
-pip install -r requirements.txt
+# Suppress .pyc output from pip install
+pip install -r requirements.txt 2>&1 | grep -v ".pyc$" || true
 
 # 6) Run unit tests
 echo "🧪 Running unit tests..."
