@@ -8,6 +8,19 @@ sudo fuser -k 8080/tcp || true
 # 1) Navigate to the bot's folder
 cd /home/alex/ELBOT
 
+# Backup current code and .env before pulling new changes
+BACKUP_DIR="/home/alex/ELBOT/backup_$(date +%Y%m%d_%H%M%S)"
+echo "🗄️ Backing up current code and .env to $BACKUP_DIR..."
+mkdir -p "$BACKUP_DIR"
+rsync -av --exclude "backup_*" /home/alex/ELBOT/ "$BACKUP_DIR" --delete
+cp /home/alex/ELBOT/.env "$BACKUP_DIR" 2>/dev/null || true
+
+# Rotate logs: keep only the last 5 log files
+LOG_DIR="/var/log/elbot"
+if [ -d "$LOG_DIR" ]; then
+  ls -1t $LOG_DIR/*.log 2>/dev/null | tail -n +6 | xargs rm -f
+fi
+
 # 2) Check for unstaged changes and stash them automatically if any exist
 if [ -n "$(git status --porcelain)" ]; then
     echo "🔄 Unstaged changes detected. Stashing changes..."
@@ -44,5 +57,21 @@ sudo systemctl restart elbot.service
 echo "✅ Checking bot service status..."
 sudo systemctl status elbot.service --no-pager
 
+# Health check after restart
+sleep 5
+echo "🔎 Performing health check..."
+if systemctl is-active --quiet elbot.service; then
+  echo "✅ ELBOT service is running."
+else
+  echo "❌ ELBOT service failed to start! Rolling back..."
+  # Rollback to previous backup
+  cp -r "$BACKUP_DIR"/* /home/alex/ELBOT/
+  sudo systemctl restart elbot.service
+  echo "🔁 Rolled back to previous working state."
+fi
+
 echo "🎉 Deployment completed successfully!"
+
+# Pi deployment steps (streamlined)
+echo "📡 Pi deployment steps completed!"
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=ELBOT Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=alex
+WorkingDirectory=/home/alex/ELBOT
+ExecStart=/home/alex/ELBOT/venv/bin/python /home/alex/ELBOT/main.py
+Restart=on-failure
+EnvironmentFile=/home/alex/ELBOT/.env
+
+[Install]
+WantedBy=multi-user.target

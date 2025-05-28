@@ -1,0 +1,6 @@
+[Unit]
+Description=Auto-update ELBOT
+
+[Service]
+Type=oneshot
+ExecStart=/home/alex/ELBOT/deploy.sh
