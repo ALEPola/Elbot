@@ -263,6 +263,22 @@ def metrics():
         "uptime": str(datetime.now() - bot_data["start_time"])
     })
 
+@app.route("/run-command", methods=["POST"])
+def run_command():
+    if not session.get("logged_in") or session.get("role") != "admin":
+        return jsonify({"output": "Unauthorized"}), 403
+    data = request.get_json()
+    cmd = data.get("command", "").strip()
+    # Only allow a safe set of commands (customize as needed)
+    allowed_cmds = ["ls", "pwd", "whoami", "uptime", "df", "free", "ps", "top", "cat", "tail", "head"]
+    if not cmd or cmd.split()[0] not in allowed_cmds:
+        return jsonify({"output": "Command not allowed."}), 400
+    try:
+        result = subprocess.check_output(cmd, shell=True, text=True, timeout=5)
+        return jsonify({"output": result})
+    except Exception as e:
+        return jsonify({"output": f"Error: {e}"}), 500
+
 # dev runner
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8081, debug=False)
