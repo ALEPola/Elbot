@@ -6,6 +6,8 @@ python-dotenv>=1.0.0
 openai>=0.27.0
 textblob>=0.17.1
 transformers>=4.28.1
+numpy<2.0.0
+
 
 # Media and File Handling
 pillow>=9.5.0
