@@ -176,7 +176,8 @@ sudo journalctl -u elbot.service --no-pager | tail -50
 This ensures the bot is running correctly.
 
 ssh alex@192.168.1.5
-cd ~/ELBOT
+cd ~/ELBOT 
+python3 -m venv venv
 source venv/bin/activate
 chmod +x deploy.sh
 ./deploy.sh
