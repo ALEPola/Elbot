@@ -141,16 +141,14 @@ class MusicControls(nextcord.ui.View):
         await self.cog.skip_track(interaction)
 
     @nextcord.ui.button(label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind")
+    async def rewind_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):    @nextcord.ui.button(label="⏪ REWIND", style=nextcord.ButtonStyle.secondary, custom_id="rewind")
     async def rewind_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-    """
-    Rewind the current track (restart).
+        """
+        Rewind the current track (restart).
 
-    Args:
-        button (nextcord.ui.Button): The button that was clicked.
-        interaction (nextcord.Interaction): The interaction object.
-    """
-    await self.cog.rewind_track(interaction)  
-.
+        Args:
+            button (nextcord.ui.Button): The button that was clicked.
+            interaction (nextcord.Interaction): The interaction object.
         """
         await self.cog.rewind_track(interaction)
 
