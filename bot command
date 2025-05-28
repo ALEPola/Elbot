@@ -158,42 +158,22 @@ deactivate
 ```bash
 ./deploy.sh
 ```
-**Description**: Executes the deployment script to update code and restart both ELBOT and its web interface.
+**Description**: Executes the deployment script to update code and restart ELBOT.
 
-### 6.2 Make Script Executable (if needed)
+### 6.2 Make Script Executable
 ```bash
 chmod +x deploy.sh
 ```
 **Description**: Allows the deploy script to be run as a command.
 
-### 6.3 Web Service Management
-```bash
-# Start web interface
-sudo systemctl start elbot-web.service
-
-# Stop web interface
-sudo systemctl stop elbot-web.service
-
-# Restart web interface
-sudo systemctl restart elbot-web.service
-
-# View web interface logs
-sudo journalctl -u elbot-web.service --no-pager | tail -50
-```
-**Description**: Commands for managing the ELBOT web interface.
-
 ---
 
-Make sure to check both bot and web service logs after deployments:
+Make sure to check ELBOT logs after running deployments or restarting, using:
 ```bash
-# Check bot logs
 sudo journalctl -u elbot.service --no-pager | tail -50
-
-# Check web service logs
-sudo journalctl -u elbot-web.service --no-pager | tail -50
 ```
 
-This ensures both services are running correctly.
+This ensures the bot is running correctly.
 
 ssh alex@192.168.1.5
 cd ~/ELBOT
