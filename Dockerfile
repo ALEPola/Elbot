@@ -2,7 +2,7 @@
 # Use Python image for better security practices
 
 # Build stage
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.11-slim-bullseye AS builder
 
 WORKDIR /build
 
@@ -19,14 +19,9 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Final stage
-FROM python:3.11-slim-bookworm
+FROM gcr.io/distroless/python3-debian11
 
-# Create a non-root user
-RUN useradd -m -u 1000 elbot
-
-# Set working directory and switch to non-root user
 WORKDIR /app
-USER elbot
 
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
@@ -34,19 +29,22 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/pyth
 # Copy application code
 COPY --chown=elbot:elbot . /app/
 
-# Create necessary directories with correct permissions
-RUN mkdir -p /app/logs && \
-    chmod 755 /app/logs
+# Install dependencies
+COPY requirements.txt /app/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r /app/requirements.txt
 
-# Environment variables
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app:$PATH"
+
+# Expose port for the bot
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import nextcord; exit(0)"
 
 # Command to run
-CMD ["python", "main.py"]
+CMD ["python3", "main.py"]
 # Tip: Rebuild this image regularly to get the latest security patches.
