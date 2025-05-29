@@ -35,7 +35,7 @@ app = Flask(
 )
 app.secret_key = os.getenv("FLASK_SECRET", "change_this_key")
 app.config.update(
-    SESSION_COOKIE_SECURE=True,  # Secure cookies for HTTPS
+    SESSION_COOKIE_SECURE=False,  # Allow cookies over HTTP
     SESSION_COOKIE_HTTPONLY=True,
     PERMANENT_SESSION_LIFETIME=timedelta(days=7)
 )
