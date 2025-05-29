@@ -6,7 +6,7 @@
   <title>ELBOT Control Center</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/futuristic.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='futuristic.css') }}">
   <!-- If futuristic.css is not loading, double-check the file path and your web server's static file configuration (e.g., in Nginx or Apache). -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -16,8 +16,8 @@
   <nav class="navbar navbar-dark bg-dark px-3">
     <a class="navbar-brand futuristic-heading fs-4" href="/">ELBOT</a>
     <div>
-      <a href="/logs" class="btn btn-sm btn-neon mx-1">Logs</a>
-      <a href="/analytics" class="btn btn-sm btn-neon mx-1">Analytics</a>
+      <a href="/bot/logs" class="btn btn-sm btn-neon mx-1">Logs</a>
+      <a href="/bot/analytics" class="btn btn-sm btn-neon mx-1">Analytics</a>
       <a href="/logout" class="btn btn-sm btn-neon mx-1">Logout</a>
     </div>
   </nav>
@@ -41,6 +41,27 @@
 
     </div>
   </div>
+
+  <!-- Add required DOM hooks -->
+  <link id="themeStylesheet" rel="stylesheet" href="">
+  <button id="themeSwitcher">Switch Theme</button>
+  <pre id="logOutput"></pre>
+  <canvas id="cpuChart"></canvas>
+  <div id="botStatus"></div>
+  <form id="commandForm">
+    <input id="commandInput" type="text" placeholder="Enter command">
+    <div id="commandOutput"></div>
+  </form>
+  <form id="branchForm">
+    <select id="branchSelect"></select>
+    <div id="branchOutput"></div>
+  </form>
+  <form id="scheduleForm">
+    <input id="scheduleTime" type="time">
+    <div id="scheduleOutput"></div>
+  </form>
+  <div id="envOutput"></div>
+  <div id="last-update"></div>
 
   <!-- Toast zone -->
   <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastZone"></div>

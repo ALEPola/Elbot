@@ -13,7 +13,7 @@
   <!-- Futuristic neon theme -->
   <link
     rel="stylesheet"
-    href="{{ url_for('static', filename='futuristic.css') }}"
+    href="static/futuristic.css"
   />
 </head>
 <body class="bg-dark text-light">
@@ -21,7 +21,7 @@
   <nav class="navbar navbar-dark bg-dark px-3">
     <a class="navbar-brand futuristic-heading fs-4" href="/">ELBOT</a>
     <div>
-      <a href="/analytics" class="btn btn-sm btn-neon mx-1">Analytics</a>
+      <a href="/bot/analytics" class="btn btn-sm btn-neon mx-1">Analytics</a>
       <a href="/logout" class="btn btn-sm btn-neon mx-1">Logout</a>
     </div>
   </nav>
@@ -30,7 +30,7 @@
   <div class="container my-4">
     <h2 class="futuristic-heading text-center">ELBOT Logs</h2>
     <div class="logs-container bg-secondary p-3 rounded">
-      <pre class="text-light">{{ logs }}</pre>
+      <pre id="logs" class="text-light">{{ logs }}</pre>
     </div>
   </div>
 

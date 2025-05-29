@@ -47,9 +47,9 @@ bot_data = {
     "start_time": datetime.now(),
     "logs": [],
     "commands": {
-        "f1": True,
-        "music": True,
-        "chat": True
+        "f1": 0,
+        "music": 0,
+        "chat": 0
     }
 }
 
@@ -169,7 +169,8 @@ def _auth():
 
 @app.route("/api/system")
 def api_system():
-    if _auth() is not True: return _auth()
+    if not session.get("logged_in"):
+        return jsonify({"error": "unauthorized"}), 401
     return jsonify({
         "cpu": psutil.cpu_percent(),
         "ram": psutil.virtual_memory().percent,
@@ -179,13 +180,15 @@ def api_system():
 
 @app.route("/api/branches")
 def api_branches():
-    if _auth() is not True: return _auth()
+    if not session.get("logged_in"):
+        return jsonify({"error": "unauthorized"}), 401
     out = subprocess.check_output(["git", "-C", REPO_DIR, "branch", "-a"], text=True)
     return jsonify(branches=[b.strip(" *\n") for b in out.splitlines()])
 
 @app.route("/api/status")
 def api_status():
-    if _auth() is not True: return _auth()
+    if not session.get("logged_in"):
+        return jsonify({"error": "unauthorized"}), 401
     try:
         active = subprocess.check_output([SYSTEMCTL, "is-active", "elbot.service"], text=True).strip()
     except subprocess.CalledProcessError:
@@ -194,13 +197,9 @@ def api_status():
 
 @app.route("/api/logs")
 def api_logs():
-    if _auth() is not True:
-        return _auth()
-    logs = subprocess.check_output(
-        [JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"],
-        text=True
-    ).splitlines()
-    return jsonify({"logs": logs})
+    """Return the latest bot logs."""
+    logs = subprocess.check_output([JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"]).decode("utf-8")
+    return jsonify({"logs": logs.splitlines()})
 
 @app.route("/switch-branch", methods=["POST"])
 def switch_branch():
@@ -257,11 +256,15 @@ def logs():
 
 @app.route("/commands")
 def commands():
+    if not session.get("logged_in"):
+        return jsonify({"error": "unauthorized"}), 401
     """Return the status of bot commands."""
     return jsonify(bot_data["commands"])
 
 @app.route("/toggle_command/<command>", methods=["POST"])
 def toggle_command(command):
+    if not session.get("logged_in"):
+        return jsonify({"error": "unauthorized"}), 401
     """Enable or disable a specific command."""
     if command in bot_data["commands"]:
         bot_data["commands"][command] = not bot_data["commands"][command]
@@ -290,11 +293,9 @@ def manage_bot():
 
 @app.route("/bot/logs")
 def bot_logs():
-    if not session.get("logged_in"):
-        return redirect(url_for("login"))
-
+    """Render the logs page with the latest bot logs."""
     logs = subprocess.check_output([JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"]).decode("utf-8")
-    return render_template("logs.html", logs=logs)
+    return render_template("logs.html", logs=logs.splitlines())
 
 @app.route("/bot/analytics")
 def bot_analytics():
@@ -302,10 +303,11 @@ def bot_analytics():
         return redirect(url_for("login"))
 
     uptime = datetime.now() - bot_data["start_time"]
+    command_stats = {cmd: count for cmd, count in bot_data["commands"].items()}
     return render_template("analytics.html", 
         uptime=uptime, 
         commands=bot_data["commands"],
-        command_stats=bot_data["commands"]  # Add command_stats for template compatibility
+        command_stats=command_stats
     )
 
 @app.route("/health")
