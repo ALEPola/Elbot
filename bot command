@@ -182,7 +182,11 @@ source venv/bin/activate
 chmod +x deploy.sh
 ./deploy.sh
 
+chmod +x deploy_git_update.sh
+./deploy_git_update.sh
 
 # web
 sudo systemctl daemon-reload
 sudo systemctl restart elbot-web.service
+chmod +x deploy_web.sh
+sudo ./deploy_web.sh
