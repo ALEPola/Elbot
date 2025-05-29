@@ -350,7 +350,13 @@ def run_command():
 
 # dev runner
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80, debug=False)  # Use port 80 for HTTP
+    # Development server settings
+    port = int(os.getenv("PORT", "8080"))  # Match Gunicorn port, allow override via env
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False
+    )
 
 
 
