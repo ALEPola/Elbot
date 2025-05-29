@@ -925,10 +925,8 @@ def setup(bot):
         """Play a moan sound effect in the voice channel"""
         if not interaction.user.voice:
             await interaction.response.send_message("You need to be in a voice channel to use this command!", ephemeral=True)
-            return
-
-        # Path to your moan sound effect
-        sound_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sounds", "moan.mp3")
+            return        # Path to your moan sound effect
+        sound_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sounds", "56753004_girl-moaning_by_a-sfx_preview.mp3")
         
         if not os.path.exists(sound_path):
             await interaction.response.send_message("Sound effect file not found! Please contact the bot administrator.", ephemeral=True)
