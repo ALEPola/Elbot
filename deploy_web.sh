@@ -7,13 +7,13 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Activate virtual environment and install Gunicorn
-source /home/pi/ELBOT/venv/bin/activate
+source ./venv/bin/activate
 pip install gunicorn
 
 deactivate
 
 # Copy the service file to systemd directory
-cp /home/pi/ELBOT/elbot-web.service /etc/systemd/system/
+cp ./elbot-web.service /etc/systemd/system/
 
 # Reload systemd and restart the service
 systemctl daemon-reload

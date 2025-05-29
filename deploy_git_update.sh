@@ -7,8 +7,8 @@ if [ "$EUID" -eq 0 ]; then
 fi
 
 # Navigate to the ELBOT directory
-cd /home/pi/ELBOT || {
-  echo "Directory /home/pi/ELBOT does not exist. Exiting."
+cd . || {
+  echo "Directory does not exist. Exiting."
   exit 1
 }
 
