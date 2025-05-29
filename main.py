@@ -101,11 +101,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(f'Failed to load {ext}:', e)
 
-    # 6) Spin up Flask in a daemon thread
+    
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # 7) Finally, start your bot
+    
     bot.run(DISCORD_BOT_TOKEN)
 
 

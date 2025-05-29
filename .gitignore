@@ -16,3 +16,6 @@ git add .gitignore
 git commit -m "Add .gitignore for virtualenv and cache cleanup"
 git push origin Working
 
+# Front-end build or local dev folder
+elbot-frontend/  
+

@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/ELBOT
+WorkingDirectory=/home/alex/ELBOT
 ExecStart=/home/alex/ELBOT/venv/bin/gunicorn -b 0.0.0.0:8080 -w 2 web.app:app
 Restart=on-failure
 EnvironmentFile=/home/alex/ELBOT/.env
