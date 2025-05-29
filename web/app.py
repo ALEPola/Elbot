@@ -3,10 +3,17 @@ from flask import (
     url_for, session, jsonify, flash
 )
 from flask_sock import Sock
-import subprocess, os, psutil, shutil, re
+import subprocess, os, psutil, shutil, re, logging
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # ── system binaries ───────────────────────────
 SUDO       = shutil.which("sudo")       or "/usr/bin/sudo"
@@ -155,7 +162,10 @@ def action(cmd):
 # ╚════════════════════════════════════════════╝
 
 def _auth():
-    return session.get("logged_in") or (jsonify(error="unauthorized"), 401)
+    """Authentication helper that returns True if authenticated, or sends a 401 response"""
+    if not session.get("logged_in"):
+        return jsonify(error="unauthorized"), 401
+    return True
 
 @app.route("/api/system")
 def api_system():
@@ -181,6 +191,42 @@ def api_status():
     except subprocess.CalledProcessError:
         active = "unknown"
     return jsonify(status=active.capitalize())
+
+@app.route("/api/logs")
+def api_logs():
+    if _auth() is not True:
+        return _auth()
+    logs = subprocess.check_output(
+        [JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"],
+        text=True
+    ).splitlines()
+    return jsonify({"logs": logs})
+
+@app.route("/switch-branch", methods=["POST"])
+def switch_branch():
+    if _auth() is not True:
+        return _auth()
+    data = request.get_json()
+    branch = data.get("branch")
+    if not branch:
+        return jsonify({"error": "Branch name required"}), 400
+    try:
+        subprocess.check_call(["git", "-C", REPO_DIR, "checkout", branch])
+        return jsonify({"message": f"Switched to branch {branch}"})
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/env")
+def api_env():
+    if _auth() is not True:
+        return _auth()
+    # Return only safe environment variables
+    safe_env = {
+        "REPO_DIR": REPO_DIR,
+        "BOT_VERSION": os.getenv("BOT_VERSION", "unknown"),
+        "PYTHON_VERSION": os.getenv("PYTHON_VERSION", "unknown")
+    }
+    return jsonify(safe_env)
 
 @app.route("/status")
 def status():
@@ -256,7 +302,11 @@ def bot_analytics():
         return redirect(url_for("login"))
 
     uptime = datetime.now() - bot_data["start_time"]
-    return render_template("analytics.html", uptime=uptime, commands=bot_data["commands"])
+    return render_template("analytics.html", 
+        uptime=uptime, 
+        commands=bot_data["commands"],
+        command_stats=bot_data["commands"]  # Add command_stats for template compatibility
+    )
 
 @app.route("/health")
 def health_check():
