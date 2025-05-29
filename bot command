@@ -190,3 +190,5 @@ sudo systemctl daemon-reload
 sudo systemctl restart elbot-web.service
 chmod +x deploy_web.sh
 sudo ./deploy_web.sh
+
+# test
