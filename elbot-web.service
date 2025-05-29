@@ -8,7 +8,7 @@ User=pi
 WorkingDirectory=/home/pi/ELBOT
 ExecStart=/home/pi/ELBOT/venv/bin/gunicorn -b 0.0.0.0:8080 -w 2 web.app:app
 Restart=on-failure
-EnvironmentFile=/home/pi/ELBOT/.env
+EnvironmentFile=/home/alex/ELBOT/.env
 # Add environment variable for development/production
 Environment=FLASK_ENV=production
 
