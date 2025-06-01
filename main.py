@@ -38,7 +38,7 @@ WEBHOOK_TOKEN  = os.getenv("WEBHOOK_TOKEN", "securetoken")
 # ── Flask app ─────────────────────────────────
 app = Flask(
     __name__,
-    static_folder="./static",   # ./static/futuristic.css relative to main.py
+    static_folder="./static/css",   # ./static/css/futuristic.css relative to main.py
     template_folder="./web/templates"
 )
 
