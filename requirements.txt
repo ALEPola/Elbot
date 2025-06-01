@@ -20,6 +20,7 @@ ffmpeg-python==0.2.0
 # Web and API
 flask>=2.3.2
 flask-sock>=0.6.0
+flask-limiter>=3.3.0  # Rate limiting for API endpoints
 aiohttp>=3.8.4
 httpx>=0.24.1
 beautifulsoup4>=4.12.2
