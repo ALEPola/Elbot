@@ -1,5 +1,5 @@
 [Unit]
-Description=ELBOT Discord Bot
+Description=ELBOT Discord Bot with Web Interface
 After=network.target
 
 [Service]
@@ -14,6 +14,8 @@ StartLimitBurst=3
 CPUQuota=40%
 MemoryMax=384M
 EnvironmentFile=/home/alex/ELBOT/.env
+Environment=ELBOT_WEB_PORT=8081
+Environment=FLASK_ENV=production
 
 [Install]
 WantedBy=multi-user.target
