@@ -53,12 +53,29 @@ app.config.update(
 sock = Sock(app)  # WebSocket support
 
 # Add rate limiting
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri=os.getenv('RATE_LIMIT_STORAGE_URI', 'redis://localhost:6379')  # use Redis by default
-)
+storage_uri = os.getenv('RATE_LIMIT_STORAGE_URI')  # e.g. 'redis://localhost:6379'
+try:
+    if storage_uri:
+        limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            default_limits=["200 per day", "50 per hour"],
+            storage_uri=storage_uri
+        )
+    else:
+        limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            default_limits=["200 per day", "50 per hour"]
+        )
+except Exception as e:
+    logger = logging.getLogger('main')
+    logger.warning(f"Rate limiter storage error ({e}); falling back to in-memory.")
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"]
+    )
 
 # Global variables for bot data
 MAX_LOGS = 1000  # Maximum number of logs to keep in memory

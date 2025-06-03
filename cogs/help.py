@@ -35,7 +35,8 @@ class HelpCog(commands.Cog):
     async def on_interaction(self, interaction: nextcord.Interaction):
         # Check if the interaction is a component interaction before accessing custom_id
         if interaction.type == nextcord.InteractionType.component:
-            if interaction.custom_id == "music_help":
+            custom_id = interaction.data.get("custom_id", "")
+            if custom_id == "music_help":
                 embed = nextcord.Embed(
                     title="Music Commands",
                     description="List of music-related commands:",
@@ -46,7 +47,7 @@ class HelpCog(commands.Cog):
                 embed.add_field(name="/skip", value="Skip the current song.", inline=False)
                 await interaction.response.edit_message(embed=embed, view=HelpView())
 
-            elif interaction.custom_id == "f1_help":
+            elif custom_id == "f1_help":
                 embed = nextcord.Embed(
                     title="F1 Commands",
                     description="List of F1-related commands:",
@@ -56,7 +57,7 @@ class HelpCog(commands.Cog):
                 embed.add_field(name="/f1_reminders", value="Manage F1 race reminders.", inline=False)
                 await interaction.response.edit_message(embed=embed, view=HelpView())
 
-            elif interaction.custom_id == "general_help":
+            elif custom_id == "general_help":
                 embed = nextcord.Embed(
                     title="General Commands",
                     description="List of general bot commands:",
