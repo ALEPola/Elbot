@@ -306,15 +306,13 @@ class Music(commands.Cog):
         self.update_activity(guild_id)  # Track activity
 
         ydl_opts = {
-            "format": "worstaudio/worst",  # Use lowest quality audio to reduce processing
+            "format": "bestaudio/best",  # Use best audio for reliable streams
             "quiet": True,
             "noplaylist": False,
             "cookies": os.getenv("YOUTUBE_COOKIES_PATH", None),
             "geo_bypass": True,
             "nocheckcertificate": True,
-            "buffersize": 512,  # Add buffer size
-            "audio_quality": 9,  # Lowest quality (0 is best, 9 is worst)
-            "extract_flat": "in_playlist"
+            "buffersize": 512  # Buffer size for smoother streaming
         }
         # Validate search length
         if len(search) > 200:

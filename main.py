@@ -56,7 +56,8 @@ sock = Sock(app)  # WebSocket support
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri=os.getenv('RATE_LIMIT_STORAGE_URI', 'redis://localhost:6379')  # use Redis by default
 )
 
 # Global variables for bot data
