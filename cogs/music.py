@@ -116,6 +116,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.queue_details(interaction)
 
     @nextcord.ui.button(label="⏯ Pause/Resume", style=nextcord.ButtonStyle.grey, custom_id="pause_resume")
@@ -127,6 +128,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.toggle_pause_resume(interaction)
 
     @nextcord.ui.button(label="SKIP", style=nextcord.ButtonStyle.green, custom_id="skip")
@@ -138,6 +140,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.skip_track(interaction)
 
     @nextcord.ui.button(label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind")
@@ -149,6 +152,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.rewind_track(interaction)
 
     @nextcord.ui.button(label="FORWARD", style=nextcord.ButtonStyle.green, custom_id="forward")
@@ -160,6 +164,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.forward_track(interaction)
 
     @nextcord.ui.button(label="REPLAY", style=nextcord.ButtonStyle.green, custom_id="replay")
@@ -171,6 +176,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.replay_track(interaction)
 
     @nextcord.ui.button(label="LOOP", style=nextcord.ButtonStyle.green, custom_id="loop")
@@ -182,6 +188,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.toggle_loop(interaction)
 
     @nextcord.ui.button(label="🛑 STOP", style=nextcord.ButtonStyle.red, custom_id="stop")
@@ -193,6 +200,7 @@ class MusicControls(nextcord.ui.View):
             button (nextcord.ui.Button): The button that was clicked.
             interaction (nextcord.Interaction): The interaction object.
         """
+        self.cog.update_activity(interaction.guild.id)  # Track activity
         await self.cog.stop_track(interaction)
 
 class Music(commands.Cog):
@@ -223,13 +231,26 @@ class Music(commands.Cog):
         self.track_start_time = {} # guild_id -> timestamp when track started
         self.current_source = {}   # guild_id -> reference to the volume transformer
         self.locks = {}            # guild_id -> asyncio.Lock for thread-safe operations
+        self.last_activity = {}    # guild_id -> timestamp of last activity
+        self.timeout_tasks = {}    # guild_id -> timeout check task
+        
+        # Performance optimization: limit queue size to prevent memory bloat
+        self.max_queue_size = 50   # Maximum songs per guild queue
 
         # Load queue from file
-        try:
-            with open(QUEUE_FILE, "r") as f:
-                self.queue = json.load(f)
-        except FileNotFoundError:
-            self.queue = {}
+        self.load_queue()
+        
+        # Start timeout checker for each guild
+        for guild in bot.guilds:
+            self.start_timeout_checker(guild.id)
+
+        # Limit concurrent YouTube-DL extractions to avoid thread exhaustion
+        self.download_semaphore = asyncio.Semaphore(4)
+
+    def cog_unload(self):
+        """Cleanup when cog is unloaded."""
+        for task in self.timeout_tasks.values():
+            task.cancel()
 
     def get_lock(self, guild_id):
         """
@@ -282,23 +303,42 @@ class Music(commands.Cog):
 
         guild_id = interaction.guild.id
         self.player_channels[guild_id] = interaction.channel
+        self.update_activity(guild_id)  # Track activity
 
         ydl_opts = {
-            "format": "bestaudio",
+            "format": "worstaudio/worst",  # Use lowest quality audio to reduce processing
             "quiet": True,
             "noplaylist": False,
             "cookies": os.getenv("YOUTUBE_COOKIES_PATH", None),
             "geo_bypass": True,
-            "nocheckcertificate": True
+            "nocheckcertificate": True,
+            "buffersize": 512,  # Add buffer size
+            "audio_quality": 9,  # Lowest quality (0 is best, 9 is worst)
+            "extract_flat": "in_playlist"
         }
-        result, error_message = await asyncio.to_thread(
-            extract_info, search, ydl_opts, os.getenv("YOUTUBE_COOKIES_PATH", None)
-        )
+        # Validate search length
+        if len(search) > 200:
+            await interaction.followup.send("❌ Search query too long.", ephemeral=True)
+            return
+        # Throttle YouTube-DL extractions
+        async with self.download_semaphore:
+            result, error_message = await asyncio.to_thread(
+                extract_info, search, ydl_opts, os.getenv("YOUTUBE_COOKIES_PATH", None)
+            )
         if result is None:
             await interaction.followup.send(f"❌ {error_message}", ephemeral=True)
             return
 
         async with self.get_lock(guild_id):
+            # Check queue size limit
+            current_queue_size = self.queue.setdefault(guild_id, asyncio.Queue()).qsize()
+            if current_queue_size >= self.max_queue_size:
+                await interaction.followup.send(
+                    f"❌ Queue is full! Maximum {self.max_queue_size} songs allowed.", 
+                    ephemeral=True
+                )
+                return
+                
             for item in result:
                 await self.queue.setdefault(guild_id, asyncio.Queue()).put(item)
 
@@ -322,11 +362,9 @@ class Music(commands.Cog):
         if guild_id not in self.queue or self.queue[guild_id].empty():
             logger.info("Queue is empty, nothing to play next.")
             if interaction is not None:
-                await interaction.followup.send("No more tracks in the queue.", ephemeral=True)
-
-            # Remove the player message after a delay if the queue is empty
+                await interaction.followup.send("No more tracks in the queue.", ephemeral=True)            # Remove the player message after a shorter delay for faster cleanup
             if guild_id in self.player_messages:
-                await asyncio.sleep(30)  # Wait for 30 seconds before removing the message
+                await asyncio.sleep(10)  # Wait for 10 seconds before removing the message
                 try:
                     await self.player_messages[guild_id].delete()
                     del self.player_messages[guild_id]
@@ -361,13 +399,15 @@ class Music(commands.Cog):
         stream_url = item.get("stream_url")
         ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn -threads 1"  # Limit threads to 1 for better performance on Raspberry Pi
+            "options": "-vn -threads 1 -bufsize 512k -ab 64k"  # Optimized for Raspberry Pi
         }
         source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
-        transformer = nextcord.PCMVolumeTransformer(source, volume=0.5)  # Default to 50% volume
+        transformer = nextcord.PCMVolumeTransformer(source, volume=0.5)
         self.current_source[guild_id] = transformer
 
         def after_callback(error):
+            if error:
+                logger.error(f"Playback error in guild {guild_id}: {error}")
             if self.loop_mode.get(guild_id, False):
                 self.bot.loop.create_task(self.play_song(voice_client, item))
             else:
@@ -445,7 +485,7 @@ class Music(commands.Cog):
         seconds = int(seconds % 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    # Optimize update_now_playing method
+    # Optimize update_now_playing method for Raspberry Pi
     async def update_now_playing(self, guild_id, voice_client, total_duration):
         """
         Update the now playing message for a guild.
@@ -456,17 +496,18 @@ class Music(commands.Cog):
         last_update = 0
         while voice_client.is_playing():
             elapsed = time.time() - self.track_start_time.get(guild_id, time.time())
-            if elapsed - last_update >= 15:  # Update every 15 seconds instead of 10
+            if elapsed - last_update >= 20:  # Update every 20 seconds for better performance
                 progress_bar = self.create_progress_bar(elapsed, total_duration)
                 if guild_id in self.player_messages:
                     try:
                         embed = self.player_messages[guild_id].embeds[0]
-                        embed.set_field_at(1, name="Progress", value=progress_bar, inline=False)
+                        embed.set_field_at(1, name="⏱ Progress", value=progress_bar, inline=False)
                         await self.player_messages[guild_id].edit(embed=embed)
                         last_update = elapsed
                     except Exception as e:
                         logger.error(f"Failed to update now playing message: {e}")
-            await asyncio.sleep(5)
+                        break  # Exit on error to prevent spam
+            await asyncio.sleep(10)  # Check every 10 seconds but update less frequently
 
     async def download_youtube_audio(self, query):
         """
@@ -504,6 +545,8 @@ class Music(commands.Cog):
             index (int): The position of the track to remove.
         """
         guild_id = interaction.guild.id
+        self.update_activity(guild_id)  # Track activity
+        
         if guild_id not in self.queue or self.queue[guild_id].empty():
             await interaction.response.send_message("The queue is empty.", ephemeral=True)
             return
@@ -665,9 +708,10 @@ class Music(commands.Cog):
         if voice_client is None:
             await interaction.response.send_message("Not connected to a voice channel.", ephemeral=True)
             return
-        if guild_id in self.current_track:
-            self.history.setdefault(guild_id, []).append(self.current_track[guild_id])
-        voice_client.stop()
+        async with self.get_lock(guild_id):
+            if guild_id in self.current_track:
+                self.history.setdefault(guild_id, []).append(self.current_track[guild_id])
+            voice_client.stop()
         await interaction.response.send_message("Skipped track.", ephemeral=True)
 
     async def stop_track(self, interaction: nextcord.Interaction):
@@ -682,13 +726,14 @@ class Music(commands.Cog):
         if voice_client is None:
             await interaction.response.send_message("Not connected to a voice channel.", ephemeral=True)
             return
-        voice_client.stop()
-        if guild_id in self.queue:
-            while not self.queue[guild_id].empty():
-                try:
-                    self.queue[guild_id].get_nowait()
-                except asyncio.QueueEmpty:
-                    break
+        async with self.get_lock(guild_id):
+            voice_client.stop()
+            if guild_id in self.queue:
+                while not self.queue[guild_id].empty():
+                    try:
+                        self.queue[guild_id].get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
         await interaction.response.send_message("Stopped playback and cleared the queue.", ephemeral=True)
 
     async def rewind_track(self, interaction: nextcord.Interaction):
@@ -811,6 +856,41 @@ class Music(commands.Cog):
         except FileNotFoundError:
             await ctx.send(f"❌ Playlist '{name}' not found.")
 
+    async def save_queue(self):
+        """
+        Persist current guild queues to disk as JSON.
+        """
+        data = {}
+        for guild_id, q in self.queue.items():
+            # convert queue to list
+            try:
+                data[guild_id] = list(q._queue)
+            except Exception:
+                data[guild_id] = []
+        tmp_file = QUEUE_FILE + ".tmp"
+        with open(tmp_file, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp_file, QUEUE_FILE)
+
+    def load_queue(self):
+        """
+        Load persisted queues from disk into asyncio.Queues.
+        """
+        try:
+            with open(QUEUE_FILE, "r") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            return
+        for guild_id_str, items in data.items():
+            try:
+                gid = int(guild_id_str)
+                q = asyncio.Queue()
+                for it in items:
+                    q.put_nowait(it)
+                self.queue[gid] = q
+            except Exception:
+                continue
+
     # Clean up guild-specific data when bot leaves a guild
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
@@ -841,6 +921,72 @@ class Music(commands.Cog):
             del self.current_source[guild_id]
         if guild_id in self.locks:
             del self.locks[guild_id]
+
+    async def check_timeout_conditions(self, guild_id: int) -> bool:
+        """
+        Check if the bot should timeout and leave the voice channel.
+        
+        Args:
+            guild_id (int): The ID of the guild to check
+            
+        Returns:
+            bool: True if the bot should timeout, False otherwise
+        """
+        guild = self.bot.get_guild(guild_id)
+        if not guild or not guild.voice_client:
+            return True
+            
+        voice_client = guild.voice_client
+        
+        # Check if bot is alone in channel
+        channel_members = len([m for m in voice_client.channel.members if not m.bot])
+        if channel_members == 0:
+            return True
+            
+        # Check for inactivity (5 minutes)
+        last_activity = self.last_activity.get(guild_id, 0)
+        if time.time() - last_activity > 300:  # 5 minutes = 300 seconds
+            return True
+            
+        return False
+        
+    def update_activity(self, guild_id: int):
+        """Update the last activity timestamp for a guild."""
+        self.last_activity[guild_id] = time.time()
+        
+    def start_timeout_checker(self, guild_id: int):
+        """Start the timeout checker task for a guild."""
+        async def timeout_checker():
+            while True:
+                try:
+                    if await self.check_timeout_conditions(guild_id):
+                        guild = self.bot.get_guild(guild_id)
+                        if guild and guild.voice_client:
+                            logger.info(f"Bot auto-disconnecting from {guild.name} due to timeout")
+                            await guild.voice_client.disconnect()
+                            # Clean up guild data
+                            if guild_id in self.player_messages:
+                                try:
+                                    await self.player_messages[guild_id].delete()
+                                except:
+                                    pass  # Message might already be deleted
+                                del self.player_messages[guild_id]
+                            # Clear queue to free memory
+                            if guild_id in self.queue:
+                                while not self.queue[guild_id].empty():
+                                    try:
+                                        self.queue[guild_id].get_nowait()
+                                    except asyncio.QueueEmpty:
+                                        break
+                            break  # Exit the loop after disconnect
+                    await asyncio.sleep(60)  # Check every minute instead of 30 seconds for better performance
+                except Exception as e:
+                    logger.error(f"Error in timeout checker: {e}")
+                    await asyncio.sleep(60)
+                    
+        if guild_id in self.timeout_tasks:
+            self.timeout_tasks[guild_id].cancel()
+        self.timeout_tasks[guild_id] = asyncio.create_task(timeout_checker())
 
 class SearchSelectView(nextcord.ui.View):
     """
