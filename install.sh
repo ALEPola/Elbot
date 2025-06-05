@@ -1,91 +1,72 @@
 #!/bin/bash
 set -euo pipefail
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Function to print status messages
-status() {
-    echo -e "${GREEN}🔄 $1${NC}"
-}
+log(){ echo -e "${GREEN}$1${NC}"; }
+warn(){ echo -e "${YELLOW}$1${NC}"; }
+error(){ echo -e "${RED}$1${NC}"; exit 1; }
 
-error() {
-    echo -e "${RED}❌ $1${NC}"
-    exit 1
-}
-
-warn() {
-    echo -e "${YELLOW}⚠️ $1${NC}"
-}
-
-# Check if running as root
 if [ "$EUID" -eq 0 ]; then
-    error "Please do not run this script as root/sudo"
+    error "Please do not run this script as root"
 fi
 
-# Navigate to the ELBOT directory
 cd "$(dirname "$0")"
+REPO_DIR="$(pwd)"
+USER_NAME="$(whoami)"
 
-# Check system dependencies
-status "Checking system dependencies..."
-for cmd in python3 pip3 git systemctl; do
-    if ! command -v $cmd &> /dev/null; then
-        error "$cmd is required but not installed."
-    fi
+log "Checking dependencies..."
+for cmd in python3 pip3 git; do
+    command -v $cmd >/dev/null || error "$cmd is required"
 done
 
-# Check Python version
-python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-if (( $(echo "$python_version < 3.8" | bc -l) )); then
-    error "Python 3.8 or higher is required (found $python_version)"
-fi
+SYSTEMCTL=$(command -v systemctl || true)
 
-# Create required directories
-status "Setting up directories..."
-sudo mkdir -p /var/log/elbot
-sudo chown $USER:$USER /var/log/elbot
-
-# Set up virtual environment
-status "Setting up virtual environment..."
+log "Preparing virtual environment..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 else
-    warn "Virtual environment already exists, rebuilding..."
-    rm -rf venv
-    python3 -m venv venv
+    warn "Virtualenv already exists"
 fi
 
-# Activate virtual environment and install requirements
-status "Installing dependencies..."
 source venv/bin/activate
+log "Installing Python packages..."
 pip install --upgrade pip
 pip install -r requirements.txt
+deactivate
 
-# Make scripts executable
-status "Setting up scripts..."
-chmod +x deploy.sh
-
-# Copy and enable service files
-status "Installing system services..."
-sudo cp elbot.service elbot-web.service /etc/systemd/system/
-sudo cp elbot-update.service elbot-update.timer /etc/systemd/system/
-
-# Create example .env if it doesn't exist
-if [ ! -f ".env" ]; then
-    status "Creating example .env file..."
-    cp .env.example .env || echo "No .env.example found, skipping..."
-    warn "Please edit .env with your configuration"
+log "Ensuring .env file..."
+if [ ! -f .env ]; then
+    cp .env.example .env 2>/dev/null || touch .env
 fi
 
-# Reload systemd and enable services
-status "Enabling services..."
-sudo systemctl daemon-reload
-sudo systemctl enable elbot.service elbot-web.service elbot-update.timer
+if ! grep -q "^DISCORD_TOKEN=" .env; then
+    read -rp "Enter your DISCORD_TOKEN: " TOKEN
+    echo "DISCORD_TOKEN=$TOKEN" >> .env
+fi
 
-status "Installation complete! Next steps:"
-echo "1. Edit .env with your Discord token and other settings"
-echo "2. Run './deploy.sh' to start the bot"
-echo "3. Check logs with 'journalctl -u elbot.service -f'"
+log "Generating service files..."
+for svc in elbot.service elbot-web.service elbot-update.service; do
+    template="$svc.template"
+    if [ -f "$template" ]; then
+        sed "s#__WORKDIR__#$REPO_DIR#g; s#__USER__#$USER_NAME#g" "$template" > "$svc"
+    fi
+done
+
+if [ -n "$SYSTEMCTL" ]; then
+    log "Installing systemd services..."
+    sudo mkdir -p /var/log/elbot
+    sudo chown "$USER_NAME" /var/log/elbot
+    sudo cp elbot.service elbot-web.service elbot-update.service elbot-update.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable elbot.service elbot-web.service elbot-update.timer
+else
+    warn "systemd not available; skipping service installation"
+fi
+
+log "Install complete"
+
+
