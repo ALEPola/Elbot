@@ -1,19 +1,19 @@
 [Unit]
 Description=ELBOT Discord Bot with Web Interface
 After=network.target
-StartLimitIntervalSec=60
-StartLimitBurst=3
 
 [Service]
 Type=simple
-User=%i
-WorkingDirectory=/home/%i/ELBOT
-ExecStart=/home/%i/ELBOT/venv/bin/python /home/%i/ELBOT/main.py
+User=__USER__
+WorkingDirectory=__WORKDIR__
+ExecStart=__WORKDIR__/venv/bin/python __WORKDIR__/main.py
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
 CPUQuota=40%
 MemoryMax=384M
-EnvironmentFile=/home/%i/ELBOT/.env
+EnvironmentFile=__WORKDIR__/.env
 Environment=ELBOT_WEB_PORT=8081
 Environment=FLASK_ENV=production
 
