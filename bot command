@@ -27,38 +27,39 @@ git clone https://github.com/ALEPola/ELBOT.git
 ---
 
 ## 2. Bot Management Commands
+These commands assume the bot is installed as a systemd service on Linux. On other operating systems, run `python main.py` directly.
 
-### 2.1 Start the Bot
+### 2.1 Start the Bot *(Linux only)*
 ```bash
 sudo systemctl start elbot.service
 ```
 **Description**: Starts the bot as a systemd service.
 
-### 2.2 Stop the Bot
+### 2.2 Stop the Bot *(Linux only)*
 ```bash
 sudo systemctl stop elbot.service
 ```
 **Description**: Stops the bot service.
 
-### 2.3 Restart the Bot
+### 2.3 Restart the Bot *(Linux only)*
 ```bash
 sudo systemctl restart elbot.service
 ```
 **Description**: Restarts the bot to apply new changes or recover from errors.
 
-### 2.4 Check Bot Status
+### 2.4 Check Bot Status *(Linux only)*
 ```bash
 sudo systemctl status elbot.service
 ```
 **Description**: Shows the current status of the bot.
 
-### 2.5 Enable Bot on Boot
+### 2.5 Enable Bot on Boot *(Linux only)*
 ```bash
 sudo systemctl enable elbot.service
 ```
 **Description**: Ensures the bot starts automatically when the system boots.
 
-### 2.6 Disable Bot on Boot
+### 2.6 Disable Bot on Boot *(Linux only)*
 ```bash
 sudo systemctl disable elbot.service
 ```

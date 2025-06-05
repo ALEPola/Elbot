@@ -25,9 +25,17 @@ GUILD_ID          = int(os.getenv('GUILD_ID',   '0'))
 # …any other env vars…
 
 # ── system binaries ───────────────────────────
-SUDO       = shutil.which("sudo")       or "/usr/bin/sudo"
-SYSTEMCTL  = shutil.which("systemctl")  or "/bin/systemctl"
-JOURNALCTL = shutil.which("journalctl") or "/bin/journalctl"
+SUDO       = shutil.which("sudo")
+SYSTEMCTL  = shutil.which("systemctl")
+JOURNALCTL = shutil.which("journalctl")
+
+def has_systemd():
+    """Return True if systemctl is available (Linux with systemd)."""
+    return SYSTEMCTL is not None and os.path.exists(SYSTEMCTL)
+
+def has_journalctl():
+    """Return True if journalctl is available."""
+    return JOURNALCTL is not None and os.path.exists(JOURNALCTL)
 
 # ── env & constants ──────────────────────────
 REPO_DIR      = os.getenv("REPO_DIR", "/home/alex/ELBOT")
@@ -167,17 +175,21 @@ def admin():
 # ╚════════════════════════════════════════════╝
 @sock.route("/ws/logs")
 def ws_logs(ws):
-    proc = subprocess.Popen(
-        [JOURNALCTL, "-u", "elbot.service", "-f", "--no-pager", "--no-hostname"],
-        stdout=subprocess.PIPE, text=True
-    )
-    try:
-        for line in iter(proc.stdout.readline, ""):
-            ws.send(line.rstrip())
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-    finally:
-        proc.terminate()
+    if has_journalctl():
+        proc = subprocess.Popen(
+            [JOURNALCTL, "-u", "elbot.service", "-f", "--no-pager", "--no-hostname"],
+            stdout=subprocess.PIPE, text=True
+        )
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                ws.send(line.rstrip())
+        except Exception as e:
+            logger.error(f"WebSocket error: {e}")
+        finally:
+            proc.terminate()
+    else:
+        for line in bot_data["logs"][-50:]:
+            ws.send(line)
 
 # ╔════════════════════════════════════════════╗
 # ☰  CONTROL ACTIONS                          
@@ -190,19 +202,28 @@ def action(cmd):
     try:
         match cmd:
             case "start":
-                subprocess.check_call([SUDO, SYSTEMCTL, "start", "elbot.service"])
+                if has_systemd():
+                    subprocess.check_call([SUDO or "sudo", SYSTEMCTL, "start", "elbot.service"])
+                else:
+                    flash("Start not supported on this OS", "warning")
             case "stop":
-                subprocess.check_call([SUDO, SYSTEMCTL, "stop", "elbot.service"])
+                if has_systemd():
+                    subprocess.check_call([SUDO or "sudo", SYSTEMCTL, "stop", "elbot.service"])
+                else:
+                    flash("Stop not supported on this OS", "warning")
             case "restart":
-                subprocess.check_call([SUDO, SYSTEMCTL, "restart", "elbot.service"])
+                if has_systemd():
+                    subprocess.check_call([SUDO or "sudo", SYSTEMCTL, "restart", "elbot.service"])
+                else:
+                    flash("Restart not supported on this OS", "warning")
             case "update":
                 subprocess.check_call([f"{REPO_DIR}/deploy.sh"], shell=True)
-            case s if s.startswith("schedule:"):
+            case s if s.startswith("schedule:") and has_systemd():
                 try:
                     minute, hour = s.split(":",1)[1].split()
                     cron = (
                         f"{minute} {hour} * * * /bin/bash {REPO_DIR}/deploy.sh && "
-                        f"{SUDO} {SYSTEMCTL} restart elbot.service"
+                        f"{SUDO or 'sudo'} {SYSTEMCTL} restart elbot.service"
                     )
                     existing = subprocess.run("crontab -l || true", shell=True,
                                               capture_output=True, text=True).stdout
@@ -255,17 +276,24 @@ def api_branches():
 def api_status():
     if not session.get("logged_in"):
         return jsonify({"error": "unauthorized"}), 401
-    try:
-        active = subprocess.check_output([SYSTEMCTL, "is-active", "elbot.service"], text=True).strip()
-    except subprocess.CalledProcessError:
-        active = "unknown"
+    if has_systemd():
+        try:
+            active = subprocess.check_output([SYSTEMCTL, "is-active", "elbot.service"], text=True).strip()
+        except subprocess.CalledProcessError:
+            active = "unknown"
+    else:
+        active = "running"
     return jsonify(status=active.capitalize())
 
 @app.route("/api/logs")
 def api_logs():
     """Return the latest bot logs."""
-    logs = subprocess.check_output([JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"]).decode("utf-8")
-    return jsonify({"logs": logs.splitlines()})
+    if has_journalctl():
+        logs = subprocess.check_output([JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"], text=True)
+        lines = logs.splitlines()
+    else:
+        lines = bot_data["logs"][-50:]
+    return jsonify({"logs": lines})
 
 @app.route("/switch-branch", methods=["POST"])
 def switch_branch():
@@ -344,14 +372,23 @@ def manage_bot():
 
     action = request.form.get("action")
     if action == "start":
-        subprocess.run([SUDO, SYSTEMCTL, "start", "elbot.service"])
-        flash("Bot started successfully!", "success")
+        if has_systemd():
+            subprocess.run([SUDO or "sudo", SYSTEMCTL, "start", "elbot.service"])
+            flash("Bot started successfully!", "success")
+        else:
+            flash("Start not supported on this OS", "warning")
     elif action == "stop":
-        subprocess.run([SUDO, SYSTEMCTL, "stop", "elbot.service"])
-        flash("Bot stopped successfully!", "warning")
+        if has_systemd():
+            subprocess.run([SUDO or "sudo", SYSTEMCTL, "stop", "elbot.service"])
+            flash("Bot stopped successfully!", "warning")
+        else:
+            flash("Stop not supported on this OS", "warning")
     elif action == "restart":
-        subprocess.run([SUDO, SYSTEMCTL, "restart", "elbot.service"])
-        flash("Bot restarted successfully!", "info")
+        if has_systemd():
+            subprocess.run([SUDO or "sudo", SYSTEMCTL, "restart", "elbot.service"])
+            flash("Bot restarted successfully!", "info")
+        else:
+            flash("Restart not supported on this OS", "warning")
     else:
         flash("Invalid action!", "danger")
 
@@ -360,8 +397,13 @@ def manage_bot():
 @app.route("/bot/logs")
 def bot_logs():
     """Render the logs page with the latest bot logs."""
-    logs = subprocess.check_output([JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"]).decode("utf-8")
-    return render_template("logs.html", logs=logs.splitlines())
+    if has_journalctl():
+        logs = subprocess.check_output([
+            JOURNALCTL, "-u", "elbot.service", "--no-pager", "-n", "50"], text=True)
+        lines = logs.splitlines()
+    else:
+        lines = bot_data["logs"][-50:]
+    return render_template("logs.html", logs=lines)
 
 @app.route("/bot/analytics")
 def bot_analytics():

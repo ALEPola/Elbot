@@ -1,11 +1,11 @@
 # ELBOT
 
-ELBOT is a Discord bot designed to provide a variety of features, including music playback, Formula 1 race reminders, and more.
+ELBOT is a Discord bot designed to provide a variety of features, including music playback, Formula 1 race reminders, and more. A lightweight web portal is bundled directly with the bot so you can manage it from any machine without extra services. The web interface no longer depends on Linux-only tools, making the bot fully cross-platform.
 
 ## Features
 - Music playback with queue management.
 - Formula 1 race schedules and reminders.
-- Web portal for managing bot settings.
+- Web portal for managing bot settings (works on Windows, macOS, and Linux).
 
 ## Setup Instructions
 1. Clone the repository:
@@ -30,6 +30,7 @@ ELBOT is a Discord bot designed to provide a variety of features, including musi
    ```bash
    python main.py
    ```
+   The web portal will start automatically. Browse to `http://<bot-ip>:8081` (or the port defined in `ELBOT_WEB_PORT`) to access it.
 
 ## Deployment
 - Use the provided `Dockerfile` for containerized deployment.
