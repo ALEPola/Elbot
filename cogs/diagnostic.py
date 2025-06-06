@@ -10,6 +10,7 @@ from nextcord.ext import commands
 
 logger = logging.getLogger("elbot.diagnostic")
 
+
 class DiagnosticCog(commands.Cog):
     """
     A cog that provides basic bot and system diagnostics.
@@ -19,10 +20,7 @@ class DiagnosticCog(commands.Cog):
         self.bot = bot
         self.start_time = time.time()
 
-    @nextcord.slash_command(
-        name="uptime",
-        description="Check the bot's uptime."
-    )
+    @nextcord.slash_command(name="uptime", description="Check the bot's uptime.")
     async def uptime(self, interaction: nextcord.Interaction):
         """
         Report how long the bot has been running.
@@ -34,10 +32,7 @@ class DiagnosticCog(commands.Cog):
         uptime_str = f"{hours}h {minutes}m {seconds}s"
         await interaction.response.send_message(f"🕒 Uptime: {uptime_str}")
 
-    @nextcord.slash_command(
-        name="ping",
-        description="Check the bot's latency."
-    )
+    @nextcord.slash_command(name="ping", description="Check the bot's latency.")
     async def ping(self, interaction: nextcord.Interaction):
         """
         Return the current bot latency in milliseconds.
@@ -45,10 +40,7 @@ class DiagnosticCog(commands.Cog):
         latency_ms = round(self.bot.latency * 1000)
         await interaction.response.send_message(f"🏓 Latency: {latency_ms}ms")
 
-    @nextcord.slash_command(
-        name="cogs",
-        description="List all loaded cogs."
-    )
+    @nextcord.slash_command(name="cogs", description="List all loaded cogs.")
     async def cogs(self, interaction: nextcord.Interaction):
         """
         Show which cogs are currently loaded.
@@ -61,8 +53,7 @@ class DiagnosticCog(commands.Cog):
             await interaction.response.send_message(f"📂 Loaded Cogs:\n{cog_list}")
 
     @nextcord.slash_command(
-        name="system_info",
-        description="Get basic system information."
+        name="system_info", description="Get basic system information."
     )
     async def system_info(self, interaction: nextcord.Interaction):
         """
@@ -71,13 +62,14 @@ class DiagnosticCog(commands.Cog):
         system = platform.system()
         release = platform.release()
         cpu = platform.processor()
-        total_ram = psutil.virtual_memory().total / (1024 ** 3)  # Convert bytes to GB
+        total_ram = psutil.virtual_memory().total / (1024**3)  # Convert bytes to GB
         await interaction.response.send_message(
             f"🖥 **System Information:**\n"
             f"- OS: {system} {release}\n"
             f"- CPU: {cpu}\n"
             f"- Memory: {total_ram:.2f} GB"
         )
+
 
 def setup(bot: commands.Bot):
     bot.add_cog(DiagnosticCog(bot))

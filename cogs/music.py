@@ -33,7 +33,9 @@ def extract_info(query: str, ydl_opts: dict, cookie_file: str):
     """
     # Quick check for unsupported services
     if "spotify" in query.lower() or "soundcloud" in query.lower():
-        logger.info("Spotify/SoundCloud integration not implemented. Use a YouTube link.")
+        logger.info(
+            "Spotify/SoundCloud integration not implemented. Use a YouTube link."
+        )
         return None, "Unsupported service. Please use a YouTube link."
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
@@ -41,29 +43,41 @@ def extract_info(query: str, ydl_opts: dict, cookie_file: str):
         if url_pattern.match(query):
             logger.info(f"Extracting direct URL: {query}")
             video_info = ydl.extract_info(query, download=False)
-            return [{
-                "stream_url": video_info.get("url"),
-                "page_url": video_info.get("webpage_url"),
-                "title": video_info.get("title"),
-                "thumbnail": video_info.get("thumbnail"),
-                "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
-                "uploader": video_info.get("uploader"),
-                "duration": video_info.get("duration")
-            }], None
-        else:
-            logger.info(f"Searching YouTube for: {query}")
-            search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
-            if search_result and "entries" in search_result and len(search_result["entries"]) > 0:
-                video_info = search_result["entries"][0]
-                return [{
+            return [
+                {
                     "stream_url": video_info.get("url"),
                     "page_url": video_info.get("webpage_url"),
                     "title": video_info.get("title"),
                     "thumbnail": video_info.get("thumbnail"),
-                    "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
+                    "artist": video_info.get("artist")
+                    or video_info.get("uploader")
+                    or "Unknown Artist",
                     "uploader": video_info.get("uploader"),
-                    "duration": video_info.get("duration")
-                }], None
+                    "duration": video_info.get("duration"),
+                }
+            ], None
+        else:
+            logger.info(f"Searching YouTube for: {query}")
+            search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
+            if (
+                search_result
+                and "entries" in search_result
+                and len(search_result["entries"]) > 0
+            ):
+                video_info = search_result["entries"][0]
+                return [
+                    {
+                        "stream_url": video_info.get("url"),
+                        "page_url": video_info.get("webpage_url"),
+                        "title": video_info.get("title"),
+                        "thumbnail": video_info.get("thumbnail"),
+                        "artist": video_info.get("artist")
+                        or video_info.get("uploader")
+                        or "Unknown Artist",
+                        "uploader": video_info.get("uploader"),
+                        "duration": video_info.get("duration"),
+                    }
+                ], None
 
     return None, "Could not find the video."
 
@@ -86,43 +100,77 @@ class MusicControls(nextcord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @nextcord.ui.button(label="QUEUE", style=nextcord.ButtonStyle.green, custom_id="queue")
-    async def queue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="QUEUE", style=nextcord.ButtonStyle.green, custom_id="queue"
+    )
+    async def queue_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.queue_details(interaction)
 
-    @nextcord.ui.button(label="⏯ Pause/Resume", style=nextcord.ButtonStyle.grey, custom_id="pause_resume")
-    async def pause_resume_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="⏯ Pause/Resume",
+        style=nextcord.ButtonStyle.grey,
+        custom_id="pause_resume",
+    )
+    async def pause_resume_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.toggle_pause_resume(interaction)
 
-    @nextcord.ui.button(label="SKIP", style=nextcord.ButtonStyle.green, custom_id="skip")
-    async def skip_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="SKIP", style=nextcord.ButtonStyle.green, custom_id="skip"
+    )
+    async def skip_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.skip_track(interaction)
 
-    @nextcord.ui.button(label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind")
-    async def rewind_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="REWIND", style=nextcord.ButtonStyle.green, custom_id="rewind"
+    )
+    async def rewind_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.rewind_track(interaction)
 
-    @nextcord.ui.button(label="FORWARD", style=nextcord.ButtonStyle.green, custom_id="forward")
-    async def forward_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="FORWARD", style=nextcord.ButtonStyle.green, custom_id="forward"
+    )
+    async def forward_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.forward_track(interaction)
 
-    @nextcord.ui.button(label="REPLAY", style=nextcord.ButtonStyle.green, custom_id="replay")
-    async def replay_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="REPLAY", style=nextcord.ButtonStyle.green, custom_id="replay"
+    )
+    async def replay_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.replay_track(interaction)
 
-    @nextcord.ui.button(label="LOOP", style=nextcord.ButtonStyle.green, custom_id="loop")
-    async def loop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="LOOP", style=nextcord.ButtonStyle.green, custom_id="loop"
+    )
+    async def loop_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.toggle_loop(interaction)
 
-    @nextcord.ui.button(label="🛑 STOP", style=nextcord.ButtonStyle.red, custom_id="stop")
-    async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+    @nextcord.ui.button(
+        label="🛑 STOP", style=nextcord.ButtonStyle.red, custom_id="stop"
+    )
+    async def stop_button(
+        self, button: nextcord.ui.Button, interaction: nextcord.Interaction
+    ):
         self.cog.update_activity(interaction.guild.id)
         await self.cog.stop_track(interaction)
 
@@ -134,18 +182,18 @@ class Music(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.queue = {}             # guild_id -> asyncio.Queue
-        self.player_messages = {}   # guild_id -> persistent player message
-        self.player_channels = {}   # guild_id -> channel for persistent message
-        self.loop_mode = {}         # guild_id -> bool
-        self.autoplay_mode = {}     # guild_id -> bool
-        self.current_track = {}     # guild_id -> dict
-        self.history = {}           # guild_id -> list
+        self.queue = {}  # guild_id -> asyncio.Queue
+        self.player_messages = {}  # guild_id -> persistent player message
+        self.player_channels = {}  # guild_id -> channel for persistent message
+        self.loop_mode = {}  # guild_id -> bool
+        self.autoplay_mode = {}  # guild_id -> bool
+        self.current_track = {}  # guild_id -> dict
+        self.history = {}  # guild_id -> list
         self.track_start_time = {}  # guild_id -> timestamp
-        self.current_source = {}    # guild_id -> PCMVolumeTransformer
-        self.locks = {}             # guild_id -> asyncio.Lock
-        self.last_activity = {}     # guild_id -> last activity timestamp
-        self.timeout_tasks = {}     # guild_id -> asyncio.Task
+        self.current_source = {}  # guild_id -> PCMVolumeTransformer
+        self.locks = {}  # guild_id -> asyncio.Lock
+        self.last_activity = {}  # guild_id -> last activity timestamp
+        self.timeout_tasks = {}  # guild_id -> asyncio.Task
 
         # Limit queue size to avoid runaway memory usage
         self.max_queue_size = 50
@@ -179,8 +227,8 @@ class Music(commands.Cog):
         """
         if interaction.user.voice is None:
             await interaction.followup.send(
-                f"{interaction.user.display_name}, you are not in a voice channel.", 
-                ephemeral=True
+                f"{interaction.user.display_name}, you are not in a voice channel.",
+                ephemeral=True,
             )
             return False
 
@@ -234,8 +282,8 @@ class Music(commands.Cog):
             current_queue = self.queue.setdefault(guild_id, asyncio.Queue())
             if current_queue.qsize() >= self.max_queue_size:
                 await interaction.followup.send(
-                    f"❌ Queue is full! Max {self.max_queue_size} songs.", 
-                    ephemeral=True
+                    f"❌ Queue is full! Max {self.max_queue_size} songs.",
+                    ephemeral=True,
                 )
                 return
 
@@ -245,11 +293,12 @@ class Music(commands.Cog):
             voice_client = interaction.guild.voice_client
             if not voice_client.is_playing():
                 asyncio.create_task(self.play_next(guild_id, interaction))
-                await interaction.followup.send("▶️ Starting playback...", ephemeral=True)
+                await interaction.followup.send(
+                    "▶️ Starting playback...", ephemeral=True
+                )
             else:
                 await interaction.followup.send(
-                    f"➕ Added **{result[0]['title']}** to the queue.", 
-                    ephemeral=True
+                    f"➕ Added **{result[0]['title']}** to the queue.", ephemeral=True
                 )
 
     async def play_next(self, guild_id: int, interaction: nextcord.Interaction = None):
@@ -259,7 +308,9 @@ class Music(commands.Cog):
         if guild_id not in self.queue or self.queue[guild_id].empty():
             logger.info("Queue is empty.")
             if interaction:
-                await interaction.followup.send("No more tracks in the queue.", ephemeral=True)
+                await interaction.followup.send(
+                    "No more tracks in the queue.", ephemeral=True
+                )
 
             # Remove the persistent player message after a short delay
             if guild_id in self.player_messages:
@@ -284,7 +335,12 @@ class Music(commands.Cog):
         await self.play_song(guild.voice_client, item, interaction)
         await self.save_queue()
 
-    async def play_song(self, voice_client: nextcord.VoiceClient, item: dict, interaction: nextcord.Interaction = None):
+    async def play_song(
+        self,
+        voice_client: nextcord.VoiceClient,
+        item: dict,
+        interaction: nextcord.Interaction = None,
+    ):
         """
         Actually begin playback of a single track.
         """
@@ -295,7 +351,7 @@ class Music(commands.Cog):
         stream_url = item["stream_url"]
         ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn -threads 1 -bufsize 512k -ab 64k"
+            "options": "-vn -threads 1 -bufsize 512k -ab 64k",
         }
         source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
         transformer = nextcord.PCMVolumeTransformer(source, volume=0.5)
@@ -314,13 +370,19 @@ class Music(commands.Cog):
 
         # Build the “Now Playing” embed with a progress bar
         progress_bar = (
-            self.create_progress_bar(0, item["duration"]) if item.get("duration") else "N/A"
+            self.create_progress_bar(0, item["duration"])
+            if item.get("duration")
+            else "N/A"
         )
         embed = nextcord.Embed(title="🎶 Now Playing", color=nextcord.Color.green())
         embed.add_field(name="🎵 Title", value=item["title"], inline=False)
         embed.add_field(name="⏱ Progress", value=progress_bar, inline=False)
-        embed.add_field(name="🔗 URL", value=f"[Click Here]({item['page_url']})", inline=False)
-        embed.set_footer(text=f"Song By: {item.get('artist') or item.get('uploader') or 'Unknown Artist'}")
+        embed.add_field(
+            name="🔗 URL", value=f"[Click Here]({item['page_url']})", inline=False
+        )
+        embed.set_footer(
+            text=f"Song By: {item.get('artist') or item.get('uploader') or 'Unknown Artist'}"
+        )
         if item.get("thumbnail"):
             embed.set_thumbnail(url=item["thumbnail"])
 
@@ -346,9 +408,13 @@ class Music(commands.Cog):
 
         # Schedule periodic “Now Playing” updates if we know the track duration
         if item.get("duration"):
-            self.bot.loop.create_task(self.update_now_playing(guild_id, voice_client, item["duration"]))
+            self.bot.loop.create_task(
+                self.update_now_playing(guild_id, voice_client, item["duration"])
+            )
 
-    def create_progress_bar(self, elapsed: float, total: float, length: int = 20) -> str:
+    def create_progress_bar(
+        self, elapsed: float, total: float, length: int = 20
+    ) -> str:
         """
         Return a string progress bar given elapsed and total seconds.
         """
@@ -369,7 +435,9 @@ class Music(commands.Cog):
         seconds = int(seconds % 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    async def update_now_playing(self, guild_id: int, voice_client: nextcord.VoiceClient, total_duration: float):
+    async def update_now_playing(
+        self, guild_id: int, voice_client: nextcord.VoiceClient, total_duration: float
+    ):
         """
         Periodically edit the “Now Playing” message’s progress bar.
         Updates every 20 seconds to reduce load.
@@ -382,7 +450,9 @@ class Music(commands.Cog):
                 if guild_id in self.player_messages:
                     try:
                         embed = self.player_messages[guild_id].embeds[0]
-                        embed.set_field_at(1, name="⏱ Progress", value=progress_bar, inline=False)
+                        embed.set_field_at(
+                            1, name="⏱ Progress", value=progress_bar, inline=False
+                        )
                         await self.player_messages[guild_id].edit(embed=embed)
                         last_update = elapsed
                     except Exception as e:
@@ -390,7 +460,10 @@ class Music(commands.Cog):
                         break
             await asyncio.sleep(10)
 
-    @nextcord.slash_command(name="remove_track", description="Remove a track from the queue by its position.")
+    @nextcord.slash_command(
+        name="remove_track",
+        description="Remove a track from the queue by its position.",
+    )
     async def remove_track(self, interaction: nextcord.Interaction, index: int):
         """
         Remove a track from the queue at position `index` (1-based).
@@ -399,58 +472,86 @@ class Music(commands.Cog):
         self.update_activity(guild_id)
 
         if guild_id not in self.queue or self.queue[guild_id].empty():
-            await interaction.response.send_message("The queue is empty.", ephemeral=True)
+            await interaction.response.send_message(
+                "The queue is empty.", ephemeral=True
+            )
             return
 
         queue_list = list(self.queue[guild_id]._queue)
         if index < 1 or index > len(queue_list):
-            await interaction.response.send_message("Invalid track index.", ephemeral=True)
+            await interaction.response.send_message(
+                "Invalid track index.", ephemeral=True
+            )
             return
 
         removed = queue_list.pop(index - 1)
         update_queue(self.queue[guild_id], queue_list)
-        await interaction.response.send_message(f"Removed **{removed['title']}** from the queue.", ephemeral=True)
+        await interaction.response.send_message(
+            f"Removed **{removed['title']}** from the queue.", ephemeral=True
+        )
 
-    @nextcord.slash_command(name="move_track", description="Move a track to a new position in the queue.")
-    async def move_track(self, interaction: nextcord.Interaction, from_index: int, to_index: int):
+    @nextcord.slash_command(
+        name="move_track", description="Move a track to a new position in the queue."
+    )
+    async def move_track(
+        self, interaction: nextcord.Interaction, from_index: int, to_index: int
+    ):
         """
         Move a track from `from_index` to `to_index` (1-based).
         """
         guild_id = interaction.guild.id
         if guild_id not in self.queue or self.queue[guild_id].empty():
-            await interaction.response.send_message("The queue is empty.", ephemeral=True)
+            await interaction.response.send_message(
+                "The queue is empty.", ephemeral=True
+            )
             return
 
         queue_list = list(self.queue[guild_id]._queue)
-        if (from_index < 1 or from_index > len(queue_list)
-                or to_index < 1 or to_index > len(queue_list)):
-            await interaction.response.send_message("Invalid track indices.", ephemeral=True)
+        if (
+            from_index < 1
+            or from_index > len(queue_list)
+            or to_index < 1
+            or to_index > len(queue_list)
+        ):
+            await interaction.response.send_message(
+                "Invalid track indices.", ephemeral=True
+            )
             return
 
         track = queue_list.pop(from_index - 1)
         queue_list.insert(to_index - 1, track)
         update_queue(self.queue[guild_id], queue_list)
-        await interaction.response.send_message(f"Moved **{track['title']}** to position {to_index}.", ephemeral=True)
+        await interaction.response.send_message(
+            f"Moved **{track['title']}** to position {to_index}.", ephemeral=True
+        )
 
-    @nextcord.slash_command(name="queue_details", description="Show detailed queue information.")
+    @nextcord.slash_command(
+        name="queue_details", description="Show detailed queue information."
+    )
     async def queue_details(self, interaction: nextcord.Interaction):
         """
         Display the full queue in an embed.
         """
         guild_id = interaction.guild.id
         if guild_id not in self.queue or self.queue[guild_id].empty():
-            await interaction.response.send_message("The queue is empty.", ephemeral=True)
+            await interaction.response.send_message(
+                "The queue is empty.", ephemeral=True
+            )
             return
 
         queue_list = list(self.queue[guild_id]._queue)
         embed = nextcord.Embed(title="Queue Details", color=nextcord.Color.blue())
         for i, item in enumerate(queue_list, start=1):
             title = item.get("title")
-            duration = self.format_time(item.get("duration")) if item.get("duration") else "N/A"
+            duration = (
+                self.format_time(item.get("duration"))
+                if item.get("duration")
+                else "N/A"
+            )
             embed.add_field(
                 name=f"{i}. {title}",
                 value=f"Duration: {duration}\n[Link]({item.get('page_url')})",
-                inline=False
+                inline=False,
             )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -465,29 +566,37 @@ class Music(commands.Cog):
             "noplaylist": True,
             "cookies": cookie_file,
             "geo_bypass": True,
-            "nocheckcertificate": True
+            "nocheckcertificate": True,
         }
         results = []
 
         def run_search():
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                search_result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+                search_result = ydl.extract_info(
+                    f"ytsearch{max_results}:{query}", download=False
+                )
                 if search_result and "entries" in search_result:
                     for video_info in search_result["entries"]:
-                        results.append({
-                            "stream_url": video_info.get("url"),
-                            "page_url": video_info.get("webpage_url"),
-                            "title": video_info.get("title"),
-                            "thumbnail": video_info.get("thumbnail"),
-                            "artist": video_info.get("artist") or video_info.get("uploader") or "Unknown Artist",
-                            "uploader": video_info.get("uploader"),
-                            "duration": video_info.get("duration")
-                        })
+                        results.append(
+                            {
+                                "stream_url": video_info.get("url"),
+                                "page_url": video_info.get("webpage_url"),
+                                "title": video_info.get("title"),
+                                "thumbnail": video_info.get("thumbnail"),
+                                "artist": video_info.get("artist")
+                                or video_info.get("uploader")
+                                or "Unknown Artist",
+                                "uploader": video_info.get("uploader"),
+                                "duration": video_info.get("duration"),
+                            }
+                        )
 
         await asyncio.to_thread(run_search)
         return results
 
-    @nextcord.slash_command(name="search", description="Search for a track and select one to queue.")
+    @nextcord.slash_command(
+        name="search", description="Search for a track and select one to queue."
+    )
     async def search(self, interaction: nextcord.Interaction, query: str):
         """
         Let user pick a track from search results.
@@ -503,7 +612,9 @@ class Music(commands.Cog):
             "Select a track to add to the queue:", view=view, ephemeral=True
         )
 
-    @nextcord.slash_command(name="volume", description="Adjust playback volume (0-150%).")
+    @nextcord.slash_command(
+        name="volume", description="Adjust playback volume (0-150%)."
+    )
     async def volume(self, interaction: nextcord.Interaction, volume: int):
         """
         Change the playback volume (0–150).
@@ -523,7 +634,9 @@ class Music(commands.Cog):
             return
 
         self.current_source[guild_id].volume = volume / 100.0
-        await interaction.response.send_message(f"Volume set to {volume}%.", ephemeral=True)
+        await interaction.response.send_message(
+            f"Volume set to {volume}%.", ephemeral=True
+        )
 
     async def toggle_pause_resume(self, interaction: nextcord.Interaction):
         """
@@ -538,12 +651,18 @@ class Music(commands.Cog):
 
         if voice_client.is_paused():
             voice_client.resume()
-            await interaction.response.send_message("▶️ Resumed playback.", ephemeral=True)
+            await interaction.response.send_message(
+                "▶️ Resumed playback.", ephemeral=True
+            )
         elif voice_client.is_playing():
             voice_client.pause()
-            await interaction.response.send_message("⏸ Paused playback.", ephemeral=True)
+            await interaction.response.send_message(
+                "⏸ Paused playback.", ephemeral=True
+            )
         else:
-            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+            await interaction.response.send_message(
+                "Nothing is playing.", ephemeral=True
+            )
 
     async def skip_track(self, interaction: nextcord.Interaction):
         """
@@ -559,7 +678,9 @@ class Music(commands.Cog):
 
         async with self.get_lock(guild_id):
             if guild_id in self.current_track:
-                self.history.setdefault(guild_id, []).append(self.current_track[guild_id])
+                self.history.setdefault(guild_id, []).append(
+                    self.current_track[guild_id]
+                )
             voice_client.stop()
         await interaction.response.send_message("⏭ Skipped track.", ephemeral=True)
 
@@ -584,7 +705,9 @@ class Music(commands.Cog):
                     except asyncio.QueueEmpty:
                         break
 
-        await interaction.response.send_message("🛑 Stopped and cleared queue.", ephemeral=True)
+        await interaction.response.send_message(
+            "🛑 Stopped and cleared queue.", ephemeral=True
+        )
 
     async def rewind_track(self, interaction: nextcord.Interaction):
         """
@@ -594,7 +717,9 @@ class Music(commands.Cog):
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if guild_id not in self.current_track:
-            await interaction.followup.send("No track is currently playing.", ephemeral=True)
+            await interaction.followup.send(
+                "No track is currently playing.", ephemeral=True
+            )
             return
 
         item = self.current_track[guild_id]
@@ -616,7 +741,9 @@ class Music(commands.Cog):
         guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
         if guild_id not in self.current_track:
-            await interaction.followup.send("No track is currently playing.", ephemeral=True)
+            await interaction.followup.send(
+                "No track is currently playing.", ephemeral=True
+            )
             return
 
         item = self.current_track[guild_id]
@@ -632,7 +759,9 @@ class Music(commands.Cog):
         current = self.loop_mode.get(guild_id, False)
         self.loop_mode[guild_id] = not current
         status = "enabled" if self.loop_mode[guild_id] else "disabled"
-        await interaction.response.send_message(f"↩️ Loop mode {status}.", ephemeral=True)
+        await interaction.response.send_message(
+            f"↩️ Loop mode {status}.", ephemeral=True
+        )
 
     @commands.command(name="shuffle")
     async def shuffle_queue(self, ctx: commands.Context):
@@ -648,7 +777,9 @@ class Music(commands.Cog):
         await ctx.send("🔀 The queue has been shuffled!")
 
     @commands.command(name="reorder")
-    async def reorder_queue(self, ctx: commands.Context, old_index: int, new_index: int):
+    async def reorder_queue(
+        self, ctx: commands.Context, old_index: int, new_index: int
+    ):
         """
         Reorder a song in the queue by index (text-command version).
         """
@@ -658,8 +789,12 @@ class Music(commands.Cog):
             return
 
         queue_list = self.queue[guild_id]._queue
-        if (old_index < 1 or new_index < 1 or
-                old_index > len(queue_list) or new_index > len(queue_list)):
+        if (
+            old_index < 1
+            or new_index < 1
+            or old_index > len(queue_list)
+            or new_index > len(queue_list)
+        ):
             await ctx.send("Invalid indices! Use valid positions in the queue.")
             return
 
@@ -735,9 +870,18 @@ class Music(commands.Cog):
         """
         guild_id = guild.id
         keys = [
-            "queue", "player_messages", "player_channels", "loop_mode",
-            "autoplay_mode", "current_track", "history", "track_start_time",
-            "current_source", "locks", "last_activity", "timeout_tasks"
+            "queue",
+            "player_messages",
+            "player_channels",
+            "loop_mode",
+            "autoplay_mode",
+            "current_track",
+            "history",
+            "track_start_time",
+            "current_source",
+            "locks",
+            "last_activity",
+            "timeout_tasks",
         ]
         for key in keys:
             container = getattr(self, key)
@@ -776,20 +920,23 @@ class Music(commands.Cog):
         """
         Begin a background task that checks every minute if the bot should disconnect.
         """
+
         async def timeout_checker():
             while True:
                 try:
                     if await self.check_timeout_conditions(guild_id):
                         guild = self.bot.get_guild(guild_id)
                         if guild and guild.voice_client:
-                            logger.info(f"Auto-disconnecting from {guild.name} due to timeout.")
+                            logger.info(
+                                f"Auto-disconnecting from {guild.name} due to timeout."
+                            )
                             await guild.voice_client.disconnect()
 
                             # Delete persistent player message if it exists
                             if guild_id in self.player_messages:
                                 try:
                                     await self.player_messages[guild_id].delete()
-                                except:
+                                except Exception:
                                     pass
                                 del self.player_messages[guild_id]
 
@@ -842,12 +989,17 @@ class SearchSelect(nextcord.ui.Select):
             label = item.get("title")[:100]
             duration = item.get("duration")
             dur_str = (
-                f"Duration: {int(duration // 60):02d}:{int(duration % 60):02d}" 
-                if duration else "N/A"
+                f"Duration: {int(duration // 60):02d}:{int(duration % 60):02d}"
+                if duration
+                else "N/A"
             )
-            options.append(nextcord.SelectOption(label=label, description=dur_str, value=str(i)))
+            options.append(
+                nextcord.SelectOption(label=label, description=dur_str, value=str(i))
+            )
 
-        super().__init__(placeholder="Select a track...", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder="Select a track...", min_values=1, max_values=1, options=options
+        )
 
     async def callback(self, interaction: nextcord.Interaction):
         """
@@ -857,8 +1009,12 @@ class SearchSelect(nextcord.ui.Select):
         selected = self.view.results[index]
         guild_id = interaction.guild.id
 
-        await self.view.music_cog.queue.setdefault(guild_id, asyncio.Queue()).put(selected)
-        await interaction.response.send_message(f"✅ Queued **{selected['title']}**", ephemeral=True)
+        await self.view.music_cog.queue.setdefault(guild_id, asyncio.Queue()).put(
+            selected
+        )
+        await interaction.response.send_message(
+            f"✅ Queued **{selected['title']}**", ephemeral=True
+        )
 
         if not interaction.guild.voice_client.is_playing():
             self.view.music_cog.bot.loop.create_task(
@@ -889,13 +1045,15 @@ def setup(bot: commands.Bot):
 
         # Path to the sound file (project_root/sounds/...)
         sound_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "sounds", 
-            "56753004_girl-moaning_by_a-sfx_preview.mp3"
+            os.path.dirname(os.path.dirname(__file__)),
+            "sounds",
+            "56753004_girl-moaning_by_a-sfx_preview.mp3",
         )
 
         if not os.path.exists(sound_path):
             await interaction.response.send_message(
-                "❌ Sound effect not found! Contact the bot administrator.", ephemeral=True
+                "❌ Sound effect not found! Contact the bot administrator.",
+                ephemeral=True,
             )
             return
 
@@ -918,4 +1076,6 @@ def setup(bot: commands.Bot):
             voice_client.play(nextcord.FFmpegPCMAudio(sound_path))
             await interaction.response.send_message("😏", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error playing sound: {str(e)}", ephemeral=True)
+            await interaction.response.send_message(
+                f"Error playing sound: {str(e)}", ephemeral=True
+            )

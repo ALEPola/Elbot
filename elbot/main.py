@@ -39,7 +39,9 @@ def main():
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send("❌ Missing required argument.")
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"⏳ Command on cooldown. Try in {round(error.retry_after,2)}s.")
+            await ctx.send(
+                f"⏳ Command on cooldown. Try in {round(error.retry_after, 2)}s."
+            )
         else:
             logger.error(f"Unhandled error: {error}", exc_info=True)
             await ctx.send("❌ An unexpected error occurred. Contact the admin.")

@@ -3,6 +3,7 @@
 import os
 from nextcord.ext import commands
 
+
 def load_all_cogs(bot: commands.Bot, cogs_dir: str = "cogs"):
     """
     Dynamically load every .py file in the cogs/ directory as a cog.

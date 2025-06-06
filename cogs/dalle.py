@@ -1,6 +1,5 @@
 # cogs/dalle.py
 
-import os
 import asyncio
 import nextcord
 from nextcord.ext import commands
@@ -9,7 +8,9 @@ import openai
 from elbot.config import Config  # Use our central config
 
 # Make sure OpenAI key is set in Config (Config.validate() will have caught a missing token).
-openai.api_key = Config.OPENAI_API_KEY  # You should add OPENAI_API_KEY to Config in config.py
+openai.api_key = (
+    Config.OPENAI_API_KEY
+)  # You should add OPENAI_API_KEY to Config in config.py
 
 
 class ImageCog(commands.Cog):
@@ -23,7 +24,7 @@ class ImageCog(commands.Cog):
 
     @nextcord.slash_command(
         name="dalle",
-        description="Generate an image using DALL·E 3"
+        description="Generate an image using DALL·E 3",
         # No `guild_ids` here—command is globally registered. If you want to restrict to a single guild,
         # you can check `if interaction.guild.id != Config.GUILD_ID` at runtime and reject it.
     )
@@ -31,7 +32,11 @@ class ImageCog(commands.Cog):
         await interaction.response.defer()
 
         # Optional: if you really want to restrict to one guild:
-        if Config.GUILD_ID and interaction.guild and interaction.guild.id != Config.GUILD_ID:
+        if (
+            Config.GUILD_ID
+            and interaction.guild
+            and interaction.guild.id != Config.GUILD_ID
+        ):
             await interaction.followup.send(
                 "This command is not available in this server.", ephemeral=True
             )
@@ -44,7 +49,7 @@ class ImageCog(commands.Cog):
                 model="dall-e-3",
                 prompt=prompt,
                 size="1024x1024",
-                n=1
+                n=1,
             )
 
             image_url = response.data[0].url
@@ -58,10 +63,12 @@ class ImageCog(commands.Cog):
             if "content_policy_violation" in msg:
                 await interaction.followup.send(
                     "The prompt you used violates the content policy. Please try a different prompt.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
             else:
-                await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
+                await interaction.followup.send(
+                    f"An error occurred: {e}", ephemeral=True
+                )
 
 
 def setup(bot: commands.Bot):
