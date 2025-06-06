@@ -34,7 +34,12 @@ Linux users can run `./scripts/install.sh` to be guided through installing syste
 
 ### 3. Configure environment variables
 
-Copy `.env.example` to `.env` and fill in your tokens:
+Copy `.env.example` to `.env` and fill in the required variables:
+
+* `DISCORD_BOT_TOKEN` &ndash; your Discord bot token
+* `OPENAI_API_KEY` &ndash; your OpenAI API key
+
+Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH` and `OPENAI_MODEL`.
 
 ```bash
 cp .env.example .env
