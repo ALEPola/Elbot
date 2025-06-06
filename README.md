@@ -26,6 +26,8 @@ source .venv/bin/activate
 ```bash
 pip install -U pip
 pip install -e .
+# Alternatively you can install from requirements.txt
+pip install -r requirements.txt
 ```
 
 Linux users can run `./scripts/install.sh` to be guided through installing system packages and Python dependencies. Pass `--yes` to skip the prompts and install automatically.

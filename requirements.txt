@@ -1,0 +1,7 @@
+nextcord
+PyNaCl
+openai
+textblob
+python-dotenv
+psutil
+yt-dlp
