@@ -101,7 +101,13 @@ echo "\n[3/5] Installing Python dependencies..."
 
 if prompt_yes_no "Install Python packages with pip?" Y; then
     pip install --upgrade pip
-    pip install nextcord PyNaCl openai textblob python-dotenv psutil yt-dlp
+    if [ -f "$ROOT_DIR/pyproject.toml" ]; then
+        # Install in editable mode if a pyproject exists
+        pip install -e "$ROOT_DIR"
+    else
+        # Fall back to requirements.txt for older setups
+        pip install -r "$ROOT_DIR/requirements.txt"
+    fi
     $PYTHON -m textblob.download_corpora
 fi
 
