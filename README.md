@@ -68,6 +68,17 @@ To pull the latest version of Elbot from GitHub:
 ./scripts/update.sh
 ```
 
+## Web Portal
+
+Elbot ships with a simple management portal built with Flask. To start it:
+
+```bash
+elbot-portal
+```
+
+The portal lets you view the bot logs, switch Git branches, trigger
+`update.sh` and restart the system service running the bot.
+
 ## Sound assets
 
 The optional `/moan` slash command in the music cog expects the file

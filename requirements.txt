@@ -5,3 +5,4 @@ textblob
 python-dotenv
 psutil
 yt-dlp
+Flask
