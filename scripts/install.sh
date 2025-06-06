@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -18,7 +18,7 @@ EOF
 
 ASK=1
 
-case "$1" in
+case "${1:-}" in
     -y|--yes)
         ASK=0
         ;;
