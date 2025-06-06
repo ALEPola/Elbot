@@ -1,0 +1,2 @@
+"""Elbot package"""
+
