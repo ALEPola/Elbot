@@ -3,6 +3,7 @@
 import platform
 import psutil
 import logging
+import time
 
 import nextcord
 from nextcord.ext import commands
@@ -16,7 +17,7 @@ class DiagnosticCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.start_time = psutil.boot_time()  # or store datetime.now() if you prefer
+        self.start_time = time.time()
 
     @nextcord.slash_command(
         name="uptime",
@@ -26,7 +27,7 @@ class DiagnosticCog(commands.Cog):
         """
         Report how long the bot has been running.
         """
-        now = psutil.time.time()
+        now = time.time()
         uptime_seconds = now - self.start_time
         hours, remainder = divmod(int(uptime_seconds), 3600)
         minutes, seconds = divmod(remainder, 60)
