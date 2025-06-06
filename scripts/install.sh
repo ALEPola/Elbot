@@ -4,30 +4,89 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-## Automated setup script for the Elbot project.
-## This will create a Python virtual environment and install all required
-## packages.  It also attempts to install system dependencies when run on
-## Debian/Ubuntu based systems.
+## Guided setup script for the Elbot project.
+## Creates a Python virtual environment, installs dependencies and optionally
+## registers a systemd service.
 
-echo "[1/5] Checking system packages..."
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--yes]
+
+--yes    Run non-interactively and assume "yes" for all prompts.
+EOF
+}
+
+ASK=1
+
+case "$1" in
+    -y|--yes)
+        ASK=0
+        ;;
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    "") ;;
+    *)
+        echo "Unknown option: $1" >&2
+        usage
+        exit 1
+        ;;
+esac
+
+# If not running in a TTY (e.g. via another script) fall back to --yes
+if [ ! -t 0 ]; then
+    ASK=0
+fi
+
+prompt_yes_no() {
+    local prompt="$1" default=${2:-Y} reply
+    if [ "$ASK" -eq 0 ]; then
+        return 0
+    fi
+    while true; do
+        read -rp "$prompt [$default] " reply
+        reply=${reply:-$default}
+        case "$reply" in
+            [Yy]*) return 0 ;;
+            [Nn]*) return 1 ;;
+            *) echo "Please answer y or n." ;;
+        esac
+    done
+}
+
+echo "\n*** Elbot Setup ***"
+echo "This script will install dependencies and create a virtual environment in"
+echo "$ROOT_DIR".
+prompt_yes_no "Continue?" Y || exit 0
+
+echo "\n[1/5] Checking system packages..."
 
 # Install system packages if apt-get is available (Ubuntu/Debian)
 if command -v apt-get >/dev/null 2>&1; then
-    # Use sudo only if available and avoid interactive prompts
-    if sudo -n true 2>/dev/null; then
-        SUDO="sudo -n"
-    else
-        SUDO=""
+    if prompt_yes_no "Install required system packages using apt-get?" Y; then
+        # Use sudo only if available and avoid interactive prompts
+        if sudo -n true 2>/dev/null; then
+            SUDO="sudo -n"
+        else
+            SUDO="sudo"
+        fi
+        export DEBIAN_FRONTEND=noninteractive
+        $SUDO apt-get -y update
+        $SUDO apt-get -y install python3 python3-venv python3-pip ffmpeg
     fi
-    export DEBIAN_FRONTEND=noninteractive
-    $SUDO apt-get -y update
-    $SUDO apt-get -y install python3 python3-venv python3-pip ffmpeg
+else
+    echo "apt-get not found; please ensure Python 3, pip and ffmpeg are installed"
 fi
 
-echo "[2/5] Creating virtual environment..."
+echo "\n[2/5] Creating virtual environment..."
 
-if [ ! -d "$ROOT_DIR/.venv" ]; then
-    python3 -m venv "$ROOT_DIR/.venv"
+if [ -d "$ROOT_DIR/.venv" ]; then
+    echo "Virtual environment already exists."
+else
+    if prompt_yes_no "Create virtual environment at .venv?" Y; then
+        python3 -m venv "$ROOT_DIR/.venv"
+    fi
 fi
 
 source "$ROOT_DIR/.venv/bin/activate"
@@ -37,22 +96,20 @@ if [ ! -f "$ROOT_DIR/.env" ] && [ -f "$ROOT_DIR/.env.example" ]; then
     cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
 fi
 
-echo "[3/5] Installing Python dependencies..."
+echo "\n[3/5] Installing Python dependencies..."
 
-# Upgrade pip first
-pip install --upgrade pip
+if prompt_yes_no "Install Python packages with pip?" Y; then
+    pip install --upgrade pip
+    pip install nextcord PyNaCl openai textblob python-dotenv psutil yt-dlp
+    python -m textblob.download_corpora
+fi
 
-# Core dependencies used by the bot
-pip install nextcord PyNaCl openai textblob python-dotenv psutil yt-dlp
-
-# TextBlob requires NLTK corpora for sentiment analysis
-python -m textblob.download_corpora
-
-echo "[4/5] Installing systemd service..."
+echo "\n[4/5] Installing systemd service..."
 
 if command -v systemctl >/dev/null 2>&1; then
-    SERVICE_FILE="/etc/systemd/system/elbot.service"
-    sudo tee "$SERVICE_FILE" >/dev/null <<EOF
+    if prompt_yes_no "Install and enable elbot.service using systemd?" Y; then
+        SERVICE_FILE="/etc/systemd/system/elbot.service"
+        sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 [Unit]
 Description=Elbot Discord Bot
 After=network.target
@@ -67,12 +124,13 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable elbot.service
-    echo "Service installed as elbot.service"
+        sudo systemctl daemon-reload
+        sudo systemctl enable elbot.service
+        echo "Service installed as elbot.service"
+    fi
 else
     echo "systemctl not found; skipping service installation"
 fi
 
-echo "[5/5] Installation complete."
+echo "\n[5/5] Installation complete."
 echo "Activate the virtual environment with: source .venv/bin/activate"
