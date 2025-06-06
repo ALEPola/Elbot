@@ -90,6 +90,7 @@ else
 fi
 
 source "$ROOT_DIR/.venv/bin/activate"
+PYTHON="$VIRTUAL_ENV/bin/python"
 
 # Copy example environment if none exists
 if [ ! -f "$ROOT_DIR/.env" ] && [ -f "$ROOT_DIR/.env.example" ]; then
@@ -101,7 +102,7 @@ echo "\n[3/5] Installing Python dependencies..."
 if prompt_yes_no "Install Python packages with pip?" Y; then
     pip install --upgrade pip
     pip install nextcord PyNaCl openai textblob python-dotenv psutil yt-dlp
-    python -m textblob.download_corpora
+    $PYTHON -m textblob.download_corpora
 fi
 
 echo "\n[4/5] Installing systemd service..."
