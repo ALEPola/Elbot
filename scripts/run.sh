@@ -2,9 +2,15 @@
 # Simple helper to launch Elbot from the project root.
 set -e
 
-if [ -d "$(dirname "$0")/../.venv" ]; then
-    source "$(dirname "$0")/../.venv/bin/activate"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Ensure the project is installed
+if [ ! -d "$ROOT_DIR/.venv" ]; then
+    "$SCRIPT_DIR/install.sh"
 fi
+
+source "$ROOT_DIR/.venv/bin/activate"
 
 python -m elbot.main "$@"
 

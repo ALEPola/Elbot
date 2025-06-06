@@ -13,8 +13,15 @@ echo "[1/5] Checking system packages..."
 
 # Install system packages if apt-get is available (Ubuntu/Debian)
 if command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get update
-    sudo apt-get install -y python3 python3-venv python3-pip ffmpeg
+    # Use sudo only if available and avoid interactive prompts
+    if sudo -n true 2>/dev/null; then
+        SUDO="sudo -n"
+    else
+        SUDO=""
+    fi
+    export DEBIAN_FRONTEND=noninteractive
+    $SUDO apt-get -y update
+    $SUDO apt-get -y install python3 python3-venv python3-pip ffmpeg
 fi
 
 echo "[2/5] Creating virtual environment..."
