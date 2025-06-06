@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import logging
 from pathlib import Path
 
 from flask import Flask, redirect, render_template_string, request, url_for
@@ -13,6 +14,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 LOG_FILE = ROOT_DIR / "elbot.log"
 UPDATE_SCRIPT = ROOT_DIR / "scripts" / "update.sh"
 SERVICE_NAME = os.environ.get("ELBOT_SERVICE", "elbot.service")
+
+logger = logging.getLogger("elbot.portal")
 
 app = Flask(__name__)
 
@@ -94,13 +97,25 @@ def branch():
 
 @app.route("/update", methods=["POST"])
 def update():
-    subprocess.run(["bash", str(UPDATE_SCRIPT)], cwd=ROOT_DIR)
+    try:
+        subprocess.run(
+            ["bash", str(UPDATE_SCRIPT)], cwd=ROOT_DIR, check=True
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error("update.sh failed: %s", e)
     return redirect(url_for("index"))
 
 
 @app.route("/restart", methods=["POST"])
 def restart():
-    subprocess.run(["systemctl", "restart", SERVICE_NAME])
+    try:
+        subprocess.run([
+            "systemctl",
+            "restart",
+            SERVICE_NAME,
+        ], check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error("Failed to restart %s: %s", SERVICE_NAME, e)
     return redirect(url_for("index"))
 
 
