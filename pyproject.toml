@@ -19,6 +19,7 @@ dependencies = [
     "psutil",
     "yt-dlp",
     "Flask",
+    "pywin32; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ test = [
 [project.scripts]
 elbot = "elbot.main:main"
 elbot-portal = "elbot.portal:main"
+elbot-install-service = "elbot.service_install:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
