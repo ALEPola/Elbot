@@ -68,4 +68,14 @@ To pull the latest version of Elbot from GitHub:
 ./scripts/update.sh
 ```
 
+## Sound assets
+
+The optional `/moan` slash command in the music cog expects the file
+`sounds/56753004_girl-moaning_by_a-sfx_preview.mp3` to exist relative to the
+project root. This MP3 is not bundled with the repository. To enable the command,
+create a `sounds/` directory at the root of the project and place the downloaded
+file there (for example from [Freesound](https://freesound.org/people/a-sfx/sounds/56753004/)).
+If the file is missing, the command will respond that the sound effect could not
+be found.
+
 
