@@ -28,7 +28,7 @@ pip install -U pip
 pip install -e .
 ```
 
-Linux users can run `./scripts/install.sh` to install system packages and the Python dependencies automatically.
+Linux users can run `./scripts/install.sh` to be guided through installing system packages and Python dependencies. Pass `--yes` to skip the prompts and install automatically.
 
 ### 3. Configure environment variables
 
