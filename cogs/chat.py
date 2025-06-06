@@ -64,11 +64,14 @@ class ChatCog(commands.Cog):
             return
 
         try:
-            # Offload the blocking OpenAI call
-            resp = await asyncio.to_thread(
-                lambda: openai_client.responses.create(model=OPENAI_MODEL, input=text)
+            # Offload the blocking OpenAI chat completion call
+            completion = await asyncio.to_thread(
+                lambda: openai_client.chat.completions.create(
+                    model=OPENAI_MODEL,
+                    messages=[{"role": "user", "content": text}],
+                )
             )
-            content = resp.output_text
+            content = completion.choices[0].message.content
         except Exception:
             logger.error("OpenAI error while generating response.", exc_info=True)
             content = "⚠️ Sorry, something went wrong with the chat bot."
