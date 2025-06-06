@@ -79,6 +79,13 @@ elbot-portal
 The portal lets you view the bot logs, switch Git branches, trigger
 `update.sh` and restart the system service running the bot.
 
+### ELBOT_SERVICE
+
+The portal restarts the bot via `systemctl`. It targets the service
+specified by the `ELBOT_SERVICE` environment variable, which defaults to
+`elbot.service`. Set this variable before launching the portal if your
+systemd unit has a different name.
+
 ## Sound assets
 
 The optional `/moan` slash command in the music cog expects the file
