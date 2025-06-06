@@ -13,6 +13,7 @@ if env_path.exists():
 class Config:
     # Your Discord bot token must live in an environment variable called DISCORD_BOT_TOKEN
     DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
     # The command prefix (e.g. “!”, or “/” if you prefer slash commands only)
     PREFIX = os.getenv("COMMAND_PREFIX", "!")
@@ -25,6 +26,8 @@ class Config:
         missing = []
         if not cls.DISCORD_TOKEN:
             missing.append("DISCORD_BOT_TOKEN")
+        if not cls.OPENAI_API_KEY:
+            missing.append("OPENAI_API_KEY")
         if missing:
             raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 

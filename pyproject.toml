@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elbot"
+version = "0.1.0"
+description = "A modular Discord bot using Nextcord and OpenAI."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "Elbot Team"}]
+license = {text = "MIT"}
+dependencies = [
+    "nextcord",
+    "PyNaCl",
+    "openai",
+    "textblob",
+    "python-dotenv",
+    "psutil",
+    "yt-dlp",
+]
+
+[project.scripts]
+elbot = "elbot.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["elbot*", "cogs*"]
+
