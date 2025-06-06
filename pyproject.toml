@@ -20,6 +20,11 @@ dependencies = [
     "yt-dlp",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
 [project.scripts]
 elbot = "elbot.main:main"
 
