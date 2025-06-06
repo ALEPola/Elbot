@@ -58,4 +58,12 @@ You can also use the helper script:
 
 On Windows, you may need to install [FFmpeg](https://ffmpeg.org/) separately and ensure `ffmpeg.exe` is in your `PATH`.
 
+## Updating
+
+To pull the latest version of Elbot from GitHub:
+
+```bash
+./scripts/update.sh
+```
+
 
