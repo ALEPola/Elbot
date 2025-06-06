@@ -57,17 +57,22 @@ def branch():
         return redirect(url_for("branch"))
 
     current = (
-        subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT_DIR)
+        subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT_DIR
+        )
         .decode()
         .strip()
     )
     all_branches = (
-        subprocess.check_output([
-            "git",
-            "for-each-ref",
-            "--format=%(refname:short)",
-            "refs/heads",
-        ], cwd=ROOT_DIR)
+        subprocess.check_output(
+            [
+                "git",
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/heads",
+            ],
+            cwd=ROOT_DIR,
+        )
         .decode()
         .splitlines()
     )
@@ -105,4 +110,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
