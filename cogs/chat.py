@@ -3,7 +3,6 @@
 import time
 import asyncio
 import logging
-import os
 
 import nextcord
 from nextcord.ext import commands
@@ -17,7 +16,7 @@ logger = logging.getLogger("elbot.chat")
 
 # Initialize OpenAI client from Config
 openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
+OPENAI_MODEL = Config.OPENAI_MODEL
 RATE_LIMIT = 5  # seconds between requests per user
 
 class ChatCog(commands.Cog):
