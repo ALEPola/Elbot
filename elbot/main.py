@@ -2,6 +2,7 @@
 
 import sys
 import logging
+import nextcord
 from nextcord.ext import commands
 from .config import Config
 from .utils import load_all_cogs
@@ -27,7 +28,7 @@ def main():
     Config.validate()
 
     # 2) Create bot with intents
-    intents = commands.Intents.default()
+    intents = nextcord.Intents.default()
     intents.message_content = True
     bot = commands.Bot(command_prefix=Config.PREFIX, intents=intents)
 
