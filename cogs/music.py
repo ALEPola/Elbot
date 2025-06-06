@@ -919,5 +919,3 @@ def setup(bot: commands.Bot):
             await interaction.response.send_message("😏", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Error playing sound: {str(e)}", ephemeral=True)
-import os
-import time 
