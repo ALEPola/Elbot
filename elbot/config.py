@@ -1,6 +1,7 @@
 # elbot/config.py
 
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -9,6 +10,9 @@ BASE_DIR = Path(__file__).parent.parent
 env_path = BASE_DIR / ".env"
 if env_path.exists():
     load_dotenv(env_path)
+
+logger = logging.getLogger("elbot.config")
+_gid_str = os.getenv("GUILD_ID")
 
 
 class Config:
@@ -21,7 +25,14 @@ class Config:
     PREFIX = os.getenv("COMMAND_PREFIX", "!")
 
     # (Optional) If you want to store a guild ID for guild-specific logic
-    GUILD_ID = int(os.getenv("GUILD_ID", "0")) if os.getenv("GUILD_ID") else None
+    if _gid_str:
+        try:
+            GUILD_ID = int(_gid_str)
+        except ValueError:
+            logger.warning("Invalid GUILD_ID '%s' - expected integer", _gid_str)
+            GUILD_ID = None
+    else:
+        GUILD_ID = None
 
     @classmethod
     def validate(cls):
