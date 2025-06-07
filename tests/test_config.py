@@ -1,5 +1,6 @@
 import importlib
 
+import logging
 import pytest
 
 
@@ -20,3 +21,18 @@ def test_config_validate_pass(monkeypatch):
 
     importlib.reload(config)
     config.Config.validate()
+
+
+def test_invalid_guild_id_logs_warning(monkeypatch, caplog):
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("GUILD_ID", "abc")
+
+    import elbot.config as config
+
+    with caplog.at_level(logging.WARNING):
+        importlib.reload(config)
+
+    assert config.Config.GUILD_ID is None
+    messages = [r.message for r in caplog.records]
+    assert any("Invalid GUILD_ID" in m for m in messages)
