@@ -26,7 +26,7 @@ logger = logging.getLogger("elbot.music")
 QUEUE_FILE = "queue.json"
 
 
-def extract_info(query: str, ydl_opts: dict, cookie_file: str):
+def extract_info(query: str, ydl_opts: dict):
     """
     Extract video information from a query using youtube_dl.
     Returns a list of track dicts or (None, error_message).
@@ -283,9 +283,7 @@ class Music(commands.Cog):
 
         # Throttle YouTube-DL extraction
         async with self.download_semaphore:
-            result, error = await asyncio.to_thread(
-                extract_info, search, ydl_opts, os.getenv("YOUTUBE_COOKIES_PATH", None)
-            )
+            result, error = await asyncio.to_thread(extract_info, search, ydl_opts)
 
         if result is None:
             await interaction.followup.send(f"❌ {error}", ephemeral=True)
