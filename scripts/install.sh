@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 ## Guided setup script for the Elbot project.
 ## Creates a Python virtual environment, installs dependencies and optionally
-## registers a systemd service.
+## registers a service.
 
 usage() {
     cat <<EOF
@@ -111,32 +111,10 @@ if prompt_yes_no "Install Python packages with pip?" Y; then
     $PYTHON -m textblob.download_corpora
 fi
 
-echo "\n[4/5] Installing systemd service..."
+echo "\n[4/5] Installing service..."
 
-if command -v systemctl >/dev/null 2>&1; then
-    if prompt_yes_no "Install and enable elbot.service using systemd?" Y; then
-        SERVICE_FILE="/etc/systemd/system/elbot.service"
-        sudo tee "$SERVICE_FILE" >/dev/null <<EOF
-[Unit]
-Description=Elbot Discord Bot
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$ROOT_DIR
-ExecStart=$ROOT_DIR/.venv/bin/python -m elbot.main
-EnvironmentFile=$ROOT_DIR/.env
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        sudo systemctl daemon-reload
-        sudo systemctl enable elbot.service
-        echo "Service installed as elbot.service"
-    fi
-else
-    echo "systemctl not found; skipping service installation"
+if prompt_yes_no "Install and enable Elbot as a service?" Y; then
+    "$PYTHON" -m elbot.service_install
 fi
 
 echo "\n[5/5] Installation complete."

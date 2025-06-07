@@ -30,6 +30,19 @@ pip install -e .
 pip install -r requirements.txt
 ```
 
+After the dependencies are installed, run:
+
+```bash
+elbot-install-service
+```
+
+This command installs and enables a system service so Elbot runs automatically.
+To remove the service later run:
+
+```bash
+elbot-install-service --remove
+```
+
 Linux users can run `./scripts/install.sh` to be guided through installing system packages and Python dependencies. Pass `--yes` to skip the prompts and install automatically.
 
 ### 3. Configure environment variables
@@ -64,6 +77,7 @@ You can also use the helper script:
 ## Windows notes
 
 On Windows, you may need to install [FFmpeg](https://ffmpeg.org/) separately and ensure `ffmpeg.exe` is in your `PATH`.
+Running `elbot-install-service` will create and start a Windows service so the bot runs in the background.
 
 ## Updating
 
