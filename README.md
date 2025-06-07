@@ -116,3 +116,17 @@ If the file is missing, the command will respond that the sound effect could not
 be found.
 
 
+
+## Testing
+
+Install Elbot in editable mode so the local package is available and test dependencies are installed:
+
+```bash
+pip install -e .[test]
+```
+
+Then run the test suite:
+
+```bash
+pytest
+```
