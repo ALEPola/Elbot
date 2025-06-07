@@ -36,7 +36,7 @@ After the dependencies are installed, run:
 elbot-install-service
 ```
 
-This command installs and enables a system service so Elbot runs automatically.
+This command installs, enables and starts a system service so Elbot runs automatically.
 To remove the service later run:
 
 ```bash
