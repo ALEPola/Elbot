@@ -113,7 +113,7 @@ fi
 
 echo "\n[4/5] Installing service..."
 
-if prompt_yes_no "Install and enable Elbot as a service?" Y; then
+if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
     "$PYTHON" -m elbot.service_install
 fi
 

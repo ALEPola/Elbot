@@ -26,7 +26,8 @@ WantedBy=multi-user.target
         f.write(unit)
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "enable", "elbot.service"], check=True)
-    print("Elbot systemd service installed and enabled.")
+    subprocess.run(["systemctl", "start", "elbot.service"], check=True)
+    print("Elbot systemd service installed, enabled and started.")
 
 
 def install_windows_service(root_dir: Path) -> None:
@@ -44,7 +45,8 @@ def install_windows_service(root_dir: Path) -> None:
         ],
         check=True,
     )
-    print("Elbot Windows service installed and set to start automatically.")
+    subprocess.run(["sc", "start", "Elbot"], check=True)
+    print("Elbot Windows service installed, set to start automatically, and started.")
 
 
 def uninstall_systemd_service() -> None:
