@@ -80,7 +80,7 @@ def branch():
         .splitlines()
     )
     options = "".join(
-        f'<option value="{b}" {"selected" if b==current else ""}>{b}</option>'
+        f'<option value="{b}" {"selected" if b == current else ""}>{b}</option>'
         for b in all_branches
     )
     return render_template_string(
