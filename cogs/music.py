@@ -82,13 +82,26 @@ def extract_info(query: str, ydl_opts: dict, cookie_file: str):
     return None, "Could not find the video."
 
 
-def update_queue(queue: asyncio.Queue, new_items: list):
+def update_queue(queue: asyncio.Queue, new_items: list) -> asyncio.Queue:
     """
-    Replace all items in `queue` with `new_items`.
+    Recreate a new ``asyncio.Queue`` populated with ``new_items``.
+
+    Parameters
+    ----------
+    queue: asyncio.Queue
+        The existing queue to replace.
+    new_items: list
+        Items that should populate the new queue.
+
+    Returns
+    -------
+    asyncio.Queue
+        The newly created queue containing ``new_items``.
     """
-    queue._queue.clear()
+    new_queue = asyncio.Queue()
     for item in new_items:
-        queue._queue.append(item)
+        new_queue.put_nowait(item)
+    return new_queue
 
 
 class MusicControls(nextcord.ui.View):
@@ -485,7 +498,7 @@ class Music(commands.Cog):
             return
 
         removed = queue_list.pop(index - 1)
-        update_queue(self.queue[guild_id], queue_list)
+        self.queue[guild_id] = update_queue(self.queue[guild_id], queue_list)
         await interaction.response.send_message(
             f"Removed **{removed['title']}** from the queue.", ephemeral=True
         )
@@ -520,7 +533,7 @@ class Music(commands.Cog):
 
         track = queue_list.pop(from_index - 1)
         queue_list.insert(to_index - 1, track)
-        update_queue(self.queue[guild_id], queue_list)
+        self.queue[guild_id] = update_queue(self.queue[guild_id], queue_list)
         await interaction.response.send_message(
             f"Moved **{track['title']}** to position {to_index}.", ephemeral=True
         )
@@ -826,7 +839,8 @@ class Music(commands.Cog):
         try:
             with open(f"{name}.json", "r") as f:
                 playlist = json.load(f)
-            update_queue(self.queue.setdefault(guild_id, asyncio.Queue()), playlist)
+            queue = self.queue.setdefault(guild_id, asyncio.Queue())
+            self.queue[guild_id] = update_queue(queue, playlist)
             await ctx.send(f"📂 Playlist '{name}' has been loaded into the queue.")
         except FileNotFoundError:
             await ctx.send(f"❌ Playlist '{name}' not found.")
