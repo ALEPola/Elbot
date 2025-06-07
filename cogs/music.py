@@ -1043,7 +1043,7 @@ def setup(bot: commands.Bot):
     bot.add_cog(Music(bot))
 
     # Optional: “moan” slash command for a sound effect
-    @nextcord.slash_command(name="moan", description="Play a moan sound effect")
+    @bot.slash_command(name="moan", description="Play a moan sound effect")
     @cooldown(1, 5, BucketType.user)
     async def moan(interaction: nextcord.Interaction):
         """
@@ -1091,3 +1091,5 @@ def setup(bot: commands.Bot):
             await interaction.response.send_message(
                 f"Error playing sound: {str(e)}", ephemeral=True
             )
+
+    bot.add_application_command(moan)
