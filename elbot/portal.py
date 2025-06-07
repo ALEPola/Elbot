@@ -98,9 +98,7 @@ def branch():
 @app.route("/update", methods=["POST"])
 def update():
     try:
-        subprocess.run(
-            ["bash", str(UPDATE_SCRIPT)], cwd=ROOT_DIR, check=True
-        )
+        subprocess.run(["bash", str(UPDATE_SCRIPT)], cwd=ROOT_DIR, check=True)
     except subprocess.CalledProcessError as e:
         logger.error("update.sh failed: %s", e)
     return redirect(url_for("index"))
@@ -109,11 +107,14 @@ def update():
 @app.route("/restart", methods=["POST"])
 def restart():
     try:
-        subprocess.run([
-            "systemctl",
-            "restart",
-            SERVICE_NAME,
-        ], check=True)
+        subprocess.run(
+            [
+                "systemctl",
+                "restart",
+                SERVICE_NAME,
+            ],
+            check=True,
+        )
     except subprocess.CalledProcessError as e:
         logger.error("Failed to restart %s: %s", SERVICE_NAME, e)
     return redirect(url_for("index"))
