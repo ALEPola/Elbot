@@ -6,3 +6,6 @@ python-dotenv
 psutil
 yt-dlp
 Flask
+icalendar
+aiohttp
+cachetools
