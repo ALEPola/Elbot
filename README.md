@@ -52,7 +52,8 @@ Copy `.env.example` to `.env` and fill in the required variables:
 * `DISCORD_BOT_TOKEN` &ndash; your Discord bot token
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
 
-Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH` and `OPENAI_MODEL`.
+Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
+`OPENAI_MODEL`, `ICS_URL` and `F1_CHANNEL_ID`.
 
 ```bash
 cp .env.example .env
