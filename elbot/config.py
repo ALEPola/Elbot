@@ -16,10 +16,18 @@ _gid_str = os.getenv("GUILD_ID")
 
 
 class Config:
+    """Central configuration loaded from environment variables.
+
+    `ICS_URL` defaults to an empty string and `F1_CHANNEL_ID` defaults to
+    ``0`` when the corresponding variables are not set.
+    """
+
     # Your Discord bot token must live in an environment variable called DISCORD_BOT_TOKEN
     DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    ICS_URL = os.getenv("ICS_URL", "")
+    F1_CHANNEL_ID = int(os.getenv("F1_CHANNEL_ID", 0) or 0)
 
     # The command prefix (e.g. “!”, or “/” if you prefer slash commands only)
     PREFIX = os.getenv("COMMAND_PREFIX", "!")

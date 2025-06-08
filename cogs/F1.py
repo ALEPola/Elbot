@@ -16,9 +16,10 @@ from elbot.config import Config
 logger = logging.getLogger("elbot.f1")
 
 # Configuration loaded from environment via Config
-ICS_URL = Config.ICS_URL               # URL to the ICS calendar feed
-CHANNEL_ID = Config.F1_CHANNEL_ID      # Channel ID for weekly updates (int or None)
-GUILD_ID = Config.GUILD_ID             # Optional guild restriction
+ICS_URL = Config.ICS_URL  # URL to the ICS calendar feed
+# Convert "0" to None when F1_CHANNEL_ID isn't configured
+CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
+GUILD_ID = Config.GUILD_ID  # Optional guild restriction
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE", "UTC"))
 
 # Path to subscriber persistence file (in project root)
@@ -74,10 +75,7 @@ def format_countdown(dt):
 
 def format_event_details(events):
     """Return a list of (name, human-readable datetime) tuples."""
-    return [
-        (name, dt.strftime("%A, %b %d %I:%M %p %Z"))
-        for dt, name in events
-    ]
+    return [(name, dt.strftime("%A, %b %d %I:%M %p %Z")) for dt, name in events]
 
 
 class F1Cog(commands.Cog):
@@ -128,16 +126,18 @@ class F1Cog(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def reminder_loop(self):
-        """Check every minute and DM subscribers if a session starts within 10 minutes."""
+        """Check every minute and DM subscribers if a session starts within 1 hour."""
         now = datetime.now(LOCAL_TZ)
         for dt, name in await fetch_events(limit=5):
             delta = dt - now
-            if timedelta(0) < delta <= timedelta(minutes=10):
+            if timedelta(0) < delta <= timedelta(hours=1):
                 if dt not in self.sent_reminders:
                     for user_id in list(self.subscribers):
                         try:
                             user = await self.bot.fetch_user(user_id)
-                            await user.send(f"⏰ Reminder: **{name}** starts in {format_countdown(dt)}")
+                            await user.send(
+                                f"⏰ Reminder: **{name}** starts in {format_countdown(dt)}"
+                            )
                         except Exception as e:
                             logger.error(f"F1Cog reminder failed for {user_id}: {e}")
                     self.sent_reminders.add(dt)
@@ -156,7 +156,9 @@ class F1Cog(commands.Cog):
     @nextcord.slash_command(name="f1_schedule", description="Show upcoming F1 sessions")
     async def f1_schedule(self, interaction: nextcord.Interaction, count: int = 5):
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            return await interaction.response.send_message("Not available in this server.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Not available in this server.", ephemeral=True
+            )
         await interaction.response.defer()
         events = await fetch_events(limit=count)
         embed = nextcord.Embed(title=f"Next {len(events)} F1 Sessions", color=0xE10600)
@@ -164,28 +166,40 @@ class F1Cog(commands.Cog):
             embed.add_field(name=name, value=when, inline=False)
         await interaction.followup.send(embed=embed)
 
-    @nextcord.slash_command(name="f1_countdown", description="Countdown to next F1 session")
+    @nextcord.slash_command(
+        name="f1_countdown", description="Countdown to next F1 session"
+    )
     async def f1_countdown(self, interaction: nextcord.Interaction):
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            return await interaction.response.send_message("Not available in this server.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Not available in this server.", ephemeral=True
+            )
         await interaction.response.defer()
         events = await fetch_events(limit=1)
         if not events:
             return await interaction.followup.send("⚠️ No upcoming Grand Prix found.")
         dt, name = events[0]
-        await interaction.followup.send(f"⏱ **{name}** starts in {format_countdown(dt)}")
+        await interaction.followup.send(
+            f"⏱ **{name}** starts in {format_countdown(dt)}"
+        )
 
-    @nextcord.slash_command(name="f1_subscribe", description="DM reminders 10 min before each session")
+    @nextcord.slash_command(
+        name="f1_subscribe", description="DM reminders 10 min before each session"
+    )
     async def f1_subscribe(self, interaction: nextcord.Interaction):
         self.subscribers.add(interaction.user.id)
         save_subscribers(self.subscribers)
-        await interaction.response.send_message("✅ You will receive session reminders.", ephemeral=True)
+        await interaction.response.send_message(
+            "✅ You will receive session reminders.", ephemeral=True
+        )
 
     @nextcord.slash_command(name="f1_unsubscribe", description="Stop session reminders")
     async def f1_unsubscribe(self, interaction: nextcord.Interaction):
         self.subscribers.discard(interaction.user.id)
         save_subscribers(self.subscribers)
-        await interaction.response.send_message("🛑 You have been unsubscribed.", ephemeral=True)
+        await interaction.response.send_message(
+            "🛑 You have been unsubscribed.", ephemeral=True
+        )
 
 
 def setup(bot: commands.Bot):
