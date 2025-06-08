@@ -78,7 +78,6 @@ def test_cog_no_tasks_when_ics_missing(monkeypatch):
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
     monkeypatch.setenv("OPENAI_API_KEY", "key")
     importlib.reload(config)
-    config.Config.BASE_DIR = config.BASE_DIR
     config.Config.ICS_URL = ""
     config.Config.F1_CHANNEL_ID = None
 
