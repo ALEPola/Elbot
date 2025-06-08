@@ -70,3 +70,36 @@ def test_reminder_triggers(monkeypatch):
 
     assert dummy.sent
     assert "Test GP" in dummy.sent[0]
+
+
+def test_cog_no_tasks_when_ics_missing(monkeypatch):
+    """Ensure the cog loads and skips scheduled tasks when ICS_URL is empty."""
+    # Configure with empty ICS_URL
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    importlib.reload(config)
+    config.Config.BASE_DIR = config.BASE_DIR
+    config.Config.ICS_URL = ""
+    config.Config.F1_CHANNEL_ID = None
+
+    from importlib import reload
+    from cogs import F1 as f1
+    f1 = reload(f1)
+
+    started = []
+
+    def record_start(self, *a, **k):
+        started.append(self)
+
+    # Patch out loop start and bot task creation
+    monkeypatch.setattr(asyncio, "create_task", lambda *a, **k: None)
+    monkeypatch.setattr(tasks.Loop, "start", record_start)
+    intents = nextcord.Intents.none()
+    bot = commands.Bot(command_prefix="!", intents=intents)
+    monkeypatch.setattr(bot.loop, "create_task", lambda *a, **k: None)
+
+    monkeypatch.setattr(f1, "fetch_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(f1.F1Cog, "get_schedule", lambda self: None)
+    cog = f1.F1Cog(bot)
+
+    assert not started
