@@ -203,7 +203,9 @@ class F1Cog(commands.Cog):
 
 
 def setup(bot: commands.Bot):
-    bot.add_cog(F1Cog(bot))
+    """Add the F1 cog and preload the schedule."""
+    cog = F1Cog(bot)
+    bot.add_cog(cog)
     logger.info("✅ Loaded F1Cog")
-    bot.loop.create_task(F1Cog(bot).get_schedule())  # Preload schedule on startup
+    bot.loop.create_task(cog.get_schedule())  # Preload schedule on startup
     logger.info("F1 schedule preloaded.")
