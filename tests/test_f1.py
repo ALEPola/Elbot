@@ -2,6 +2,7 @@ import asyncio
 import importlib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
+import aiohttp
 
 import nextcord
 from nextcord.ext import commands, tasks
@@ -70,3 +71,16 @@ def test_reminder_triggers(monkeypatch):
 
     assert dummy.sent
     assert "Test GP" in dummy.sent[0]
+
+
+def test_fetch_events_client_error(monkeypatch):
+    _setup_config(monkeypatch)
+    from cogs import F1 as f1
+
+    async def raise_error(*a, **k):
+        raise aiohttp.ClientError("boom")
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", raise_error)
+
+    events = asyncio.run(f1.fetch_events(limit=1))
+    assert events == []

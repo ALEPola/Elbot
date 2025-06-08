@@ -41,10 +41,14 @@ def save_subscribers(subscribers):
 
 async def fetch_events(limit=10):
     """Fetch and parse the next up to `limit` F1 sessions from the ICS feed."""
-    async with aiohttp.ClientSession() as sess:
-        resp = await sess.get(ICS_URL)
-        resp.raise_for_status()
-        cal = Calendar.from_ical(await resp.text())
+    try:
+        async with aiohttp.ClientSession() as sess:
+            resp = await sess.get(ICS_URL)
+            resp.raise_for_status()
+            cal = Calendar.from_ical(await resp.text())
+    except aiohttp.ClientError as e:
+        logger.error("Failed to fetch F1 schedule: %s", e)
+        return []
 
     now = datetime.now(LOCAL_TZ)
     events = []
