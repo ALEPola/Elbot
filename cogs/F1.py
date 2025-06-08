@@ -41,10 +41,18 @@ def save_subscribers(subscribers):
 
 async def fetch_events(limit=10):
     """Fetch and parse the next up to `limit` F1 sessions from the ICS feed."""
-    async with aiohttp.ClientSession() as sess:
-        resp = await sess.get(ICS_URL)
-        resp.raise_for_status()
-        cal = Calendar.from_ical(await resp.text())
+    if not ICS_URL:
+        logger.warning("ICS_URL is not configured; returning empty schedule")
+        return []
+
+    try:
+        async with aiohttp.ClientSession() as sess:
+            resp = await sess.get(ICS_URL)
+            resp.raise_for_status()
+            cal = Calendar.from_ical(await resp.text())
+    except Exception as e:
+        logger.warning("Failed to fetch F1 schedule: %s", e)
+        return []
 
     now = datetime.now(LOCAL_TZ)
     events = []
@@ -86,8 +94,11 @@ class F1Cog(commands.Cog):
         self.subscribers = load_subscribers()
         self.schedule_cache = TTLCache(maxsize=1, ttl=3600)
         self.sent_reminders = set()
-        self.weekly_update.start()
-        self.reminder_loop.start()
+        if ICS_URL:
+            self.weekly_update.start()
+            self.reminder_loop.start()
+        else:
+            logger.info("ICS_URL empty - scheduled tasks not started")
 
     def cog_unload(self):
         self.weekly_update.cancel()
