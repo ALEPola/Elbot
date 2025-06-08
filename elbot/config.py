@@ -23,6 +23,7 @@ class Config:
     """
 
     # Your Discord bot token must live in an environment variable called DISCORD_BOT_TOKEN
+    BASE_DIR = BASE_DIR
     DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
