@@ -18,6 +18,8 @@ logger = logging.getLogger("elbot.chat")
 openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
 OPENAI_MODEL = Config.OPENAI_MODEL
 RATE_LIMIT = 5  # seconds between requests per user
+# Maximum characters allowed in a response
+MAX_RESPONSE_LENGTH = 2000
 
 
 class ChatCog(commands.Cog):
@@ -72,6 +74,8 @@ class ChatCog(commands.Cog):
                 )
             )
             content = completion.choices[0].message.content
+            if len(content) > MAX_RESPONSE_LENGTH:
+                content = content[: MAX_RESPONSE_LENGTH - 3] + "..."
         except Exception:
             logger.error("OpenAI error while generating response.", exc_info=True)
             content = "⚠️ Sorry, something went wrong with the chat bot."
