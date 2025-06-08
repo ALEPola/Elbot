@@ -32,13 +32,14 @@ def load_subscribers():
     except (FileNotFoundError, json.JSONDecodeError):
         return set()
 
+
 def save_subscribers(subscribers):
     with open(SUBSCRIBERS_FILE, "w") as f:
         json.dump(list(subscribers), f)
 
 
 async def fetch_events(limit=10):
-    """Fetch and parse the next up to `limit` Grand Prix events from the ICS feed."""
+    """Fetch and parse the next up to `limit` F1 sessions from the ICS feed."""
     async with aiohttp.ClientSession() as sess:
         resp = await sess.get(ICS_URL)
         resp.raise_for_status()
@@ -49,16 +50,14 @@ async def fetch_events(limit=10):
     for comp in cal.walk():
         if comp.name != "VEVENT":
             continue
-        summary = str(comp.get("SUMMARY", "")).lower()
-        if "grand prix" not in summary:
-            continue
+        summary = str(comp.get("SUMMARY", ""))
         dt = comp.get("DTSTART").dt
         if not isinstance(dt, datetime):
             dt = datetime(dt.year, dt.month, dt.day, tzinfo=LOCAL_TZ)
         else:
             dt = dt.astimezone(LOCAL_TZ)
         if dt > now:
-            events.append((dt, comp.get("SUMMARY")))
+            events.append((dt, summary))
 
     events.sort(key=lambda x: x[0])
     return events[:limit]
@@ -88,6 +87,7 @@ class F1Cog(commands.Cog):
         self.bot = bot
         self.subscribers = load_subscribers()
         self.schedule_cache = TTLCache(maxsize=1, ttl=3600)
+        self.sent_reminders = set()
         self.weekly_update.start()
         self.reminder_loop.start()
 
@@ -126,19 +126,23 @@ class F1Cog(commands.Cog):
     async def before_weekly(self):
         await self.bot.wait_until_ready()
 
-    @tasks.loop(minutes=30)
+    @tasks.loop(minutes=1)
     async def reminder_loop(self):
-        """Every 30 minutes, DM subscribers if a race starts within 1 hour."""
+        """Check every minute and DM subscribers if a session starts within 10 minutes."""
         now = datetime.now(LOCAL_TZ)
         for dt, name in await fetch_events(limit=5):
             delta = dt - now
-            if timedelta(0) < delta <= timedelta(hours=1):
-                for user_id in list(self.subscribers):
-                    try:
-                        user = await self.bot.fetch_user(user_id)
-                        await user.send(f"⏰ Reminder: **{name}** starts in {format_countdown(dt)}")
-                    except Exception as e:
-                        logger.error(f"F1Cog reminder failed for {user_id}: {e}")
+            if timedelta(0) < delta <= timedelta(minutes=10):
+                if dt not in self.sent_reminders:
+                    for user_id in list(self.subscribers):
+                        try:
+                            user = await self.bot.fetch_user(user_id)
+                            await user.send(f"⏰ Reminder: **{name}** starts in {format_countdown(dt)}")
+                        except Exception as e:
+                            logger.error(f"F1Cog reminder failed for {user_id}: {e}")
+                    self.sent_reminders.add(dt)
+            elif delta <= timedelta(0) and dt in self.sent_reminders:
+                self.sent_reminders.discard(dt)
 
     @reminder_loop.before_loop
     async def before_reminder(self):
@@ -149,18 +153,18 @@ class F1Cog(commands.Cog):
         """Remove subscriber DMs when bot leaves a guild."""
         # no-op: subscribers are by user DM, not guild
 
-    @nextcord.slash_command(name="f1_schedule", description="Show upcoming F1 races")
+    @nextcord.slash_command(name="f1_schedule", description="Show upcoming F1 sessions")
     async def f1_schedule(self, interaction: nextcord.Interaction, count: int = 5):
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             return await interaction.response.send_message("Not available in this server.", ephemeral=True)
         await interaction.response.defer()
         events = await fetch_events(limit=count)
-        embed = nextcord.Embed(title=f"Next {len(events)} Grands Prix", color=0xE10600)
+        embed = nextcord.Embed(title=f"Next {len(events)} F1 Sessions", color=0xE10600)
         for name, when in format_event_details(events):
             embed.add_field(name=name, value=when, inline=False)
         await interaction.followup.send(embed=embed)
 
-    @nextcord.slash_command(name="f1_countdown", description="Countdown to next F1 race")
+    @nextcord.slash_command(name="f1_countdown", description="Countdown to next F1 session")
     async def f1_countdown(self, interaction: nextcord.Interaction):
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             return await interaction.response.send_message("Not available in this server.", ephemeral=True)
@@ -171,20 +175,21 @@ class F1Cog(commands.Cog):
         dt, name = events[0]
         await interaction.followup.send(f"⏱ **{name}** starts in {format_countdown(dt)}")
 
-    @nextcord.slash_command(name="f1_subscribe", description="DM reminders 1 h before each race")
+    @nextcord.slash_command(name="f1_subscribe", description="DM reminders 10 min before each session")
     async def f1_subscribe(self, interaction: nextcord.Interaction):
         self.subscribers.add(interaction.user.id)
         save_subscribers(self.subscribers)
-        await interaction.response.send_message("✅ You will receive race reminders.", ephemeral=True)
+        await interaction.response.send_message("✅ You will receive session reminders.", ephemeral=True)
 
-    @nextcord.slash_command(name="f1_unsubscribe", description="Stop race reminders")
+    @nextcord.slash_command(name="f1_unsubscribe", description="Stop session reminders")
     async def f1_unsubscribe(self, interaction: nextcord.Interaction):
         self.subscribers.discard(interaction.user.id)
         save_subscribers(self.subscribers)
         await interaction.response.send_message("🛑 You have been unsubscribed.", ephemeral=True)
 
+
 def setup(bot: commands.Bot):
     bot.add_cog(F1Cog(bot))
     logger.info("✅ Loaded F1Cog")
     bot.loop.create_task(F1Cog(bot).get_schedule())  # Preload schedule on startup
-    logger.info("F1 schedule preloaded.")   
+    logger.info("F1 schedule preloaded.")
