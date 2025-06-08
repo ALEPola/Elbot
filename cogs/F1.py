@@ -88,6 +88,8 @@ class F1Cog(commands.Cog):
         self.bot = bot
         self.subscribers = load_subscribers()
         self.schedule_cache = TTLCache(maxsize=1, ttl=3600)
+        # Preload the race schedule on startup
+        self.bot.loop.create_task(self.get_schedule())
         self.weekly_update.start()
         self.reminder_loop.start()
 
@@ -184,7 +186,6 @@ class F1Cog(commands.Cog):
         await interaction.response.send_message("🛑 You have been unsubscribed.", ephemeral=True)
 
 def setup(bot: commands.Bot):
-    bot.add_cog(F1Cog(bot))
+    cog = F1Cog(bot)
+    bot.add_cog(cog)
     logger.info("✅ Loaded F1Cog")
-    bot.loop.create_task(F1Cog(bot).get_schedule())  # Preload schedule on startup
-    logger.info("F1 schedule preloaded.")   
