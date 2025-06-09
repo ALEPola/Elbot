@@ -3,6 +3,7 @@ import importlib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 import aiohttp
+import pytest
 
 import nextcord
 from nextcord.ext import commands, tasks
@@ -91,4 +92,14 @@ def test_fetch_events_client_error(monkeypatch):
     monkeypatch.setattr(aiohttp.ClientSession, "get", raise_error)
 
     events = asyncio.run(f1.fetch_events(limit=1))
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_events_empty_url(monkeypatch):
+    _setup_config(monkeypatch)
+    config.Config.ICS_URL = ""
+    from cogs import F1 as f1
+    importlib.reload(f1)
+    events = await f1.fetch_events()
     assert events == []
