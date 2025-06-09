@@ -59,3 +59,39 @@ def test_chat_response_truncated(monkeypatch):
     sent = interaction.followup.send.call_args.args[0]
     assert len(sent) <= chat_cog.MAX_RESPONSE_LENGTH
     assert sent.endswith("...")
+
+
+def test_chat_history(monkeypatch):
+    recorded = []
+
+    class DummyCompletion:
+        def __init__(self, content):
+            self.choices = [type("Choice", (), {"message": type("Msg", (), {"content": content})()})()]
+
+    class DummyOpenAI:
+        def __init__(self):
+            def create(self, model, messages):
+                recorded.append(messages)
+                return DummyCompletion("ok")
+
+            self.chat = type("Chat", (), {"completions": type("Completions", (), {"create": create})()})()
+
+    monkeypatch.setattr(chat_cog, "openai_client", DummyOpenAI())
+    monkeypatch.setattr(chat_cog, "RATE_LIMIT", 0)
+
+    async def fake_to_thread(func, *a, **k):
+        return func()
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+
+    intents = nextcord.Intents.none()
+    bot = commands.Bot(command_prefix="!", intents=intents)
+    cog = chat_cog.ChatCog(bot)
+    interaction = DummyInteraction()
+
+    asyncio.run(cog.chat(interaction, message="hi"))
+    asyncio.run(cog.chat(interaction, message="again"))
+
+    assert len(recorded) == 2
+    assert recorded[1][0]["content"] == "hi"
+    assert recorded[1][-1]["content"] == "again"
