@@ -106,6 +106,39 @@ async def test_fetch_events_empty_url(monkeypatch):
     assert events == []
 
 
+@pytest.mark.asyncio
+async def test_fetch_events_webcal(monkeypatch):
+    _setup_config(monkeypatch)
+    config.Config.ICS_URL = "webcal://example.com/f1.ics"
+    from cogs import F1 as f1
+    importlib.reload(f1)
+
+    sample_ics = """BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Test GP\nDTSTART:29991231T000000Z\nEND:VEVENT\nEND:VCALENDAR"""
+
+    async def dummy_get(url, *a, **k):
+        class Resp:
+            async def text(self):
+                return sample_ics
+
+            def raise_for_status(self):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                pass
+
+        dummy_get.called_url = url
+        return Resp()
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", dummy_get)
+
+    events = await f1.fetch_events(limit=1)
+    assert dummy_get.called_url == "https://example.com/f1.ics"
+    assert events and events[0][1] == "Test GP"
+
+
 def test_fetch_race_results_client_error(monkeypatch):
     _setup_config(monkeypatch)
     from cogs import F1 as f1
