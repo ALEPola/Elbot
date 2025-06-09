@@ -1,6 +1,22 @@
 # Elbot
 
-Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord/nextcord) and OpenAI. It includes chat, image generation and music playback features.
+Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord/nextcord) and OpenAI. It includes chat, image generation and music playback features. The project ships with a lightweight management portal and supports running as a system service on Linux and Windows.
+
+## Table of Contents
+
+1. [Features](#features)
+2. [Requirements](#requirements)
+3. [Installation](#installation)
+4. [Configuration](#configuration)
+5. [Running the bot](#running-the-bot)
+6. [Docker](#docker)
+7. [Windows notes](#windows-notes)
+8. [Updating](#updating)
+9. [Web Portal](#web-portal)
+10. [Architecture overview](#architecture-overview)
+11. [Command summary](#command-summary)
+12. [Sound assets](#sound-assets)
+13. [Testing](#testing)
 
 ## Features
 
@@ -55,9 +71,9 @@ elbot-install-service --remove
 
 Linux users can run `./scripts/install.sh` to be guided through installing system packages and Python dependencies. Pass `--yes` to skip the prompts and install automatically.
 
-### 3. Configure environment variables
+## Configuration
 
-Copy `.env.example` to `.env` and fill in the required variables:
+Create a `.env` file by copying the example and then fill in the required variables:
 
 * `DISCORD_BOT_TOKEN` &ndash; your Discord bot token
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
@@ -129,6 +145,30 @@ The portal restarts the bot via `systemctl`. It targets the service
 specified by the `ELBOT_SERVICE` environment variable, which defaults to
 `elbot.service`. Set this variable before launching the portal if your
 systemd unit has a different name.
+
+## Architecture overview
+
+The project is organised into a few key directories:
+
+- **`elbot/`** – core package with the main entry point, configuration helper,
+  service installation logic and the Flask management portal.
+- **`cogs/`** – individual modules implementing slash commands for chat,
+  image generation, music playback and Formula&nbsp;1 updates.
+- **`scripts/`** – helper shell scripts for installing dependencies,
+  running the bot and updating from Git.
+- **`tests/`** – pytest-based test suite.
+
+## Command summary
+
+Elbot exposes several slash commands once invited to your server:
+
+- `/chat` and `/chat_reset` – converse with the bot via OpenAI.
+- `/dalle` – generate an image from a text prompt.
+- Music queue commands: `/play`, `/skip`, `/pause`, `/resume`, `/queue` and
+  `/stop`.
+- Formula&nbsp;1 commands: `/f1_schedule`, `/f1_countdown`, `/f1_results`,
+  `/f1_subscribe` and `/f1_unsubscribe`.
+- Diagnostic commands: `/uptime` and `/ping`.
 
 ## Sound assets
 
