@@ -16,6 +16,7 @@ from elbot.config import Config
 logger = logging.getLogger("elbot.f1")
 
 # Configuration loaded from environment via Config
+# If ``ICS_URL`` is empty, event fetching will be skipped.
 ICS_URL = Config.ICS_URL  # URL to the ICS calendar feed
 # Convert "0" to None when F1_CHANNEL_ID isn't configured
 CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
@@ -40,7 +41,13 @@ def save_subscribers(subscribers):
 
 
 async def fetch_events(limit=10):
-    """Fetch and parse the next up to `limit` F1 sessions from the ICS feed."""
+    """Fetch and parse the next up to `limit` F1 sessions from the ICS feed.
+
+    Returns an empty list if ``ICS_URL`` is not configured.
+    """
+    if not ICS_URL:
+        logger.warning("ICS_URL not configured; skipping event fetch")
+        return []
     try:
         async with aiohttp.ClientSession() as sess:
             resp = await sess.get(ICS_URL)
