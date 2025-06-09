@@ -799,7 +799,7 @@ class Music(commands.Cog):
             await ctx.send("The queue is empty! Nothing to reorder.")
             return
 
-        queue_list = self.queue[guild_id]._queue
+        queue_list = list(self.queue[guild_id]._queue)
         if (
             old_index < 1
             or new_index < 1
@@ -811,6 +811,7 @@ class Music(commands.Cog):
 
         song = queue_list.pop(old_index - 1)
         queue_list.insert(new_index - 1, song)
+        self.queue[guild_id] = update_queue(self.queue[guild_id], queue_list)
         await ctx.send(f"🔄 Moved song to position {new_index}.")
 
     @commands.command(name="save_playlist")
