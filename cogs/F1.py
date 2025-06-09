@@ -120,8 +120,11 @@ class F1Cog(commands.Cog):
         self.subscribers = load_subscribers()
         self.schedule_cache = TTLCache(maxsize=1, ttl=3600)
         self.sent_reminders = set()
-        self.weekly_update.start()
-        self.reminder_loop.start()
+        if ICS_URL:
+            self.weekly_update.start()
+            self.reminder_loop.start()
+        else:
+            logger.warning("ICS_URL not configured; F1 reminders disabled")
 
     def cog_unload(self):
         self.weekly_update.cancel()
