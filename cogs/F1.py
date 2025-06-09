@@ -18,6 +18,9 @@ logger = logging.getLogger("elbot.f1")
 # Configuration loaded from environment via Config
 # If ``ICS_URL`` is empty, event fetching will be skipped.
 ICS_URL = Config.ICS_URL  # URL to the ICS calendar feed
+# Allow ``webcal://`` style URLs by converting them to HTTPS
+if ICS_URL.startswith("webcal://"):
+    ICS_URL = "https://" + ICS_URL[len("webcal://") :]
 # Convert "0" to None when F1_CHANNEL_ID isn't configured
 CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
 GUILD_ID = Config.GUILD_ID  # Optional guild restriction

@@ -64,6 +64,8 @@ Copy `.env.example` to `.env` and fill in the required variables:
 
 Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
 `OPENAI_MODEL`, `ICS_URL` and `F1_CHANNEL_ID`.
+`ICS_URL` may use a `webcal://` address. It will be converted to `https://` automatically.
+See `.env.example` for an example Formula&nbsp;1 feed.
 
 ```bash
 cp .env.example .env
