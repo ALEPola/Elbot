@@ -2,6 +2,16 @@
 
 Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord/nextcord) and OpenAI. It includes chat, image generation and music playback features.
 
+## Features
+
+- **Chat** – interact with OpenAI via the `/chat` command. Recent messages are kept briefly to provide context.
+- **DALL·E** – generate images using the `/dalle` command.
+- **F1** – receive Formula&nbsp;1 schedules, countdowns and race results. Set `ICS_URL` for the calendar feed and `LOCAL_TIMEZONE` for your local zone.
+- **Music** – play audio from YouTube links. Requires `ffmpeg` installed.
+- **Diagnostic** – utility commands for bot admins.
+
+See `.env.example` for all configuration variables, including `ELBOT_SERVICE` and `PORT` which are used by the management portal.
+
 ## Requirements
 
 - Python 3.9+
@@ -75,6 +85,17 @@ You can also use the helper script:
 ./scripts/run.sh
 ```
 
+## Docker
+
+Build the container and run the bot and portal with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+The portal exposes port `8000` by default and can be changed with the `PORT`
+environment variable.
+
 ## Windows notes
 
 On Windows, you may need to install [FFmpeg](https://ffmpeg.org/) separately and ensure `ffmpeg.exe` is in your `PATH`.
@@ -97,7 +118,8 @@ elbot-portal
 ```
 
 The portal lets you view the bot logs, switch Git branches, trigger
-`update.sh` and restart the system service running the bot.
+`update.sh` and restart the system service running the bot. It listens on the
+port specified by the `PORT` environment variable (default `8000`).
 
 ### ELBOT_SERVICE
 

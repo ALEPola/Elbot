@@ -46,6 +46,7 @@ def test_f1_commands_registered(monkeypatch):
         names = {cmd.name for cmd in commands_list}
         assert "f1_schedule" in names
         assert "f1_countdown" in names
+        assert "f1_results" in names
     finally:
         loop.close()
 
@@ -103,3 +104,15 @@ async def test_fetch_events_empty_url(monkeypatch):
     importlib.reload(f1)
     events = await f1.fetch_events()
     assert events == []
+
+
+def test_fetch_race_results_client_error(monkeypatch):
+    _setup_config(monkeypatch)
+    from cogs import F1 as f1
+
+    async def raise_error(*a, **k):
+        raise aiohttp.ClientError("boom")
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", raise_error)
+    race, results = asyncio.run(f1.fetch_race_results())
+    assert race is None and results == []
