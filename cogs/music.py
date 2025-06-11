@@ -267,11 +267,12 @@ class Music(commands.Cog):
         self.update_activity(guild_id)
 
         # Build youtube_dl options
+        cookie_path = os.getenv("YOUTUBE_COOKIES_PATH", None)
         ydl_opts = {
             "format": "bestaudio/best",
             "quiet": True,
             "noplaylist": False,
-            "cookies": os.getenv("YOUTUBE_COOKIES_PATH", None),
+            "cookiefile": cookie_path,
             "geo_bypass": True,
             "nocheckcertificate": True,
             "buffersize": 512,
@@ -575,7 +576,7 @@ class Music(commands.Cog):
             "format": "bestaudio",
             "quiet": True,
             "noplaylist": True,
-            "cookies": cookie_file,
+            "cookiefile": cookie_file,
             "geo_bypass": True,
             "nocheckcertificate": True,
         }
