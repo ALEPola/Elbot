@@ -9,7 +9,14 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    redirect,
+    render_template,
+    request,
+    url_for,
+    render_template_string,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
