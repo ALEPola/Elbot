@@ -25,6 +25,8 @@ if ICS_URL.startswith("webcal://"):
 CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
 GUILD_ID = Config.GUILD_ID  # Optional guild restriction
 # Use UTC if LOCAL_TIMEZONE is unset or blank
+# Set LOCAL_TIMEZONE to an IANA zone like "America/New_York".
+# See .env.example for a list of common US values.
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE") or "UTC")
 
 # Path to subscriber persistence file (in project root)

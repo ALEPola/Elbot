@@ -113,9 +113,22 @@ Create a `.env` file by copying the example and then fill in the required variab
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
 
 Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
-`OPENAI_MODEL`, `ICS_URL` and `F1_CHANNEL_ID`.
+`OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID` and `LOCAL_TIMEZONE`.
 `ICS_URL` may use a `webcal://` address. It will be converted to `https://` automatically.
-See `.env.example` for an example Formula&nbsp;1 feed.
+`LOCAL_TIMEZONE` should be an [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) such as `America/New_York`.
+See `.env.example` for an example Formula&nbsp;1 feed and common timezone values.
+
+Common US timezones include:
+
+```
+America/New_York
+America/Chicago
+America/Denver
+America/Los_Angeles
+America/Phoenix
+America/Anchorage
+America/Honolulu
+```
 
 ```bash
 cp .env.example .env
