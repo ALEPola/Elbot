@@ -95,3 +95,39 @@ def test_chat_history(monkeypatch):
     assert len(recorded) == 2
     assert recorded[1][0]["content"] == "hi"
     assert recorded[1][-1]["content"] == "again"
+
+
+def test_chat_summary(monkeypatch, tmp_path):
+    class DummyCompletion:
+        def __init__(self, content):
+            self.choices = [type("Choice", (), {"message": type("Msg", (), {"content": content})()})()]
+
+    class DummyOpenAI:
+        def __init__(self):
+            def create(self, model, messages):
+                DummyOpenAI.last = messages
+                return DummyCompletion("summary")
+
+            self.chat = type("Chat", (), {"completions": type("Completions", (), {"create": create})()})()
+
+    monkeypatch.setattr(chat_cog, "openai_client", DummyOpenAI())
+    monkeypatch.setattr(chat_cog, "RATE_LIMIT", 0)
+
+    async def fake_to_thread(func, *a, **k):
+        return func()
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(chat_cog.Config, "BASE_DIR", tmp_path)
+
+    intents = nextcord.Intents.none()
+    bot = commands.Bot(command_prefix="!", intents=intents)
+    cog = chat_cog.ChatCog(bot)
+    interaction = DummyInteraction()
+
+    # Create some persisted history
+    cog._persist_history(123, "user", "hi")
+    cog._persist_history(123, "assistant", "there")
+
+    asyncio.run(cog.chat_summary(interaction))
+
+    assert any("hi" in m["content"] for m in DummyOpenAI.last)

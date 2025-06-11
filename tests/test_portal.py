@@ -9,6 +9,7 @@ from elbot import portal
 def make_client(monkeypatch):
     importlib.reload(portal)
     monkeypatch.setattr(portal, "LOG_FILE", Path(__file__))
+    monkeypatch.setattr(portal, "AUTO_UPDATE", False)
     monkeypatch.setattr(
         subprocess,
         "check_output",
@@ -52,3 +53,18 @@ def test_update_and_restart(monkeypatch):
     resp = client.post("/restart")
     assert resp.status_code == 302
     assert any("systemctl" in cmd[0] for cmd in ran)
+
+
+def test_update_status(monkeypatch):
+    ran = []
+
+    def fake_run(*args, **kwargs):
+        ran.append(args[0])
+        return subprocess.CompletedProcess(args[0], 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: b"up to date")
+    client = make_client(monkeypatch)
+    resp = client.get("/update_status")
+    assert resp.status_code == 200
+    assert ran

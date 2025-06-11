@@ -13,6 +13,7 @@ import time
 import random
 import asyncio
 import logging
+from pathlib import Path
 
 import yt_dlp as youtube_dl
 import nextcord
@@ -210,6 +211,9 @@ class Music(commands.Cog):
 
         # Limit queue size to avoid runaway memory usage
         self.max_queue_size = 50
+
+        self.playlist_dir = Path(os.getcwd()) / "playlists"
+        self.playlist_dir.mkdir(exist_ok=True)
 
         # Load any previously saved queues
         self.load_queue()
@@ -826,7 +830,8 @@ class Music(commands.Cog):
             return
 
         playlist = list(self.queue[guild_id]._queue)
-        with open(f"{name}.json", "w") as f:
+        path = self.playlist_dir / f"{ctx.author.id}_{name}.json"
+        with open(path, "w") as f:
             json.dump(playlist, f)
         await ctx.send(f"💾 Playlist '{name}' has been saved.")
 
@@ -836,14 +841,59 @@ class Music(commands.Cog):
         Load a JSON playlist (`<name>.json`) into the queue.
         """
         guild_id = ctx.guild.id
+        path = self.playlist_dir / f"{ctx.author.id}_{name}.json"
         try:
-            with open(f"{name}.json", "r") as f:
+            with open(path, "r") as f:
                 playlist = json.load(f)
             queue = self.queue.setdefault(guild_id, asyncio.Queue())
             self.queue[guild_id] = update_queue(queue, playlist)
             await ctx.send(f"📂 Playlist '{name}' has been loaded into the queue.")
         except FileNotFoundError:
             await ctx.send(f"❌ Playlist '{name}' not found.")
+
+    @nextcord.slash_command(name="playlist_save", description="Save the queue as a playlist")
+    async def playlist_save(self, interaction: nextcord.Interaction, name: str):
+        guild_id = interaction.guild.id
+        if guild_id not in self.queue or self.queue[guild_id].empty():
+            await interaction.response.send_message("The queue is empty! Nothing to save.", ephemeral=True)
+            return
+        playlist = list(self.queue[guild_id]._queue)
+        path = self.playlist_dir / f"{interaction.user.id}_{name}.json"
+        with open(path, "w") as f:
+            json.dump(playlist, f)
+        await interaction.response.send_message(f"💾 Playlist '{name}' has been saved.", ephemeral=True)
+
+    @nextcord.slash_command(name="playlist_load", description="Load a saved playlist")
+    async def playlist_load(self, interaction: nextcord.Interaction, name: str):
+        guild_id = interaction.guild.id
+        path = self.playlist_dir / f"{interaction.user.id}_{name}.json"
+        try:
+            with open(path, "r") as f:
+                playlist = json.load(f)
+            queue = self.queue.setdefault(guild_id, asyncio.Queue())
+            self.queue[guild_id] = update_queue(queue, playlist)
+            await interaction.response.send_message(f"📂 Playlist '{name}' has been loaded into the queue.", ephemeral=True)
+        except FileNotFoundError:
+            await interaction.response.send_message("Playlist not found.", ephemeral=True)
+
+    @nextcord.slash_command(name="playlist_list", description="List your playlists")
+    async def playlist_list(self, interaction: nextcord.Interaction):
+        user_id = interaction.user.id
+        files = list(self.playlist_dir.glob(f"{user_id}_*.json"))
+        names = [f.name.split("_", 1)[1][:-5] for f in files]
+        if not names:
+            await interaction.response.send_message("No playlists found.", ephemeral=True)
+        else:
+            await interaction.response.send_message("\n".join(names), ephemeral=True)
+
+    @nextcord.slash_command(name="playlist_delete", description="Delete a playlist")
+    async def playlist_delete(self, interaction: nextcord.Interaction, name: str):
+        path = self.playlist_dir / f"{interaction.user.id}_{name}.json"
+        if path.exists():
+            path.unlink()
+            await interaction.response.send_message("Deleted.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Playlist not found.", ephemeral=True)
 
     async def save_queue(self):
         """
