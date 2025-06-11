@@ -14,6 +14,9 @@ import random
 import asyncio
 import logging
 from pathlib import Path
+import shutil
+
+from cachetools import TTLCache
 
 import yt_dlp as youtube_dl
 import nextcord
@@ -25,6 +28,9 @@ logger = logging.getLogger("elbot.music")
 
 # If you want to persist queues across restarts, this file will be created in your working directory.
 QUEUE_FILE = "queue.json"
+
+# Cache track metadata for repeated searches
+TRACK_CACHE = TTLCache(maxsize=100, ttl=3600)
 
 
 def extract_info(query: str, ydl_opts: dict):
@@ -39,12 +45,17 @@ def extract_info(query: str, ydl_opts: dict):
         )
         return None, "Unsupported service. Please use a YouTube link."
 
+    # Return cached results when available
+    if query in TRACK_CACHE:
+        logger.info("Using cached info for '%s'", query)
+        return TRACK_CACHE[query], None
+
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
         if url_pattern.match(query):
             logger.info(f"Extracting direct URL: {query}")
             video_info = ydl.extract_info(query, download=False)
-            return [
+            result = [
                 {
                     "stream_url": video_info.get("url"),
                     "page_url": video_info.get("webpage_url"),
@@ -56,7 +67,7 @@ def extract_info(query: str, ydl_opts: dict):
                     "uploader": video_info.get("uploader"),
                     "duration": video_info.get("duration"),
                 }
-            ], None
+            ]
         else:
             logger.info(f"Searching YouTube for: {query}")
             search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
@@ -66,7 +77,7 @@ def extract_info(query: str, ydl_opts: dict):
                 and len(search_result["entries"]) > 0
             ):
                 video_info = search_result["entries"][0]
-                return [
+                result = [
                     {
                         "stream_url": video_info.get("url"),
                         "page_url": video_info.get("webpage_url"),
@@ -78,7 +89,12 @@ def extract_info(query: str, ydl_opts: dict):
                         "uploader": video_info.get("uploader"),
                         "duration": video_info.get("duration"),
                     }
-                ], None
+                ]
+            else:
+                result = None
+        if result:
+            TRACK_CACHE[query] = result
+            return result, None
 
     return None, "Could not find the video."
 
@@ -223,7 +239,11 @@ class Music(commands.Cog):
             self.start_timeout_checker(guild.id)
 
         # Limit concurrent YouTube-DL extractions
-        self.download_semaphore = asyncio.Semaphore(4)
+        concurrency = int(os.getenv("MUSIC_DL_CONCURRENCY", "4"))
+        self.download_semaphore = asyncio.Semaphore(concurrency)
+
+        if not shutil.which("ffmpeg"):
+            logger.warning("FFmpeg not found in PATH; music playback will fail")
 
     def cog_unload(self):
         """Cancel all timeout checker tasks when the cog is unloaded."""

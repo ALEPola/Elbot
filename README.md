@@ -25,7 +25,9 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 - **Chat summaries** – `/chat_summary` provides an OpenAI generated recap of your conversation and chat history now persists across restarts.
 - **DALL·E** – generate images using the `/dalle` command.
 - **F1** – receive Formula&nbsp;1 schedules, countdowns and race results. Set `ICS_URL` for the calendar feed and `LOCAL_TIMEZONE` for your local zone.
-- **Music** – play audio from YouTube links. Requires `ffmpeg` installed.
+- **Music** – play audio from YouTube links. Requires `ffmpeg` installed. Track
+  info is cached for faster playback and download concurrency can be adjusted
+  with `MUSIC_DL_CONCURRENCY`.
 - **Playlists** – save and load queues with `/playlist_save` and `/playlist_load`.
 - **Diagnostic** – utility commands for bot admins.
 - **Moderation** – `/kick`, `/ban` and `/clear_messages` commands for server admins.
@@ -117,7 +119,7 @@ Create a `.env` file by copying the example and then fill in the required variab
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
 
 Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
-`OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID` and `LOCAL_TIMEZONE`.
+`OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID`, `LOCAL_TIMEZONE` and `MUSIC_DL_CONCURRENCY`.
 `ICS_URL` may use a `webcal://` address. It will be converted to `https://` automatically.
 `LOCAL_TIMEZONE` should be an [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) such as `America/New_York`.
 See `.env.example` for an example Formula&nbsp;1 feed and common timezone values.
