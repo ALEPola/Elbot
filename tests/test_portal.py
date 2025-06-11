@@ -2,7 +2,6 @@ import importlib
 from pathlib import Path
 import subprocess
 
-import pytest
 
 from elbot import portal
 

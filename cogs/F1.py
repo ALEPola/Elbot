@@ -7,7 +7,7 @@ import aiohttp
 from icalendar import Calendar
 import nextcord
 from nextcord.ext import commands, tasks
-from datetime import datetime, timedelta, time as dt_time
+from datetime import datetime, timedelta, time as dt_time, tzinfo
 from zoneinfo import ZoneInfo
 from cachetools import TTLCache
 
@@ -28,6 +28,29 @@ GUILD_ID = Config.GUILD_ID  # Optional guild restriction
 # Set LOCAL_TIMEZONE to an IANA zone like "America/New_York".
 # See .env.example for a list of common US values.
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE") or "UTC")
+
+
+class AwareZone(tzinfo):
+    """tzinfo adapter to allow zoneinfo zones with nextcord tasks."""
+
+    def __init__(self, zone: ZoneInfo):
+        self.zone = zone
+
+    def utcoffset(self, dt=None):
+        if dt is None:
+            dt = datetime.now(self.zone)
+        return self.zone.utcoffset(dt)
+
+    def dst(self, dt=None):
+        if dt is None:
+            dt = datetime.now(self.zone)
+        return self.zone.dst(dt)
+
+    def tzname(self, dt=None):
+        if dt is None:
+            dt = datetime.now(self.zone)
+        return self.zone.tzname(dt)
+
 
 # Path to subscriber persistence file (in project root)
 SUBSCRIBERS_FILE = os.path.join(Config.BASE_DIR, "subscribers.json")
@@ -138,7 +161,7 @@ class F1Cog(commands.Cog):
             self.schedule_cache["schedule"] = await fetch_events(limit=10)
         return self.schedule_cache["schedule"]
 
-    @tasks.loop(time=dt_time(hour=12, tzinfo=LOCAL_TZ))
+    @tasks.loop(time=dt_time(hour=12, tzinfo=AwareZone(LOCAL_TZ)))
     async def weekly_update(self):
         """Every Sunday at 12:00, post the next Grand Prix to the configured channel."""
         now = datetime.now(LOCAL_TZ)

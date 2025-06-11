@@ -113,7 +113,14 @@ async def test_fetch_events_webcal(monkeypatch):
     from cogs import F1 as f1
     importlib.reload(f1)
 
-    sample_ics = """BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Test GP\nDTSTART:29991231T000000Z\nEND:VEVENT\nEND:VCALENDAR"""
+    sample_ics = (
+        "BEGIN:VCALENDAR\n"
+        "BEGIN:VEVENT\n"
+        "SUMMARY:Test GP\n"
+        "DTSTART:29991231T000000Z\n"
+        "END:VEVENT\n"
+        "END:VCALENDAR"
+    )
 
     async def dummy_get(url, *a, **k):
         class Resp:
