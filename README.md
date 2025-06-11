@@ -22,10 +22,14 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 ## Features
 
 - **Chat** – interact with OpenAI via the `/chat` command. Recent messages are kept briefly to provide context.
+- **Chat summaries** – `/chat_summary` provides an OpenAI generated recap of your conversation and chat history now persists across restarts.
 - **DALL·E** – generate images using the `/dalle` command.
 - **F1** – receive Formula&nbsp;1 schedules, countdowns and race results. Set `ICS_URL` for the calendar feed and `LOCAL_TIMEZONE` for your local zone.
 - **Music** – play audio from YouTube links. Requires `ffmpeg` installed.
+- **Playlists** – save and load queues with `/playlist_save` and `/playlist_load`.
 - **Diagnostic** – utility commands for bot admins.
+- **Moderation** – `/kick`, `/ban` and `/clear_messages` commands for server admins.
+- **Portal auto-update** – the Flask portal can report update status and optionally run daily updates.
 
 See `.env.example` for all configuration variables, including `ELBOT_SERVICE` and `PORT` which are used by the management portal.
 
@@ -211,13 +215,14 @@ The project is organised into a few key directories:
 
 Elbot exposes several slash commands once invited to your server:
 
-- `/chat` and `/chat_reset` – converse with the bot via OpenAI.
+- `/chat`, `/chat_reset` and `/chat_summary` – converse with the bot and view a summary.
 - `/dalle` – generate an image from a text prompt.
-- Music queue commands: `/play`, `/skip`, `/pause`, `/resume`, `/queue` and
-  `/stop`.
+- Music queue commands: `/play`, `/skip`, `/pause`, `/resume`, `/queue`,
+  `/stop`, plus playlist management (`/playlist_save`, `/playlist_load`, `/playlist_list`, `/playlist_delete`).
 - Formula&nbsp;1 commands: `/f1_schedule`, `/f1_countdown`, `/f1_results`,
   `/f1_subscribe` and `/f1_unsubscribe`.
 - Diagnostic commands: `/uptime` and `/ping`.
+- Moderation commands: `/kick`, `/ban` and `/clear_messages`.
 
 ## Sound assets
 

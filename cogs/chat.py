@@ -1,8 +1,10 @@
 # cogs/chat.py
 
 import time
+import json
 import asyncio
 import logging
+from pathlib import Path
 from collections import defaultdict, deque
 
 import nextcord
@@ -34,6 +36,30 @@ class ChatCog(commands.Cog):
         self.bot = bot
         self.user_last_interaction = {}  # user_id → timestamp
         self.histories = defaultdict(deque)
+        self.history_dir = Path(Config.BASE_DIR) / "chat_history"
+        self.history_dir.mkdir(exist_ok=True)
+
+    def _persist_history(self, user_id: int, role: str, content: str) -> None:
+        file = self.history_dir / f"{user_id}.json"
+        try:
+            if file.exists():
+                data = json.loads(file.read_text())
+            else:
+                data = []
+        except Exception:
+            data = []
+        data.append({"ts": time.time(), "role": role, "content": content})
+        with file.open("w") as f:
+            json.dump(data, f)
+
+    def _load_history(self, user_id: int) -> list:
+        file = self.history_dir / f"{user_id}.json"
+        if not file.exists():
+            return []
+        try:
+            return json.loads(file.read_text())
+        except Exception:
+            return []
 
     @nextcord.slash_command(
         name="chat", description="Chat with the bot (powered by OpenAI)."
@@ -94,6 +120,8 @@ class ChatCog(commands.Cog):
         await interaction.followup.send(content)
         history.append((now, "user", text))
         history.append((now, "assistant", content))
+        self._persist_history(user_id, "user", text)
+        self._persist_history(user_id, "assistant", content)
         while len(history) > HISTORY_LEN * 2:
             history.popleft()
 
@@ -103,6 +131,32 @@ class ChatCog(commands.Cog):
         await interaction.response.send_message(
             "✅ Chat history cleared.", ephemeral=True
         )
+
+    @nextcord.slash_command(name="chat_summary", description="Summarize recent chat")
+    async def chat_summary(self, interaction: nextcord.Interaction):
+        """Summarize the persisted conversation with the user."""
+        await interaction.response.defer(ephemeral=True)
+        user_id = interaction.user.id
+        history = self._load_history(user_id)
+        if not history:
+            await interaction.followup.send("No chat history found.", ephemeral=True)
+            return
+        conversation = "\n".join(f"{h['role']}: {h['content']}" for h in history[-20:])
+        try:
+            summary = await asyncio.to_thread(
+                lambda: openai_client.chat.completions.create(
+                    model=OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": "Summarize the following conversation."},
+                        {"role": "user", "content": conversation},
+                    ],
+                )
+            )
+            content = summary.choices[0].message.content
+        except Exception:
+            logger.error("OpenAI error while summarizing.", exc_info=True)
+            content = "⚠️ Failed to generate summary."
+        await interaction.followup.send(content, ephemeral=True)
 
 
 def setup(bot: commands.Bot):
