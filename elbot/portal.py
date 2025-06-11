@@ -7,7 +7,7 @@ import subprocess
 import logging
 from pathlib import Path
 
-from flask import Flask, redirect, render_template_string, request, url_for
+from flask import Flask, redirect, render_template, request, url_for
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -17,26 +17,12 @@ SERVICE_NAME = os.environ.get("ELBOT_SERVICE", "elbot.service")
 
 logger = logging.getLogger("elbot.portal")
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates", static_folder="static")
 
 
 @app.route("/")
 def index():
-    return render_template_string(
-        """
-        <h1>Elbot Portal</h1>
-        <ul>
-          <li><a href="{{ url_for('view_logs') }}">View Logs</a></li>
-          <li><a href="{{ url_for('branch') }}">Switch Branch</a></li>
-        </ul>
-        <form method="post" action="{{ url_for('update') }}">
-          <button type="submit">Run update.sh</button>
-        </form>
-        <form method="post" action="{{ url_for('restart') }}">
-          <button type="submit">Restart Service</button>
-        </form>
-        """
-    )
+    return render_template("index.html")
 
 
 @app.route("/logs")
@@ -45,10 +31,7 @@ def view_logs():
     if LOG_FILE.exists():
         with LOG_FILE.open("r") as f:
             lines = f.readlines()[-200:]
-    return render_template_string(
-        "<pre>{{logs}}</pre>",
-        logs="".join(lines),
-    )
+    return render_template("logs.html", logs="".join(lines))
 
 
 @app.route("/branch", methods=["GET", "POST"])
@@ -83,16 +66,7 @@ def branch():
         f'<option value="{b}" {"selected" if b == current else ""}>{b}</option>'
         for b in all_branches
     )
-    return render_template_string(
-        """
-        <h2>Switch Branch</h2>
-        <form method="post">
-          <select name="branch">{{ options|safe }}</select>
-          <button type="submit">Checkout</button>
-        </form>
-        """,
-        options=options,
-    )
+    return render_template("branch.html", options=options)
 
 
 @app.route("/update", methods=["POST"])

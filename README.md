@@ -178,15 +178,16 @@ To pull the latest version of Elbot from GitHub:
 
 ## Web Portal
 
-Elbot ships with a simple management portal built with Flask. To start it:
+Elbot includes a lightweight management portal built with Flask. After the
+dependencies are installed you can launch it with:
 
 ```bash
 elbot-portal
 ```
 
-The portal lets you view the bot logs, switch Git branches, trigger
-`update.sh` and restart the system service running the bot. It listens on the
-port specified by the `PORT` environment variable (default `8000`).
+Open your browser to <http://localhost:8000> (or whatever you set `PORT` to).
+The portal lets you view logs, switch Git branches and run the `update.sh`
+script. It also provides a button to restart the bot service.
 
 ### ELBOT_SERVICE
 
