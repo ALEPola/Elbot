@@ -118,6 +118,8 @@ Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
 `LOCAL_TIMEZONE` should be an [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) such as `America/New_York`.
 See `.env.example` for an example Formula&nbsp;1 feed and common timezone values.
 
+`YOUTUBE_COOKIES_PATH` should point to a Netscape formatted cookies file if you need to bypass age or region restrictions. Replace the provided `youtube_cookies.txt` with your own export if required.
+
 Common US timezones include:
 
 ```
