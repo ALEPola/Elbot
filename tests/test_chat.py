@@ -61,6 +61,7 @@ def test_chat_response_truncated(monkeypatch):
     sent = interaction.followup.send.call_args.args[0]
     assert len(sent) <= chat_cog.MAX_RESPONSE_LENGTH
     assert sent.endswith("...")
+    loop.close()
 
 
 def test_chat_history(monkeypatch):
@@ -99,6 +100,7 @@ def test_chat_history(monkeypatch):
     assert len(recorded) == 2
     assert recorded[1][0]["content"] == "hi"
     assert recorded[1][-1]["content"] == "again"
+    loop.close()
 
 
 def test_chat_summary(monkeypatch, tmp_path):
@@ -137,3 +139,4 @@ def test_chat_summary(monkeypatch, tmp_path):
     asyncio.run(cog.chat_summary(interaction))
 
     assert any("hi" in m["content"] for m in DummyOpenAI.last)
+    loop.close()
