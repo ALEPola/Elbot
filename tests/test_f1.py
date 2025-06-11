@@ -122,7 +122,7 @@ async def test_fetch_events_webcal(monkeypatch):
         "END:VCALENDAR"
     )
 
-    async def dummy_get(url, *a, **k):
+    async def dummy_get(self, url, *a, **k):
         class Resp:
             async def text(self):
                 return sample_ics
