@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Switch Branch - Elbot Portal{% endblock %}
+{% block content %}
+<h2>Switch Branch</h2>
+<form method="post">
+  <select name="branch">
+    {{ options|safe }}
+  </select>
+  <button type="submit">Checkout</button>
+</form>
+{% endblock %}
