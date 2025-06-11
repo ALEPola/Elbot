@@ -50,7 +50,9 @@ def test_chat_response_truncated(monkeypatch):
     monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
 
     intents = nextcord.Intents.none()
-    bot = commands.Bot(command_prefix="!", intents=intents)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
     cog = chat_cog.ChatCog(bot)
 
     interaction = DummyInteraction()
@@ -85,7 +87,9 @@ def test_chat_history(monkeypatch):
     monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
 
     intents = nextcord.Intents.none()
-    bot = commands.Bot(command_prefix="!", intents=intents)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
     cog = chat_cog.ChatCog(bot)
     interaction = DummyInteraction()
 
@@ -120,7 +124,9 @@ def test_chat_summary(monkeypatch, tmp_path):
     monkeypatch.setattr(chat_cog.Config, "BASE_DIR", tmp_path)
 
     intents = nextcord.Intents.none()
-    bot = commands.Bot(command_prefix="!", intents=intents)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
     cog = chat_cog.ChatCog(bot)
     interaction = DummyInteraction()
 

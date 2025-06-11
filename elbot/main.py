@@ -2,6 +2,7 @@
 
 import sys
 import logging
+import asyncio
 import nextcord
 from nextcord.ext import commands
 from .config import Config
@@ -30,7 +31,12 @@ def main():
     # 2) Create bot with intents
     intents = nextcord.Intents.default()
     intents.message_content = True
-    bot = commands.Bot(command_prefix=Config.PREFIX, intents=intents)
+
+    # Create and set event loop before instantiating the bot
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    bot = commands.Bot(command_prefix=Config.PREFIX, intents=intents, loop=loop)
 
     # 3) Global error handler
     @bot.event
