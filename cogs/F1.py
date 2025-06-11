@@ -24,7 +24,8 @@ if ICS_URL.startswith("webcal://"):
 # Convert "0" to None when F1_CHANNEL_ID isn't configured
 CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
 GUILD_ID = Config.GUILD_ID  # Optional guild restriction
-LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE", "UTC"))
+# Use UTC if LOCAL_TIMEZONE is unset or blank
+LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE") or "UTC")
 
 # Path to subscriber persistence file (in project root)
 SUBSCRIBERS_FILE = os.path.join(Config.BASE_DIR, "subscribers.json")
