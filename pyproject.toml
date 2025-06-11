@@ -28,6 +28,8 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
+    "nextcord[voice]",
+    "aiohttp[speedups]",
 ]
 
 [project.scripts]

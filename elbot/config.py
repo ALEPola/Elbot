@@ -28,7 +28,17 @@ class Config:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
     ICS_URL = os.getenv("ICS_URL", "")
-    F1_CHANNEL_ID = int(os.getenv("F1_CHANNEL_ID", 0) or 0)
+    _f1_channel_str = os.getenv("F1_CHANNEL_ID")
+    if _f1_channel_str:
+        try:
+            F1_CHANNEL_ID = int(_f1_channel_str)
+        except ValueError:
+            logger.warning(
+                "Invalid F1_CHANNEL_ID '%s' - expected integer", _f1_channel_str
+            )
+            F1_CHANNEL_ID = 0
+    else:
+        F1_CHANNEL_ID = 0
 
     # The command prefix (e.g. “!”, or “/” if you prefer slash commands only)
     PREFIX = os.getenv("COMMAND_PREFIX", "!")

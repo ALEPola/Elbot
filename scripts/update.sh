@@ -2,8 +2,23 @@
 # Pull the latest version of Elbot from GitHub
 set -e
 
+ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"
+BACKUP_FILE="$ENV_FILE.bak"
+
+restore_env() {
+    if [ -f "$BACKUP_FILE" ]; then
+        mv "$BACKUP_FILE" "$ENV_FILE"
+    fi
+}
+
+trap restore_env EXIT
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
+
+if [ -f "$ENV_FILE" ]; then
+    cp "$ENV_FILE" "$BACKUP_FILE"
+fi
 
 echo "[1/2] Pulling latest changes..."
 git pull --ff-only

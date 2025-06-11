@@ -16,11 +16,16 @@ from elbot.config import Config
 logger = logging.getLogger("elbot.f1")
 
 # Configuration loaded from environment via Config
+# If ``ICS_URL`` is empty, event fetching will be skipped.
 ICS_URL = Config.ICS_URL  # URL to the ICS calendar feed
+# Allow ``webcal://`` style URLs by converting them to HTTPS
+if ICS_URL.startswith("webcal://"):
+    ICS_URL = "https://" + ICS_URL[len("webcal://") :]
 # Convert "0" to None when F1_CHANNEL_ID isn't configured
 CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
 GUILD_ID = Config.GUILD_ID  # Optional guild restriction
-LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE", "UTC"))
+# Use UTC if LOCAL_TIMEZONE is unset or blank
+LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE") or "UTC")
 
 # Path to subscriber persistence file (in project root)
 SUBSCRIBERS_FILE = os.path.join(Config.BASE_DIR, "subscribers.json")
@@ -40,11 +45,21 @@ def save_subscribers(subscribers):
 
 
 async def fetch_events(limit=10):
-    """Fetch and parse the next up to `limit` F1 sessions from the ICS feed."""
-    async with aiohttp.ClientSession() as sess:
-        resp = await sess.get(ICS_URL)
-        resp.raise_for_status()
-        cal = Calendar.from_ical(await resp.text())
+    """Fetch and parse the next up to `limit` F1 sessions from the ICS feed.
+
+    Returns an empty list if ``ICS_URL`` is not configured.
+    """
+    if not ICS_URL:
+        logger.warning("ICS_URL not configured; skipping event fetch")
+        return []
+    try:
+        async with aiohttp.ClientSession() as sess:
+            resp = await sess.get(ICS_URL)
+            resp.raise_for_status()
+            cal = Calendar.from_ical(await resp.text())
+    except aiohttp.ClientError as e:
+        logger.error("Failed to fetch F1 schedule: %s", e)
+        return []
 
     now = datetime.now(LOCAL_TZ)
     events = []
@@ -62,6 +77,29 @@ async def fetch_events(limit=10):
 
     events.sort(key=lambda x: x[0])
     return events[:limit]
+
+
+async def fetch_race_results():
+    """Fetch the latest race results from the Ergast API."""
+    url = "https://ergast.com/api/f1/current/last/results.json"
+    try:
+        async with aiohttp.ClientSession() as sess:
+            resp = await sess.get(url)
+            resp.raise_for_status()
+            data = await resp.json()
+    except aiohttp.ClientError as e:
+        logger.error("Failed to fetch F1 results: %s", e)
+        return None, []
+
+    race = data.get("MRData", {}).get("RaceTable", {}).get("Races", [{}])[0]
+    race_name = race.get("raceName", "")
+    results = []
+    for entry in race.get("Results", [])[:10]:
+        pos = entry.get("position")
+        driver = entry.get("Driver", {}).get("familyName")
+        team = entry.get("Constructor", {}).get("name")
+        results.append((pos, driver, team))
+    return race_name, results
 
 
 def format_countdown(dt):
@@ -182,6 +220,21 @@ class F1Cog(commands.Cog):
         await interaction.followup.send(
             f"⏱ **{name}** starts in {format_countdown(dt)}"
         )
+
+    @nextcord.slash_command(name="f1_results", description="Latest race results")
+    async def f1_results(self, interaction: nextcord.Interaction):
+        if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
+            return await interaction.response.send_message(
+                "Not available in this server.", ephemeral=True
+            )
+        await interaction.response.defer()
+        race_name, results = await fetch_race_results()
+        if not race_name:
+            return await interaction.followup.send("⚠️ Unable to fetch results.")
+        embed = nextcord.Embed(title=f"{race_name} Results", color=0xE10600)
+        for pos, driver, team in results:
+            embed.add_field(name=f"#{pos} {driver}", value=team, inline=False)
+        await interaction.followup.send(embed=embed)
 
     @nextcord.slash_command(
         name="f1_subscribe", description="DM reminders 10 min before each session"
