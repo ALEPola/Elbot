@@ -6,17 +6,18 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 
 1. [Features](#features)
 2. [Requirements](#requirements)
-3. [Installation](#installation)
-4. [Configuration](#configuration)
-5. [Running the bot](#running-the-bot)
-6. [Docker](#docker)
-7. [Windows notes](#windows-notes)
-8. [Updating](#updating)
-9. [Web Portal](#web-portal)
-10. [Architecture overview](#architecture-overview)
-11. [Command summary](#command-summary)
-12. [Sound assets](#sound-assets)
-13. [Testing](#testing)
+3. [Quick start](#quick-start)
+4. [Installation](#installation)
+5. [Configuration](#configuration)
+6. [Running the bot](#running-the-bot)
+7. [Docker](#docker)
+8. [Windows notes](#windows-notes)
+9. [Updating](#updating)
+10. [Web Portal](#web-portal)
+11. [Architecture overview](#architecture-overview)
+12. [Command summary](#command-summary)
+13. [Sound assets](#sound-assets)
+14. [Testing](#testing)
 
 ## Features
 
@@ -34,6 +35,39 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 - `ffmpeg` installed and on your `PATH` (required for music commands)
 - A Discord bot token
 - An OpenAI API key
+
+## Quick start
+
+1. Clone the repository and change into the project directory:
+
+```bash
+git clone <repository-url>
+cd Elbot
+```
+
+2. Run the guided setup script (Linux/macOS):
+
+```bash
+./scripts/install.sh
+```
+
+This installs dependencies, creates a virtual environment and can register a
+system service so the bot starts on boot. When finished, edit `.env` with your
+Discord and OpenAI tokens then launch the bot with:
+
+```bash
+source .venv/bin/activate
+python -m elbot.main
+```
+
+To run Elbot continually in the background use:
+
+```bash
+elbot-install-service
+```
+
+Windows users can follow the manual steps below and use `elbot-install-service`
+to create a service after installing the dependencies.
 
 ## Installation
 
