@@ -241,7 +241,7 @@ be found.
 
 ## Testing
 
-Install Elbot in editable mode so the local package is available and the extras required by the tests (such as `nextcord[voice]` and `aiohttp[speedups]`) are installed. These packages are bundled in the `test` extras group:
+Install Elbot in editable mode so the local package is available and the extras required by the tests (such as `nextcord[voice]`, `aiohttp[speedups]` and `pytest-asyncio`) are installed. These packages are bundled in the `test` extras group:
 
 ```bash
 pip install -e .[test]
