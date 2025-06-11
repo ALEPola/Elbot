@@ -30,6 +30,7 @@ test = [
     "pytest",
     "nextcord[voice]",
     "aiohttp[speedups]",
+    "pytest-asyncio",
 ]
 
 [project.scripts]
