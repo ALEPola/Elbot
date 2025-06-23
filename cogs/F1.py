@@ -3,6 +3,7 @@
 import os
 import json
 import logging
+import inspect
 import aiohttp
 from icalendar import Calendar
 import nextcord
@@ -28,6 +29,24 @@ GUILD_ID = Config.GUILD_ID  # Optional guild restriction
 # Set LOCAL_TIMEZONE to an IANA zone like "America/New_York".
 # See .env.example for a list of common US values.
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE") or "UTC")
+
+# Reusable HTTP session for API calls
+_session: aiohttp.ClientSession | None = None
+
+
+async def get_session() -> aiohttp.ClientSession:
+    """Return a shared :class:`aiohttp.ClientSession`."""
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession()
+    return _session
+
+
+async def close_session() -> None:
+    """Close the shared HTTP session if it exists."""
+    global _session
+    if _session and not _session.closed:
+        await _session.close()
 
 
 class AwareZone(tzinfo):
@@ -78,10 +97,13 @@ async def fetch_events(limit=10):
         logger.warning("ICS_URL not configured; skipping event fetch")
         return []
     try:
-        async with aiohttp.ClientSession() as sess:
-            resp = await sess.get(ICS_URL)
+        session = await get_session()
+        resp = await session.get(ICS_URL)
+        try:
             resp.raise_for_status()
             cal = Calendar.from_ical(await resp.text())
+        finally:
+            await resp.release()
     except aiohttp.ClientError as e:
         logger.error("Failed to fetch F1 schedule: %s", e)
         return []
@@ -108,10 +130,13 @@ async def fetch_race_results():
     """Fetch the latest race results from the Ergast API."""
     url = "https://ergast.com/api/f1/current/last/results.json"
     try:
-        async with aiohttp.ClientSession() as sess:
-            resp = await sess.get(url)
+        session = await get_session()
+        resp = await session.get(url)
+        try:
             resp.raise_for_status()
             data = await resp.json()
+        finally:
+            await resp.release()
     except aiohttp.ClientError as e:
         logger.error("Failed to fetch F1 results: %s", e)
         return None, []
@@ -155,6 +180,7 @@ class F1Cog(commands.Cog):
     def cog_unload(self):
         self.weekly_update.cancel()
         self.reminder_loop.cancel()
+        self.bot.loop.create_task(close_session())
 
     async def get_schedule(self):
         if "schedule" not in self.schedule_cache:
@@ -172,7 +198,12 @@ class F1Cog(commands.Cog):
             logger.error("F1Cog: CHANNEL_ID not found.")
             return
 
-        events = await fetch_events(limit=1)
+        events = self.get_schedule()
+        if inspect.iscoroutine(events):
+            events = await events
+        if not events:
+            events = await fetch_events(limit=1)
+        events = events[:1]
         if not events:
             await channel.send("⚠️ No upcoming Grand Prix found.")
             return
@@ -191,7 +222,12 @@ class F1Cog(commands.Cog):
     async def reminder_loop(self):
         """Check every minute and DM subscribers if a session starts within 1 hour."""
         now = datetime.now(LOCAL_TZ)
-        for dt, name in await fetch_events(limit=5):
+        schedule = self.get_schedule()
+        if inspect.iscoroutine(schedule):
+            schedule = await schedule
+        if not schedule:
+            schedule = await fetch_events(limit=5)
+        for dt, name in schedule[:5]:
             delta = dt - now
             if timedelta(0) < delta <= timedelta(hours=1):
                 if dt not in self.sent_reminders:
@@ -223,7 +259,12 @@ class F1Cog(commands.Cog):
                 "Not available in this server.", ephemeral=True
             )
         await interaction.response.defer()
-        events = await fetch_events(limit=count)
+        events = self.get_schedule()
+        if inspect.iscoroutine(events):
+            events = await events
+        if not events:
+            events = await fetch_events(limit=count)
+        events = events[:count]
         embed = nextcord.Embed(title=f"Next {len(events)} F1 Sessions", color=0xE10600)
         for name, when in format_event_details(events):
             embed.add_field(name=name, value=when, inline=False)
@@ -238,7 +279,12 @@ class F1Cog(commands.Cog):
                 "Not available in this server.", ephemeral=True
             )
         await interaction.response.defer()
-        events = await fetch_events(limit=1)
+        events = self.get_schedule()
+        if inspect.iscoroutine(events):
+            events = await events
+        if not events:
+            events = await fetch_events(limit=1)
+        events = events[:1]
         if not events:
             return await interaction.followup.send("⚠️ No upcoming Grand Prix found.")
         dt, name = events[0]
