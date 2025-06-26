@@ -292,6 +292,12 @@ class Music(commands.Cog):
 
         # Build youtube_dl options
         cookie_path = os.getenv("YOUTUBE_COOKIES_PATH", None)
+        if cookie_path and not os.path.isfile(cookie_path):
+            logger.warning(
+                "Cookies file %s not found, ignoring YOUTUBE_COOKIES_PATH",
+                cookie_path,
+            )
+            cookie_path = None
         ydl_opts = {
             "format": "bestaudio/best",
             "quiet": True,
@@ -596,6 +602,12 @@ class Music(commands.Cog):
         Perform a YouTube search and return up to `max_results` items.
         """
         cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", None)
+        if cookie_file and not os.path.isfile(cookie_file):
+            logger.warning(
+                "Cookies file %s not found, ignoring YOUTUBE_COOKIES_PATH",
+                cookie_file,
+            )
+            cookie_file = None
         ydl_opts = {
             "format": "bestaudio",
             "quiet": True,

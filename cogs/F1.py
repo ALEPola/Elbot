@@ -103,7 +103,8 @@ async def fetch_events(limit=10):
             resp.raise_for_status()
             cal = Calendar.from_ical(await resp.text())
         finally:
-            await resp.release()
+            if hasattr(resp, "release"):
+                await resp.release()
     except aiohttp.ClientError as e:
         logger.error("Failed to fetch F1 schedule: %s", e)
         return []
@@ -136,7 +137,8 @@ async def fetch_race_results():
             resp.raise_for_status()
             data = await resp.json()
         finally:
-            await resp.release()
+            if hasattr(resp, "release"):
+                await resp.release()
     except aiohttp.ClientError as e:
         logger.error("Failed to fetch F1 results: %s", e)
         return None, []
