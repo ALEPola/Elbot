@@ -44,7 +44,6 @@ async def get_session() -> aiohttp.ClientSession:
 
 async def close_session() -> None:
     """Close the shared HTTP session if it exists."""
-    global _session
     if _session and not _session.closed:
         await _session.close()
 
@@ -310,7 +309,7 @@ class F1Cog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @nextcord.slash_command(
-        name="f1_subscribe", description="DM reminders 10 min before each session"
+        name="f1_subscribe", description="DM reminders 1 hour before each session"
     )
     async def f1_subscribe(self, interaction: nextcord.Interaction):
         self.subscribers.add(interaction.user.id)

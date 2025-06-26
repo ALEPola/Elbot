@@ -26,7 +26,7 @@ class Config:
     BASE_DIR = BASE_DIR
     DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
     ICS_URL = os.getenv("ICS_URL", "")
     _f1_channel_str = os.getenv("F1_CHANNEL_ID")
     if _f1_channel_str:
