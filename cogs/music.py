@@ -259,9 +259,7 @@ class Music(commands.Cog):
         return self.locks[guild_id]
 
     async def ensure_voice(self, interaction: nextcord.Interaction) -> bool:
-        """
-        Ensure the user is in a voice channel and the bot is connected to it.
-        """
+        """Ensure the user is in a voice channel and the bot is connected."""
         if interaction.user.voice is None:
             await interaction.followup.send(
                 f"{interaction.user.display_name}, you are not in a voice channel.",
@@ -270,11 +268,18 @@ class Music(commands.Cog):
             return False
 
         channel = interaction.user.voice.channel
-        if interaction.guild.voice_client is None:
-            await channel.connect()
-        elif interaction.guild.voice_client.channel != channel:
-            await interaction.guild.voice_client.move_to(channel)
-        return True
+        try:
+            if interaction.guild.voice_client is None:
+                await channel.connect()
+            elif interaction.guild.voice_client.channel != channel:
+                await interaction.guild.voice_client.move_to(channel)
+        except Exception as e:  # connection failed
+            await interaction.followup.send(
+                f"Failed to connect to voice channel: {e}", ephemeral=True
+            )
+            return False
+
+        return interaction.guild.voice_client is not None
 
     @nextcord.slash_command(name="play", description="Play a song from YouTube.")
     @cooldown(1, 5, BucketType.guild)
@@ -333,11 +338,16 @@ class Music(commands.Cog):
                 await current_queue.put(item)
 
             voice_client = interaction.guild.voice_client
-            if not voice_client.is_playing():
-                asyncio.create_task(self.play_next(guild_id, interaction))
-                await interaction.followup.send(
-                    "▶️ Starting playback...", ephemeral=True
-                )
+            if not voice_client or not voice_client.is_playing():
+                if voice_client:
+                    asyncio.create_task(self.play_next(guild_id, interaction))
+                    await interaction.followup.send(
+                        "▶️ Starting playback...", ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        "Could not connect to the voice channel.", ephemeral=True
+                    )
             else:
                 await interaction.followup.send(
                     f"➕ Added **{result[0]['title']}** to the queue.", ephemeral=True
