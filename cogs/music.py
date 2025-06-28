@@ -16,6 +16,7 @@ import logging
 from pathlib import Path
 import shutil
 
+from typing import Optional
 from cachetools import TTLCache
 
 import yt_dlp as youtube_dl
@@ -31,6 +32,16 @@ QUEUE_FILE = "queue.json"
 
 # Cache track metadata for repeated searches
 TRACK_CACHE = TTLCache(maxsize=100, ttl=3600)
+
+# Load a raw Cookie header string from youtube_cookies.txt. Returns None if the
+# file is missing.
+def load_cookie() -> Optional[str]:
+    path = os.getenv("YOUTUBE_COOKIES_PATH", "youtube_cookies.txt")
+    if not os.path.isfile(path):
+        logger.warning("Cookies file %s not found, ignoring", path)
+        return None
+    with open(path, "r") as f:
+        return f.read().strip()
 
 # Persist recent search queries to page URLs so we can refresh
 SEARCH_MAP_FILE = "search_map.json"
@@ -358,21 +369,15 @@ class Music(commands.Cog):
         self.update_activity(guild_id)
 
         # Build youtube_dl options
-        cookie_path = os.getenv("YOUTUBE_COOKIES_PATH", None)
-        if cookie_path and not os.path.isfile(cookie_path):
-            logger.warning(
-                "Cookies file %s not found, ignoring YOUTUBE_COOKIES_PATH",
-                cookie_path,
-            )
-            cookie_path = None
+        raw_cookie = load_cookie()
         ydl_opts = {
             "format": "bestaudio/best",
             "quiet": True,
             "noplaylist": False,
-            "cookiefile": cookie_path,
             "geo_bypass": True,
             "nocheckcertificate": True,
             "buffersize": 512,
+            "http_headers": {"Cookie": raw_cookie} if raw_cookie else {},
         }
 
         if len(search) > 200:
@@ -673,20 +678,14 @@ class Music(commands.Cog):
         """
         Perform a YouTube search and return up to `max_results` items.
         """
-        cookie_file = os.getenv("YOUTUBE_COOKIES_PATH", None)
-        if cookie_file and not os.path.isfile(cookie_file):
-            logger.warning(
-                "Cookies file %s not found, ignoring YOUTUBE_COOKIES_PATH",
-                cookie_file,
-            )
-            cookie_file = None
+        raw_cookie = load_cookie()
         ydl_opts = {
             "format": "bestaudio",
             "quiet": True,
             "noplaylist": True,
-            "cookiefile": cookie_file,
             "geo_bypass": True,
             "nocheckcertificate": True,
+            "http_headers": {"Cookie": raw_cookie} if raw_cookie else {},
         }
         results = []
 
