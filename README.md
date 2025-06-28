@@ -26,8 +26,10 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 - **DALL·E** – generate images using the `/dalle` command.
 - **F1** – receive Formula&nbsp;1 schedules, countdowns and race results. Set `ICS_URL` for the calendar feed and `LOCAL_TIMEZONE` for your local zone.
 - **Music** – play audio from YouTube links. Requires `ffmpeg` installed. Track
-  info is cached for faster playback and download concurrency can be adjusted
-  with `MUSIC_DL_CONCURRENCY`.
+  info is cached so repeated `/play` queries skip the YouTube search. Providing
+  a direct link is fastest. Recent searches are stored on disk so stream URLs
+  can be refreshed quickly. Download concurrency can be adjusted with
+  `MUSIC_DL_CONCURRENCY`.
 - **Playlists** – save and load queues with `/playlist_save` and `/playlist_load`.
 - **Diagnostic** – utility commands for bot admins.
 - **Moderation** – `/kick`, `/ban` and `/clear_messages` commands for server admins.

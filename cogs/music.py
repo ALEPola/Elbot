@@ -32,6 +32,21 @@ QUEUE_FILE = "queue.json"
 # Cache track metadata for repeated searches
 TRACK_CACHE = TTLCache(maxsize=100, ttl=3600)
 
+# Persist recent search queries to page URLs so we can refresh
+SEARCH_MAP_FILE = "search_map.json"
+try:
+    with open(SEARCH_MAP_FILE, "r") as f:
+        SEARCH_MAP = json.load(f)
+except Exception:
+    SEARCH_MAP = {}
+
+
+def save_search_map():
+    tmp = SEARCH_MAP_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(SEARCH_MAP, f)
+    os.replace(tmp, SEARCH_MAP_FILE)
+
 
 def extract_info(query: str, ydl_opts: dict):
     """
@@ -45,13 +60,55 @@ def extract_info(query: str, ydl_opts: dict):
         )
         return None, "Unsupported service. Please use a YouTube link."
 
-    # Return cached results when available
+    # Refresh using cached page_url when available
+    url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
     if query in TRACK_CACHE:
+        cached = TRACK_CACHE[query]
+        page_url = cached[0].get("page_url") if cached else None
+        if page_url:
+            logger.info("Refreshing stream URL for '%s'", query)
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                video_info = ydl.extract_info(page_url, download=False)
+            result = [
+                {
+                    "stream_url": video_info.get("url"),
+                    "page_url": video_info.get("webpage_url"),
+                    "title": video_info.get("title"),
+                    "thumbnail": video_info.get("thumbnail"),
+                    "artist": video_info.get("artist")
+                    or video_info.get("uploader")
+                    or "Unknown Artist",
+                    "uploader": video_info.get("uploader"),
+                    "duration": video_info.get("duration"),
+                }
+            ]
+            TRACK_CACHE[query] = result
+            return result, None
         logger.info("Using cached info for '%s'", query)
-        return TRACK_CACHE[query], None
+        return cached, None
+
+    if query in SEARCH_MAP:
+        page_url = SEARCH_MAP[query]
+        logger.info("Fetching '%s' from stored page URL", query)
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            video_info = ydl.extract_info(page_url, download=False)
+        result = [
+            {
+                "stream_url": video_info.get("url"),
+                "page_url": video_info.get("webpage_url"),
+                "title": video_info.get("title"),
+                "thumbnail": video_info.get("thumbnail"),
+                "artist": video_info.get("artist")
+                or video_info.get("uploader")
+                or "Unknown Artist",
+                "uploader": video_info.get("uploader"),
+                "duration": video_info.get("duration"),
+            }
+        ]
+        TRACK_CACHE[query] = result
+        return result, None
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        url_pattern = re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/.+")
         if url_pattern.match(query):
             logger.info(f"Extracting direct URL: {query}")
             video_info = ydl.extract_info(query, download=False)
@@ -90,6 +147,8 @@ def extract_info(query: str, ydl_opts: dict):
                         "duration": video_info.get("duration"),
                     }
                 ]
+                SEARCH_MAP[query] = result[0]["page_url"]
+                save_search_map()
             else:
                 result = None
         if result:
@@ -281,7 +340,10 @@ class Music(commands.Cog):
 
         return interaction.guild.voice_client is not None
 
-    @nextcord.slash_command(name="play", description="Play a song from YouTube.")
+    @nextcord.slash_command(
+        name="play",
+        description="Play a song from YouTube (direct links skip search).",
+    )
     @cooldown(1, 5, BucketType.guild)
     async def play(self, interaction: nextcord.Interaction, search: str):
         """
