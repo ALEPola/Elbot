@@ -33,7 +33,7 @@ QUEUE_FILE = "queue.json"
 TRACK_CACHE = TTLCache(maxsize=100, ttl=3600)
 
 
-def extract_info(query: str, ydl_opts: dict):
+def extract_info(query: str, ydl_opts: dict, refresh: bool = False):
     """
     Extract video information from a query using youtube_dl.
     Returns a list of track dicts or (None, error_message).
@@ -46,7 +46,7 @@ def extract_info(query: str, ydl_opts: dict):
         return None, "Unsupported service. Please use a YouTube link."
 
     # Return cached results when available
-    if query in TRACK_CACHE:
+    if not refresh and query in TRACK_CACHE:
         logger.info("Using cached info for '%s'", query)
         return TRACK_CACHE[query], None
 
@@ -258,6 +258,53 @@ class Music(commands.Cog):
             self.locks[guild_id] = asyncio.Lock()
         return self.locks[guild_id]
 
+    def build_ydl_opts(self, noplaylist: bool = True) -> dict:
+        """Return common youtube_dl options respecting cookies."""
+        cookie_path = os.getenv("YOUTUBE_COOKIES_PATH", None)
+        if cookie_path and not os.path.isfile(cookie_path):
+            logger.warning(
+                "Cookies file %s not found, ignoring YOUTUBE_COOKIES_PATH",
+                cookie_path,
+            )
+            cookie_path = None
+        return {
+            "format": "bestaudio/best",
+            "quiet": True,
+            "noplaylist": noplaylist,
+            "cookiefile": cookie_path,
+            "geo_bypass": True,
+            "nocheckcertificate": True,
+            "buffersize": 512,
+        }
+
+    def refresh_stream_sync(self, track: dict) -> dict | None:
+        """Refresh a track's stream_url using its page_url."""
+        ydl_opts = self.build_ydl_opts(True)
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(track["page_url"], download=False)
+            track.update(
+                {
+                    "stream_url": info.get("url"),
+                    "page_url": info.get("webpage_url", track.get("page_url")),
+                    "title": info.get("title", track.get("title")),
+                    "thumbnail": info.get("thumbnail", track.get("thumbnail")),
+                    "artist": info.get("artist")
+                    or info.get("uploader")
+                    or track.get("artist"),
+                    "uploader": info.get("uploader", track.get("uploader")),
+                    "duration": info.get("duration", track.get("duration")),
+                }
+            )
+            return track
+        except Exception as exc:
+            logger.error("Failed to refresh stream for %s: %s", track.get("title"), exc)
+            return None
+
+    async def refresh_stream(self, track: dict) -> dict | None:
+        """Asynchronous wrapper around ``refresh_stream_sync``."""
+        return await asyncio.to_thread(self.refresh_stream_sync, track)
+
     async def ensure_voice(self, interaction: nextcord.Interaction) -> bool:
         """Ensure the user is in a voice channel and the bot is connected."""
         if interaction.user.voice is None:
@@ -400,14 +447,13 @@ class Music(commands.Cog):
         self.current_track[guild_id] = item
         self.track_start_time[guild_id] = time.time()
 
-        stream_url = item["stream_url"]
+        if not item.get("stream_url"):
+            item = await self.refresh_stream(item) or item
+
         ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn -threads 1 -bufsize 512k -ab 64k",
         }
-        source = nextcord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
-        transformer = nextcord.PCMVolumeTransformer(source, volume=0.5)
-        self.current_source[guild_id] = transformer
 
         def after_callback(error):
             if error:
@@ -417,7 +463,23 @@ class Music(commands.Cog):
             else:
                 self.bot.loop.create_task(self.play_next(guild_id))
 
-        voice_client.play(transformer, after=after_callback)
+        async def start_playback() -> bool:
+            try:
+                source = nextcord.FFmpegPCMAudio(item["stream_url"], **ffmpeg_opts)
+                transformer = nextcord.PCMVolumeTransformer(source, volume=0.5)
+                self.current_source[guild_id] = transformer
+                voice_client.play(transformer, after=after_callback)
+                return True
+            except Exception as exc:
+                logger.error("Playback failed for %s: %s", item.get("title"), exc)
+                return False
+
+        if not await start_playback():
+            refreshed = await self.refresh_stream(item)
+            if not refreshed or not await start_playback():
+                await self.play_next(guild_id)
+                return
+
         logger.info(f"Now playing: {item['title']}")
 
         # Build the “Now Playing” embed with a progress bar
@@ -871,7 +933,11 @@ class Music(commands.Cog):
             await ctx.send("The queue is empty! Nothing to save.")
             return
 
-        playlist = list(self.queue[guild_id]._queue)
+        playlist = []
+        for it in list(self.queue[guild_id]._queue):
+            data = it.copy()
+            data.pop("stream_url", None)
+            playlist.append(data)
         path = self.playlist_dir / f"{ctx.author.id}_{name}.json"
         with open(path, "w") as f:
             json.dump(playlist, f)
@@ -887,8 +953,13 @@ class Music(commands.Cog):
         try:
             with open(path, "r") as f:
                 playlist = json.load(f)
+            refreshed = []
+            for item in playlist:
+                new_item = await asyncio.to_thread(self.refresh_stream_sync, item)
+                if new_item:
+                    refreshed.append(new_item)
             queue = self.queue.setdefault(guild_id, asyncio.Queue())
-            self.queue[guild_id] = update_queue(queue, playlist)
+            self.queue[guild_id] = update_queue(queue, refreshed)
             await ctx.send(f"📂 Playlist '{name}' has been loaded into the queue.")
         except FileNotFoundError:
             await ctx.send(f"❌ Playlist '{name}' not found.")
@@ -899,7 +970,11 @@ class Music(commands.Cog):
         if guild_id not in self.queue or self.queue[guild_id].empty():
             await interaction.response.send_message("The queue is empty! Nothing to save.", ephemeral=True)
             return
-        playlist = list(self.queue[guild_id]._queue)
+        playlist = []
+        for it in list(self.queue[guild_id]._queue):
+            data = it.copy()
+            data.pop("stream_url", None)
+            playlist.append(data)
         path = self.playlist_dir / f"{interaction.user.id}_{name}.json"
         with open(path, "w") as f:
             json.dump(playlist, f)
@@ -912,8 +987,13 @@ class Music(commands.Cog):
         try:
             with open(path, "r") as f:
                 playlist = json.load(f)
+            refreshed = []
+            for item in playlist:
+                new_item = await asyncio.to_thread(self.refresh_stream_sync, item)
+                if new_item:
+                    refreshed.append(new_item)
             queue = self.queue.setdefault(guild_id, asyncio.Queue())
-            self.queue[guild_id] = update_queue(queue, playlist)
+            self.queue[guild_id] = update_queue(queue, refreshed)
             await interaction.response.send_message(f"📂 Playlist '{name}' has been loaded into the queue.", ephemeral=True)
         except FileNotFoundError:
             await interaction.response.send_message("Playlist not found.", ephemeral=True)
@@ -943,7 +1023,12 @@ class Music(commands.Cog):
         """
         data = {}
         for guild_id, q in self.queue.items():
-            data[str(guild_id)] = list(q._queue)
+            items = []
+            for it in list(q._queue):
+                d = it.copy()
+                d.pop("stream_url", None)
+                items.append(d)
+            data[str(guild_id)] = items
         tmp_file = QUEUE_FILE + ".tmp"
         with open(tmp_file, "w") as f:
             json.dump(data, f)
@@ -964,7 +1049,9 @@ class Music(commands.Cog):
                 gid = int(guild_id_str)
                 q = asyncio.Queue()
                 for it in items:
-                    q.put_nowait(it)
+                    refreshed = self.refresh_stream_sync(it)
+                    if refreshed:
+                        q.put_nowait(refreshed)
                 self.queue[gid] = q
             except Exception:
                 continue
