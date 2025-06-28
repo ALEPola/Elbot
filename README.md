@@ -58,8 +58,9 @@ cd Elbot
 ```
 
 This installs dependencies, creates a virtual environment and can register a
-system service so the bot starts on boot. When finished, edit `.env` with your
-Discord and OpenAI tokens then launch the bot with:
+system service so the bot starts on boot. The script now prompts for your
+Discord bot token, OpenAI API key and optional guild ID. When finished, launch
+the bot with:
 
 ```bash
 source .venv/bin/activate
@@ -113,7 +114,9 @@ Linux users can run `./scripts/install.sh` to be guided through installing syste
 
 ## Configuration
 
-Create a `.env` file by copying the example and then fill in the required variables:
+If you ran `./scripts/install.sh` the script created a `.env` file and asked for
+the most important values. Otherwise copy the example and fill in the required
+variables:
 
 * `DISCORD_BOT_TOKEN` &ndash; your Discord bot token
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
@@ -138,9 +141,11 @@ America/Anchorage
 America/Honolulu
 ```
 
+If you skipped the install script, create the file manually:
+
 ```bash
 cp .env.example .env
-# edit .env with your values
+# then edit .env with your values
 ```
 
 ## Running the bot

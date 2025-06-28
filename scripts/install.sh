@@ -60,7 +60,7 @@ echo "This script will install dependencies and create a virtual environment in"
 echo "$ROOT_DIR".
 prompt_yes_no "Continue?" Y || exit 0
 
-echo "\n[1/5] Checking system packages..."
+echo "\n[1/6] Checking system packages..."
 
 # Install system packages if apt-get is available (Ubuntu/Debian)
 if command -v apt-get >/dev/null 2>&1; then
@@ -79,7 +79,7 @@ else
     echo "apt-get not found; please ensure Python 3, pip and ffmpeg are installed"
 fi
 
-echo "\n[2/5] Creating virtual environment..."
+echo "\n[2/6] Creating virtual environment..."
 
 if [ -d "$ROOT_DIR/.venv" ]; then
     echo "Virtual environment already exists."
@@ -97,7 +97,29 @@ if [ ! -f "$ROOT_DIR/.env" ] && [ -f "$ROOT_DIR/.env.example" ]; then
     cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
 fi
 
-echo "\n[3/5] Installing Python dependencies..."
+update_env_var() {
+    local var="$1" value="$2"
+    if grep -q "^$var=" "$ROOT_DIR/.env"; then
+        sed -i.bak "s|^$var=.*|$var=$value|" "$ROOT_DIR/.env" && rm -f "$ROOT_DIR/.env.bak"
+    else
+        echo "$var=$value" >>"$ROOT_DIR/.env"
+    fi
+}
+
+if [ "$ASK" -eq 1 ]; then
+    echo "\n[3/6] Configuring environment variables..."
+    read -rp "Discord bot token: " discord_token
+    read -rp "OpenAI API key: " openai_key
+    read -rp "Guild ID (optional): " guild_id
+    update_env_var "DISCORD_BOT_TOKEN" "$discord_token"
+    update_env_var "OPENAI_API_KEY" "$openai_key"
+    if [ -n "$guild_id" ]; then
+        update_env_var "GUILD_ID" "$guild_id"
+    fi
+    echo "Edit $ROOT_DIR/.env to configure additional settings."
+fi
+
+echo "\n[4/6] Installing Python dependencies..."
 
 if prompt_yes_no "Install Python packages with pip?" Y; then
     pip install --upgrade pip
@@ -111,11 +133,11 @@ if prompt_yes_no "Install Python packages with pip?" Y; then
     $PYTHON -m textblob.download_corpora
 fi
 
-echo "\n[4/5] Installing service..."
+echo "\n[5/6] Installing service..."
 
 if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
     "$PYTHON" -m elbot.service_install
 fi
 
-echo "\n[5/5] Installation complete."
+echo "\n[6/6] Installation complete."
 echo "Activate the virtual environment with: source .venv/bin/activate"
