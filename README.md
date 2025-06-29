@@ -129,7 +129,7 @@ Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
 `LOCAL_TIMEZONE` should be an [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) such as `America/New_York`.
 See `.env.example` for an example Formula&nbsp;1 feed and common timezone values.
 
-`YOUTUBE_COOKIES_PATH` should point to a cookie file used by `yt_dlp`. Replace the provided `youtube_cookies.txt` with your own file if needed.
+`YOUTUBE_COOKIES_PATH` should point to a text file containing a single-line `Cookie` header string. Replace the provided `youtube_cookies.txt` with your own value if needed.
 
 Common US timezones include:
 
