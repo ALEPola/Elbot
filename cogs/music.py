@@ -33,16 +33,6 @@ QUEUE_FILE = "queue.json"
 # Cache track metadata for repeated searches
 TRACK_CACHE = TTLCache(maxsize=100, ttl=3600)
 
-# Load a raw Cookie header string from youtube_cookies.txt. Returns None if the
-# file is missing.
-def load_cookie() -> Optional[str]:
-    path = os.getenv("YOUTUBE_COOKIES_PATH", "youtube_cookies.txt")
-    if not os.path.isfile(path):
-        logger.warning("Cookies file %s not found, ignoring", path)
-        return None
-    with open(path, "r") as f:
-        return f.read().strip()
-
 # Persist recent search queries to page URLs so we can refresh
 SEARCH_MAP_FILE = "search_map.json"
 try:
@@ -369,7 +359,7 @@ class Music(commands.Cog):
         self.update_activity(guild_id)
 
         # Build youtube_dl options
-        raw_cookie = load_cookie()
+        cookiefile = os.getenv("YOUTUBE_COOKIES_PATH", "youtube_cookies.txt")
         ydl_opts = {
             "format": "bestaudio/best",
             "quiet": True,
@@ -377,7 +367,7 @@ class Music(commands.Cog):
             "geo_bypass": True,
             "nocheckcertificate": True,
             "buffersize": 512,
-            "http_headers": {"Cookie": raw_cookie} if raw_cookie else {},
+            "cookiefile": cookiefile,
         }
 
         if len(search) > 200:
@@ -678,14 +668,14 @@ class Music(commands.Cog):
         """
         Perform a YouTube search and return up to `max_results` items.
         """
-        raw_cookie = load_cookie()
+        cookiefile = os.getenv("YOUTUBE_COOKIES_PATH", "youtube_cookies.txt")
         ydl_opts = {
             "format": "bestaudio",
             "quiet": True,
             "noplaylist": True,
             "geo_bypass": True,
             "nocheckcertificate": True,
-            "http_headers": {"Cookie": raw_cookie} if raw_cookie else {},
+            "cookiefile": cookiefile,
         }
         results = []
 
