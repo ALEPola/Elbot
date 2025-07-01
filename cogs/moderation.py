@@ -29,6 +29,24 @@ class ModerationCog(commands.Cog):
         await interaction.channel.purge(limit=count)
         await interaction.response.send_message(f"🧹 Deleted {count} messages", ephemeral=True)
 
+    @nextcord.slash_command(
+        name="clear_bot_messages",
+        description="Delete recent messages sent by the bot",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def clear_bot_messages(
+        self, interaction: nextcord.Interaction, count: int = 50
+    ):
+        """Remove up to ``count`` recent messages authored by this bot."""
+
+        def is_bot(msg: nextcord.Message) -> bool:
+            return msg.author == self.bot.user
+
+        deleted = await interaction.channel.purge(limit=count, check=is_bot)
+        await interaction.response.send_message(
+            f"🧹 Deleted {len(deleted)} bot messages", ephemeral=True
+        )
+
 
 def setup(bot: commands.Bot):
     bot.add_cog(ModerationCog(bot))

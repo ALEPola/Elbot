@@ -32,7 +32,7 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
   `MUSIC_DL_CONCURRENCY`.
 - **Playlists** – save and load queues with `/playlist_save` and `/playlist_load`.
 - **Diagnostic** – utility commands for bot admins.
-- **Moderation** – `/kick`, `/ban` and `/clear_messages` commands for server admins.
+- **Moderation** – `/kick`, `/ban`, `/clear_messages` and `/clear_bot_messages` commands for server admins.
 - **Portal auto-update** – the Flask portal can report update status and optionally run daily updates.
 
 See `.env.example` for all configuration variables, including `ELBOT_SERVICE` and `PORT` which are used by the management portal.
@@ -234,7 +234,7 @@ Elbot exposes several slash commands once invited to your server:
 - Formula&nbsp;1 commands: `/f1_schedule`, `/f1_countdown`, `/f1_results`,
   `/f1_subscribe` and `/f1_unsubscribe`.
 - Diagnostic commands: `/uptime` and `/ping`.
-- Moderation commands: `/kick`, `/ban` and `/clear_messages`.
+- Moderation commands: `/kick`, `/ban`, `/clear_messages` and `/clear_bot_messages`.
 
 ## Sound assets
 
