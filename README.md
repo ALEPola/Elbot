@@ -40,7 +40,7 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 ## Requirements
 
 - Python 3.9+
-- `ffmpeg` installed and on your `PATH` (required for music commands)
+- `ffmpeg` installed and on your `PATH` (required for music commands; also listed in `requirements.txt`)
 - A Discord bot token
 - An OpenAI API key
 
@@ -112,7 +112,7 @@ To remove the service later run:
 elbot-install-service --remove
 ```
 
-Linux users can run `./scripts/install.sh` to be guided through installing system packages and Python dependencies. Pass `--yes` to skip the prompts and install automatically.
+Linux users can run `./scripts/install.sh` to be guided through installing system packages (including `ffmpeg`) and Python dependencies. Pass `--yes` to skip the prompts and install automatically.
 
 ## Configuration
 
@@ -172,6 +172,8 @@ Build the container and run the bot and portal with Docker Compose:
 ```bash
 docker compose up --build
 ```
+
+The Dockerfile installs `ffmpeg` automatically so music playback works out of the box.
 
 The portal exposes port `8000` by default and can be changed with the `PORT`
 environment variable.
