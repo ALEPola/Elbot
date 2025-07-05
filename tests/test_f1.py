@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import warnings
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 import aiohttp
@@ -87,8 +88,15 @@ def test_fetch_events_client_error(monkeypatch):
     _setup_config(monkeypatch)
     from cogs import F1 as f1
 
-    async def raise_error(*a, **k):
-        raise aiohttp.ClientError("boom")
+    def raise_error(self, url, *a, **k):
+        class Resp:
+            async def __aenter__(self_inner):
+                raise aiohttp.ClientError("boom")
+
+            async def __aexit__(self_inner, exc_type, exc, tb):
+                pass
+
+        return Resp()
 
     monkeypatch.setattr(aiohttp.ClientSession, "get", raise_error)
 
@@ -122,7 +130,7 @@ async def test_fetch_events_webcal(monkeypatch):
         "END:VCALENDAR"
     )
 
-    async def dummy_get(self, url, *a, **k):
+    def dummy_get(self, url, *a, **k):
         class Resp:
             async def text(self):
                 return sample_ics
@@ -150,9 +158,115 @@ def test_fetch_race_results_client_error(monkeypatch):
     _setup_config(monkeypatch)
     from cogs import F1 as f1
 
-    async def raise_error(*a, **k):
-        raise aiohttp.ClientError("boom")
+    def raise_error(self, url, *a, **k):
+        class Resp:
+            async def __aenter__(self_inner):
+                raise aiohttp.ClientError("boom")
+
+            async def __aexit__(self_inner, exc_type, exc, tb):
+                pass
+
+        return Resp()
 
     monkeypatch.setattr(aiohttp.ClientSession, "get", raise_error)
     race, results = asyncio.run(f1.fetch_race_results())
     assert race is None and results == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_events_no_unclosed_warning(monkeypatch):
+    _setup_config(monkeypatch)
+    from aiohttp import web
+
+    sample_ics = (
+        "BEGIN:VCALENDAR\n"
+        "BEGIN:VEVENT\n"
+        "SUMMARY:Test GP\n"
+        "DTSTART:29991231T000000Z\n"
+        "END:VEVENT\n"
+        "END:VCALENDAR"
+    )
+
+    async def handler(request):
+        return web.Response(text=sample_ics)
+
+    app = web.Application()
+    app.router.add_get("/f1.ics", handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+
+    config.Config.ICS_URL = f"http://localhost:{port}/f1.ics"
+    from cogs import F1 as f1
+    importlib.reload(f1)
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        events = await f1.fetch_events(limit=1)
+        await f1.close_session()
+
+    await runner.cleanup()
+
+    assert events and events[0][1] == "Test GP"
+    assert not any("Unclosed" in str(wr.message) for wr in w)
+
+
+@pytest.mark.asyncio
+async def test_fetch_race_results_no_unclosed_warning(monkeypatch):
+    _setup_config(monkeypatch)
+    from aiohttp import web
+
+    data = {
+        "MRData": {
+            "RaceTable": {
+                "Races": [
+                    {
+                        "raceName": "Test Race",
+                        "Results": [
+                            {
+                                "position": "1",
+                                "Driver": {"familyName": "Driver"},
+                                "Constructor": {"name": "Team"},
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+
+    async def handler(request):
+        return web.json_response(data)
+
+    app = web.Application()
+    app.router.add_get("/results.json", handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+
+    results_url = f"http://localhost:{port}/results.json"
+    orig_get = aiohttp.ClientSession.get
+
+    def local_get(self, url, *a, **k):
+        if url == "https://ergast.com/api/f1/current/last/results.json":
+            url = results_url
+        return orig_get(self, url, *a, **k)
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", local_get)
+    from cogs import F1 as f1
+    importlib.reload(f1)
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        race_name, results = await f1.fetch_race_results()
+        await f1.close_session()
+
+    await runner.cleanup()
+
+    assert race_name == "Test Race"
+    assert results[0] == ("1", "Driver", "Team")
+    assert not any("Unclosed" in str(wr.message) for wr in w)
