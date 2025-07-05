@@ -200,9 +200,15 @@ dependencies are installed you can launch it with:
 elbot-portal
 ```
 
-Open your browser to <http://localhost:8000> (or whatever you set `PORT` to).
-The portal lets you view logs, switch Git branches and run the `update.sh`
-script. It also provides a button to restart the bot service.
+Open your browser to <http://localhost:8000> by default. The listening port can
+be changed with the `PORT` environment variable. The portal lets you view logs,
+switch Git branches and run the `update.sh` script. It also provides a button
+to restart the bot service.
+
+### PORT
+
+Set `PORT` before launching the portal if you want it to listen on a different
+TCP port.
 
 ### ELBOT_SERVICE
 
@@ -210,6 +216,20 @@ The portal restarts the bot via `systemctl`. It targets the service
 specified by the `ELBOT_SERVICE` environment variable, which defaults to
 `elbot.service`. Set this variable before launching the portal if your
 systemd unit has a different name.
+
+### AUTO_UPDATE
+
+When `AUTO_UPDATE` is set to `1` the portal spawns a background thread that
+runs `scripts/update.sh` once per day and restarts the bot service after each
+update. This allows unattended updates and restarts.
+
+To enable the feature temporarily:
+
+```bash
+AUTO_UPDATE=1 elbot-portal
+```
+
+Or export the variable in your shell for persistent use.
 
 ## Architecture overview
 
