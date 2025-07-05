@@ -97,13 +97,9 @@ async def fetch_events(limit=10):
         return []
     try:
         session = await get_session()
-        resp = await session.get(ICS_URL)
-        try:
+        async with session.get(ICS_URL) as resp:
             resp.raise_for_status()
             cal = Calendar.from_ical(await resp.text())
-        finally:
-            if hasattr(resp, "release"):
-                await resp.release()
     except aiohttp.ClientError as e:
         logger.error("Failed to fetch F1 schedule: %s", e)
         return []
@@ -131,13 +127,9 @@ async def fetch_race_results():
     url = "https://ergast.com/api/f1/current/last/results.json"
     try:
         session = await get_session()
-        resp = await session.get(url)
-        try:
+        async with session.get(url) as resp:
             resp.raise_for_status()
             data = await resp.json()
-        finally:
-            if hasattr(resp, "release"):
-                await resp.release()
     except aiohttp.ClientError as e:
         logger.error("Failed to fetch F1 results: %s", e)
         return None, []
