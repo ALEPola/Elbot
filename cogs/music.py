@@ -316,9 +316,14 @@ class Music(commands.Cog):
             logger.warning("FFmpeg not found in PATH; music playback will fail")
 
     def cog_unload(self):
-        """Cancel all timeout checker tasks when the cog is unloaded."""
+        """Cancel timeout tasks and disconnect from any voice channels."""
         for task in self.timeout_tasks.values():
             task.cancel()
+
+        for guild in self.bot.guilds:
+            voice = getattr(guild, "voice_client", None)
+            if voice:
+                self.bot.loop.create_task(voice.disconnect())
 
     def get_lock(self, guild_id: int) -> asyncio.Lock:
         """
