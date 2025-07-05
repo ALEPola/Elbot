@@ -1,1 +1,7 @@
-SID=g.a000yghqbzknzotczt8bkPk9HtjltFmkNETkPE9wC_eyz9ApUXgmDsetDF70AI7xt2T_ZdQyMAACgYKARQSARUSFQHGX2MiCz-7iJczaZNX3liK5qp7VRoVAUF8yKoT7JkmRyBS-31RCsXykrD-0076; SSID=ApKRCh8CKsyH9v0; SAPISID=gy0rHqCC5NNRiAjAPxGko1LsnNEPpEwL; LOGIN_INFO=AFmmF2swRQI...<your full LOGIN_INFO>; HSID=AN0vD53ttU4E2ZC; VISITOR_INFO1_LIVE=Gqw1LfLQqUg; YSC=Hb6mDp9uLcc;
+# Netscape HTTP Cookie File
+# This file was generated for tests. Replace with your own export if needed.
+.youtube.com	TRUE	/	FALSE	0	LOGIN_INFO	AFmmF2swRAIgFABDb9ggzyJ_XvQZjH6nyJHgZAcXCG7bb_WaasLmX9YCIGnRlPOb7uWjbn5l8RQ3H4Gq8mLndE5CLr_JKi23OY8g
+.youtube.com	TRUE	/	FALSE	0	SID	g.a000swhqb_A09beX0cxuZ_Ud-unrrm-3u12rjhimtsXZhmqtdkBBejx6zYH_EyrhR8m1L3Za0gACgYKAagSARUSFQHGX2MibtKPJxTa1dlCmLNyU46wORoVAUF8yKo2qtpYZoPq3X2MwytYea6W0076
+.youtube.com	TRUE	/	FALSE	0	SSID	A7HwvcKBT9zco1_MJ
+.youtube.com	TRUE	/	FALSE	0	SAPISID	6OCBW0NdrbRPP46Z/AFW56OD3jRij0Rjf7
+.youtube.com	TRUE	/	FALSE	0	VISITOR_INFO1_LIVE	h2TXN5xfiFU
