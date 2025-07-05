@@ -1,3 +1,9 @@
+"""
+Patch nextcord to avoid AttributeError in VoiceClient.poll_voice_ws.
+Nextcord assumes websocket objects expose poll_event, which was removed in websockets>=12.
+This guard mirrors discord.py's fix for similar issues (see nextcord/nextcord#1262
+and Rapptz/discord.py#10207).
+"""
 import asyncio
 
 from nextcord.voice_client import (
