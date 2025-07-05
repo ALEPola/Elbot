@@ -34,7 +34,7 @@ QUEUE_FILE = "queue.json"
 TRACK_CACHE = TTLCache(maxsize=100, ttl=3600)
 
 # Load a raw Cookie header string from youtube_cookies.txt. Returns None if
-# the file is missing.
+# the file is missing. (Kept for backward compatibility)
 def load_cookie() -> Optional[str]:
     path = os.getenv("YOUTUBE_COOKIES_PATH", "youtube_cookies.txt")
     if not os.path.isfile(path):
@@ -42,6 +42,14 @@ def load_cookie() -> Optional[str]:
         return None
     with open(path, "r") as f:
         return f.read().strip()
+
+# Return the cookie file path if available, otherwise ``None``.
+def get_cookiefile_path() -> Optional[str]:
+    path = os.getenv("YOUTUBE_COOKIES_PATH", "youtube_cookies.txt")
+    if not os.path.isfile(path):
+        logger.warning("Cookies file %s not found, ignoring", path)
+        return None
+    return path
 
 # Persist recent search queries to page URLs so we can refresh
 SEARCH_MAP_FILE = "search_map.json"
@@ -61,9 +69,12 @@ def save_search_map():
 
 def extract_info(query: str, ydl_opts: dict):
     """
-    Extract video information from a query using youtube_dl.
-    Returns a list of track dicts or (None, error_message).
+    Extract video information from a query using ``youtube_dl``.
+    Returns a list of track dicts or ``(None, error_message)``.
     """
+    cookie_file = get_cookiefile_path()
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
     # Quick check for unsupported services
     if "spotify" in query.lower() or "soundcloud" in query.lower():
         logger.info(
@@ -374,7 +385,7 @@ class Music(commands.Cog):
         self.update_activity(guild_id)
 
         # Build youtube_dl options
-        raw_cookie = load_cookie()
+        cookie_file = get_cookiefile_path()
         ydl_opts = {
             "format": "bestaudio/best",
             "quiet": True,
@@ -383,8 +394,8 @@ class Music(commands.Cog):
             "nocheckcertificate": True,
             "buffersize": 512,
         }
-        if raw_cookie:
-            ydl_opts["http_headers"] = {"Cookie": raw_cookie}
+        if cookie_file:
+            ydl_opts["cookiefile"] = cookie_file
 
         if len(search) > 200:
             await interaction.followup.send("❌ Search query too long.", ephemeral=True)
@@ -684,7 +695,7 @@ class Music(commands.Cog):
         """
         Perform a YouTube search and return up to `max_results` items.
         """
-        raw_cookie = load_cookie()
+        cookie_file = get_cookiefile_path()
         ydl_opts = {
             "format": "bestaudio",
             "quiet": True,
@@ -692,8 +703,8 @@ class Music(commands.Cog):
             "geo_bypass": True,
             "nocheckcertificate": True,
         }
-        if raw_cookie:
-            ydl_opts["http_headers"] = {"Cookie": raw_cookie}
+        if cookie_file:
+            ydl_opts["cookiefile"] = cookie_file
         results = []
 
         def run_search():
