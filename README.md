@@ -28,7 +28,6 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 - **Music** – stream audio from YouTube via a Lavalink server. Requires
   `ffmpeg` installed and Lavalink running. Use the `/play`, `/skip` and `/stop`
   commands to control playback.
-- **Playlists** – save and load queues with `/playlist_save` and `/playlist_load`.
 - **Diagnostic** – utility commands for bot admins.
 - **Moderation** – `/kick`, `/ban`, `/clear_messages` and `/clear_bot_messages` commands for server admins.
 - **Portal auto-update** – the Flask portal can report update status and optionally run daily updates.
@@ -246,8 +245,7 @@ Elbot exposes several slash commands once invited to your server:
 
 - `/chat`, `/chat_reset` and `/chat_summary` – converse with the bot and view a summary.
 - `/dalle` – generate an image from a text prompt.
-- Music queue commands: `/play`, `/skip`, `/pause`, `/resume`, `/queue`,
-  `/stop`, plus playlist management (`/playlist_save`, `/playlist_load`, `/playlist_list`, `/playlist_delete`).
+- Music commands: `/play`, `/skip` and `/stop`.
 - Formula&nbsp;1 commands: `/f1_schedule`, `/f1_countdown`, `/f1_results`,
   `/f1_subscribe` and `/f1_unsubscribe`.
 - Diagnostic commands: `/uptime` and `/ping`.
