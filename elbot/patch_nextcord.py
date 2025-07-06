@@ -66,5 +66,3 @@ def apply_patch() -> None:
                     continue
 
     VoiceClient.poll_voice_ws = patched_poll_voice_ws
-
-
