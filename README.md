@@ -292,6 +292,9 @@ Elbot exposes several slash commands once invited to your server:
 - `/chat`, `/chat_reset` and `/chat_summary` – converse with the bot and view a summary.
 - `/dalle` – generate an image from a text prompt.
 - Music commands: `/play`, `/skip` and `/stop`.
+- Optional `/moan` – plays a moan sound effect from
+  `sounds/56753004_girl-moaning_by_a-sfx_preview.mp3` if present. You must
+  supply this file yourself because it is not included in the repository.
 - Formula&nbsp;1 commands: `/f1_schedule`, `/f1_countdown`, `/f1_results`,
   `/f1_subscribe` and `/f1_unsubscribe`.
 - Diagnostic commands: `/uptime` and `/ping`.
