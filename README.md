@@ -10,14 +10,15 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 4. [Installation](#installation)
 5. [Configuration](#configuration)
 6. [Running the bot](#running-the-bot)
-7. [Docker](#docker)
-8. [Windows notes](#windows-notes)
-9. [Updating](#updating)
-10. [Web Portal](#web-portal)
-11. [Architecture overview](#architecture-overview)
-12. [Command summary](#command-summary)
-13. [Sound assets](#sound-assets)
-14. [Testing](#testing)
+7. [Running Lavalink](#running-lavalink)
+8. [Docker](#docker)
+9. [Windows notes](#windows-notes)
+10. [Updating](#updating)
+11. [Web Portal](#web-portal)
+12. [Architecture overview](#architecture-overview)
+13. [Command summary](#command-summary)
+14. [Sound assets](#sound-assets)
+15. [Testing](#testing)
 
 ## Features
 
@@ -161,6 +162,28 @@ You can also use the helper script:
 ```bash
 ./scripts/run.sh
 ```
+
+## Running Lavalink
+
+The music cog expects a Lavalink server running on Java 17 or higher. You can
+download `Lavalink.jar` from the [releases page](https://github.com/freyacodes/Lavalink/releases)
+and start it manually:
+
+```bash
+java -jar Lavalink.jar
+```
+
+Docker users can launch Lavalink with:
+
+```bash
+docker run -p 2333:2333 \
+  -e SERVER_PORT=2333 \
+  -e LAVALINK_SERVER_PASSWORD=youshallnotpass \
+  ghcr.io/lavalink-devs/lavalink:latest
+```
+
+Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your `.env` file
+to match your Lavalink instance.
 
 ## Docker
 
