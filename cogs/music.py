@@ -64,7 +64,7 @@ class Music(commands.Cog):
             voice = None
 
         if not voice:
-            voice = await channel.connect(cls=wavelink.Player)
+            voice = await wavelink.Player.connect(guild_id=interaction.guild.id, channel=channel)
 
         return voice
 
