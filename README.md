@@ -190,6 +190,13 @@ setup, download `Lavalink.jar` from the
 [releases page](https://github.com/freyacodes/Lavalink/releases) and run it
 with `java -jar Lavalink.jar`.
 
+`scripts/install.sh` can optionally install `lavalink.service` so the server
+runs automatically:
+
+```bash
+sudo systemctl status lavalink.service
+```
+
 Docker users can launch Lavalink with:
 
 ```bash
