@@ -172,11 +172,24 @@ Run the helper script to download the JAR and start the server:
 ./scripts/lavalink.sh start
 ```
 
+Stop it later with:
+
+```bash
+./scripts/lavalink.sh stop
+```
+
 This creates `lavalink/` in the project root and writes an `application.yml`
 using the `LAVALINK_*` values from your `.env` file.  If you prefer manual
 setup, download `Lavalink.jar` from the
 [releases page](https://github.com/freyacodes/Lavalink/releases) and run it
 with `java -jar Lavalink.jar`.
+
+`scripts/install.sh` can optionally install `lavalink.service` so the server
+runs automatically:
+
+```bash
+sudo systemctl status lavalink.service
+```
 
 Docker users can launch Lavalink with:
 

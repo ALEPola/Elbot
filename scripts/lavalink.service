@@ -1,0 +1,14 @@
+[Unit]
+Description=Lavalink Audio Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT_DIR__/lavalink
+ExecStart=__ROOT_DIR__/scripts/lavalink.sh start
+ExecStop=__ROOT_DIR__/scripts/lavalink.sh stop
+EnvironmentFile=__ROOT_DIR__/.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

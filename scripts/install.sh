@@ -139,5 +139,21 @@ if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
     "$PYTHON" -m elbot.service_install
 fi
 
+if command -v systemctl >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/lavalink.service" ]; then
+    if prompt_yes_no "Install, enable and start Lavalink as a service?" Y; then
+        if sudo -n true 2>/dev/null; then
+            SUDO="sudo -n"
+        else
+            SUDO="sudo"
+        fi
+        sed "s|__ROOT_DIR__|$ROOT_DIR|g" "$ROOT_DIR/scripts/lavalink.service" \
+            | $SUDO tee /etc/systemd/system/lavalink.service >/dev/null
+        $SUDO systemctl daemon-reload
+        $SUDO systemctl enable lavalink.service
+        $SUDO systemctl start lavalink.service
+        echo "Lavalink systemd service installed."
+    fi
+fi
+
 echo "\n[6/6] Installation complete."
 echo "Activate the virtual environment with: source .venv/bin/activate"
