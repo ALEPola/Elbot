@@ -39,6 +39,7 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 
 - Python 3.9+
 - `ffmpeg` installed and on your `PATH` (required for music commands; also listed in `requirements.txt`)
+- A running [Lavalink](https://github.com/lavalink-devs/Lavalink) server for music playback
 - A Discord bot token
 - An OpenAI API key
 
@@ -162,6 +163,15 @@ You can also use the helper script:
 ./scripts/run.sh
 ```
 
+Ensure a Lavalink server is running before using music commands. The
+[`lavalink`](https://github.com/lavalink-devs/Lavalink) container can be
+started with:
+
+```bash
+docker run -p 2333:2333 -e LAVALINK_SERVER_PASSWORD=youshallnotpass \
+  ghcr.io/lavalink-devs/lavalink:4
+```
+
 ## Docker
 
 Build the container and run the bot and portal with Docker Compose:
@@ -169,6 +179,8 @@ Build the container and run the bot and portal with Docker Compose:
 ```bash
 docker compose up --build
 ```
+
+This starts the bot, management portal and a Lavalink instance for music playback.
 
 The Dockerfile installs `ffmpeg` automatically so music playback works out of the box.
 

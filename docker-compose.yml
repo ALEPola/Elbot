@@ -4,6 +4,13 @@ services:
     build: .
     command: python -m elbot.main
     env_file: .env
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    environment:
+      SERVER_PORT: ${LAVALINK_PORT:-2333}
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+    ports:
+      - "${LAVALINK_PORT:-2333}:${LAVALINK_PORT:-2333}"
   portal:
     build: .
     command: elbot-portal

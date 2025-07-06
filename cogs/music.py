@@ -28,9 +28,13 @@ class Music(commands.Cog):
 
         uri = f"http://{Config.LAVALINK_HOST}:{Config.LAVALINK_PORT}"
         self.node = wavelink.Node(uri=uri, password=Config.LAVALINK_PASSWORD)
-
-        await wavelink.Pool.connect(client=self.bot, nodes=[self.node])
-        logger.info("Connected to Lavalink at %s", uri)
+        try:
+            await wavelink.Pool.connect(client=self.bot, nodes=[self.node])
+        except Exception as exc:  # pragma: no cover - network error handling
+            logger.error("Failed to connect to Lavalink at %s: %s", uri, exc)
+            self.node = None
+        else:
+            logger.info("Connected to Lavalink at %s", uri)
 
     async def cog_unload(self) -> None:
         if self.node:
