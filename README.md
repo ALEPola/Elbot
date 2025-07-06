@@ -205,6 +205,43 @@ docker run -p 2333:2333 \
 Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your `.env` file
 to match your Lavalink instance.
 
+### Systemd service
+
+To keep Lavalink running automatically, create `/etc/systemd/system/lavalink.service`:
+
+```ini
+[Unit]
+Description=Lavalink Audio Node
+After=network.target
+
+[Service]
+User=alex
+WorkingDirectory=/home/alex/Elbot/lavalink
+ExecStart=/usr/bin/java -jar Lavalink.jar
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Adjust `User`, `WorkingDirectory` and the paths to Java and `Lavalink.jar` as needed. Then enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable lavalink.service
+sudo systemctl start lavalink.service
+```
+
+Optionally edit `/etc/systemd/system/elbot.service` and add under `[Unit]`:
+
+```ini
+Requires=lavalink.service
+After=lavalink.service
+```
+
+This ensures Elbot waits for Lavalink and keeps it running when the bot restarts.
+
 ## Docker
 
 Build the container and run the bot and portal with Docker Compose:
