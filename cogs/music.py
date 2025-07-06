@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import logging
+import asyncio
 import nextcord
 from nextcord.ext import commands
 import wavelink
@@ -20,6 +21,7 @@ class Music(commands.Cog):
         self.bot = bot
         self.node: wavelink.Node | None = None
         self.connect_task = bot.loop.create_task(self.connect_nodes())
+        self._cleanup_lock = asyncio.Lock()
 
     async def connect_nodes(self) -> None:
         """Connect to the Lavalink node configured in :class:`Config`."""
@@ -36,9 +38,18 @@ class Music(commands.Cog):
         else:
             logger.info("Connected to Lavalink at %s", uri)
 
+    async def close_node(self) -> None:
+        """Close the Lavalink connection if active."""
+        async with self._cleanup_lock:
+            if self.node:
+                try:
+                    await wavelink.Pool.close()
+                finally:
+                    self.node = None
+                    logger.info("Lavalink connection closed")
+
     async def cog_unload(self) -> None:
-        if self.node:
-            await wavelink.Pool.close()
+        await self.close_node()
 
         for guild in self.bot.guilds:
             if guild.voice_client:
@@ -62,6 +73,9 @@ class Music(commands.Cog):
         if voice and not isinstance(voice, wavelink.Player):
             await voice.disconnect()
             voice = None
+
+        if not self.node:
+            await self.connect_nodes()
 
         if not voice:
             voice = await channel.connect(cls=wavelink.Player)
@@ -100,7 +114,7 @@ class Music(commands.Cog):
         await player.skip()
         await interaction.response.send_message("⏭ Skipped.", ephemeral=True)
 
-    @nextcord.slash_command(name="stop", description="Stop playback and clear the queue")
+    @nextcord.slash_command(name="stop", description="Stop playback and disconnect")
     async def stop(self, interaction: nextcord.Interaction) -> None:
         player = interaction.guild.voice_client
 
@@ -110,7 +124,9 @@ class Music(commands.Cog):
 
         player.queue.clear()
         await player.stop()
-        await interaction.response.send_message("🛑 Stopped.", ephemeral=True)
+        await player.disconnect()
+        await self.close_node()
+        await interaction.response.send_message("🛑 Stopped and cleaned up.", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload) -> None:
@@ -119,6 +135,9 @@ class Music(commands.Cog):
         if player and player.queue:
             next_track = await player.queue.get()
             await player.play(next_track)
+        elif player and not player.queue:
+            await player.disconnect()
+            await self.close_node()
 
 
 def setup(bot: commands.Bot) -> None:
