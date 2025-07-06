@@ -163,14 +163,27 @@ You can also use the helper script:
 ./scripts/run.sh
 ```
 
-Ensure a Lavalink server is running before using music commands. The
-[`lavalink`](https://github.com/lavalink-devs/Lavalink) container can be
-started with:
+## Running Lavalink
+
+The music cog expects a Lavalink server running on Java 17 or higher. You can
+download `Lavalink.jar` from the [releases page](https://github.com/freyacodes/Lavalink/releases)
+and start it manually:
 
 ```bash
-docker run -p 2333:2333 -e LAVALINK_SERVER_PASSWORD=youshallnotpass \
-  ghcr.io/lavalink-devs/lavalink:4
+java -jar Lavalink.jar
 ```
+
+Docker users can launch Lavalink with:
+
+```bash
+docker run -p 2333:2333 \
+  -e SERVER_PORT=2333 \
+  -e LAVALINK_SERVER_PASSWORD=youshallnotpass \
+  ghcr.io/lavalink-devs/lavalink:latest
+```
+
+Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your `.env` file
+to match your Lavalink instance.
 
 ## Docker
 
