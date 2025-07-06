@@ -29,9 +29,13 @@ class Music(commands.Cog):
         await self.bot.wait_until_ready()
 
         uri = f"http://{Config.LAVALINK_HOST}:{Config.LAVALINK_PORT}"
-        self.node = wavelink.Node(uri=uri, password=Config.LAVALINK_PASSWORD)
         try:
-            await wavelink.Pool.connect(client=self.bot, nodes=[self.node])
+            self.node = await wavelink.NodePool.create_node(
+                bot=self.bot,
+                host=Config.LAVALINK_HOST,
+                port=Config.LAVALINK_PORT,
+                password=Config.LAVALINK_PASSWORD,
+            )
         except Exception as exc:  # pragma: no cover - network error handling
             logger.error("Failed to connect to Lavalink at %s: %s", uri, exc)
             self.node = None
@@ -43,7 +47,8 @@ class Music(commands.Cog):
         async with self._cleanup_lock:
             if self.node:
                 try:
-                    await wavelink.Pool.close()
+                    await self.node.disconnect()
+                    await self.node.cleanup()
                 finally:
                     self.node = None
                     logger.info("Lavalink connection closed")
@@ -90,12 +95,13 @@ class Music(commands.Cog):
         if not player:
             return
 
-        tracks = await wavelink.Pool.fetch_tracks(query)
+        node = wavelink.NodePool.get_node()
+        tracks = await node.get_tracks(wavelink.YouTubeTrack, query)
         if not tracks:
             await interaction.followup.send("No results found.", ephemeral=True)
             return
 
-        track = tracks[0] if not isinstance(tracks, wavelink.Playlist) else tracks.tracks[0]
+        track = tracks[0]
 
         await player.queue.put_wait(track)
         if not player.playing:
