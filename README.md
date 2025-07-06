@@ -19,6 +19,7 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 13. [Command summary](#command-summary)
 14. [Sound assets](#sound-assets)
 15. [Testing](#testing)
+16. [Detailed installation guide](docs/INSTALLATION.md)
 
 ## Features
 
@@ -76,6 +77,8 @@ elbot-install-service
 
 Windows users can follow the manual steps below and use `elbot-install-service`
 to create a service after installing the dependencies.
+
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for a comprehensive cross-platform guide.
 
 ## Installation
 
