@@ -5,6 +5,7 @@ import logging
 
 logger = logging.getLogger("elbot.moderation")
 
+
 class ModerationCog(commands.Cog):
     """Basic moderation commands."""
 
@@ -13,9 +14,17 @@ class ModerationCog(commands.Cog):
 
     @nextcord.slash_command(name="kick", description="Kick a member")
     @commands.has_permissions(kick_members=True)
-    async def kick(self, interaction: nextcord.Interaction, member: nextcord.Member, reason: str = "No reason provided"):
+    async def kick(
+        self,
+        interaction: nextcord.Interaction,
+        member: nextcord.Member,
+        reason: str = "No reason provided",
+    ) -> None:
         await member.kick(reason=reason)
-        await interaction.response.send_message(f"👢 Kicked {member.display_name}", ephemeral=True)
+        await interaction.response.send_message(
+            f"👢 Kicked {member.display_name}",
+            ephemeral=True,
+        )
 
     @nextcord.slash_command(name="ban", description="Ban a member")
     @commands.has_permissions(ban_members=True)

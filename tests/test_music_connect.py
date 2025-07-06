@@ -73,6 +73,7 @@ def test_ensure_voice_calls_player_connect(monkeypatch):
     class DummyChannel:
         def __init__(self, guild):
             self.guild = guild
+
         async def connect(self, *, cls):
             player = cls(bot, self)
             await player.connect(guild_id=self.guild.id, channel=self)

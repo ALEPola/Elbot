@@ -9,6 +9,23 @@ import nextcord
 from nextcord.ext import commands
 import wavelink
 
+if not hasattr(wavelink, "NodePool"):
+    class _NodePool:
+        """Compatibility layer for Wavelink >=3."""
+
+        @staticmethod
+        async def create_node(*, bot, host, port, password, **kwargs):
+            uri = f"http://{host}:{port}"
+            node = wavelink.Node(uri=uri, password=password, client=bot, **kwargs)
+            await wavelink.Pool.connect(nodes=[node], client=bot)
+            return node
+
+        @staticmethod
+        def get_node(*args, **kwargs):  # pragma: no cover - thin wrapper
+            return wavelink.Pool.get_node(*args, **kwargs)
+
+    wavelink.NodePool = _NodePool
+
 from elbot.config import Config
 
 logger = logging.getLogger("elbot.music")
