@@ -189,6 +189,8 @@ runs automatically:
 
 ```bash
 sudo systemctl status lavalink.service
+sudo systemctl stop lavalink.service   # stop if Lavalink is already running
+sudo systemctl disable lavalink.service   # optional: prevent automatic start
 ```
 
 Docker users can launch Lavalink with:
