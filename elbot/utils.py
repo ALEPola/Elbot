@@ -1,6 +1,7 @@
 # elbot/utils.py
 
 import os
+from pathlib import Path
 from nextcord.ext import commands
 
 
@@ -12,7 +13,7 @@ def load_all_cogs(bot: commands.Bot, cogs_dir: str = "cogs"):
         if not filename.endswith(".py") or filename.startswith("_"):
             continue
         module_name = filename[:-3]
-        extension = f"{cogs_dir.replace('/', '.')}.{module_name}"
+        extension = ".".join((*Path(cogs_dir).parts, module_name))
         try:
             bot.load_extension(extension)
             print(f"✅ Loaded cog: {extension}")
