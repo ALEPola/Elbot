@@ -25,11 +25,9 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 - **Chat summaries** – `/chat_summary` provides an OpenAI generated recap of your conversation and chat history now persists across restarts.
 - **DALL·E** – generate images using the `/dalle` command.
 - **F1** – receive Formula&nbsp;1 schedules, countdowns and race results. Set `ICS_URL` for the calendar feed and `LOCAL_TIMEZONE` for your local zone.
-- **Music** – play audio from YouTube links. Requires `ffmpeg` installed. Track
-  info is cached so repeated `/play` queries skip the YouTube search. Providing
-  a direct link is fastest. Recent searches are stored on disk so stream URLs
-  can be refreshed quickly. Download concurrency can be adjusted with
-  `MUSIC_DL_CONCURRENCY`.
+- **Music** – stream audio from YouTube via a Lavalink server. Requires
+  `ffmpeg` installed and Lavalink running. Use the `/play`, `/skip` and `/stop`
+  commands to control playback.
 - **Playlists** – save and load queues with `/playlist_save` and `/playlist_load`.
 - **Diagnostic** – utility commands for bot admins.
 - **Moderation** – `/kick`, `/ban`, `/clear_messages` and `/clear_bot_messages` commands for server admins.
@@ -123,13 +121,12 @@ variables:
 * `DISCORD_BOT_TOKEN` &ndash; your Discord bot token
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
 
-Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `YOUTUBE_COOKIES_PATH`,
-`OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID`, `LOCAL_TIMEZONE` and `MUSIC_DL_CONCURRENCY`.
+Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `LAVALINK_HOST`,
+`LAVALINK_PORT`, `LAVALINK_PASSWORD`, `OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID`,
+and `LOCAL_TIMEZONE`.
 `ICS_URL` may use a `webcal://` address. It will be converted to `https://` automatically.
 `LOCAL_TIMEZONE` should be an [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) such as `America/New_York`.
 See `.env.example` for an example Formula&nbsp;1 feed and common timezone values.
-
-`YOUTUBE_COOKIES_PATH` should point to a cookies file exported from your browser (Netscape format) if you need authenticated YouTube access. Replace the provided `youtube_cookies.txt` with your own file if required.
 
 Common US timezones include:
 

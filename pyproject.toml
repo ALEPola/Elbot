@@ -17,7 +17,7 @@ dependencies = [
     "textblob",
     "python-dotenv",
     "psutil",
-    "yt-dlp",
+    "wavelink",
     "Flask",
     "icalendar",
     "aiohttp",
