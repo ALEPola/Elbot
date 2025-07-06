@@ -27,16 +27,29 @@ def test_music_cog_unload_disconnects_voice(monkeypatch):
 
     monkeypatch.setattr(commands.Bot, "guilds", property(lambda self: guilds))
 
-    closed = False
+    async def fake_wait_until_ready(self):
+        return None
 
-    async def fake_close():
-        nonlocal closed
-        closed = True
+    monkeypatch.setattr(commands.Bot, "wait_until_ready", fake_wait_until_ready)
 
-    monkeypatch.setattr(music_cog.wavelink.Pool, "close", fake_close)
+    closed = {"disconnect": False, "cleanup": False}
+
+    class DummyNode:
+        async def disconnect(self):
+            closed["disconnect"] = True
+
+        async def cleanup(self):
+            closed["cleanup"] = True
+
+    async def fake_create_node(*a, **k):
+        return DummyNode()
+
+    monkeypatch.setattr(music_cog.wavelink.NodePool, "create_node", fake_create_node)
+
+    loop.run_until_complete(cog.connect_task)
 
     loop.run_until_complete(cog.cog_unload())
 
-    assert closed
+    assert closed["disconnect"] and closed["cleanup"]
     assert vc.disconnected
     loop.close()

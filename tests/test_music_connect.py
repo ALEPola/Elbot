@@ -9,12 +9,13 @@ from cogs import music as music_cog
 def test_connect_nodes_uses_env(monkeypatch):
     recorded = {}
 
-    async def fake_connect(*, client, nodes):
-        node = list(nodes)[0]
-        recorded['uri'] = node.uri
-        recorded['password'] = node.password
+    async def fake_create_node(*, bot, host, port, password, **_):
+        recorded['host'] = host
+        recorded['port'] = port
+        recorded['password'] = password
+        return object()
 
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'connect', fake_connect)
+    monkeypatch.setattr(music_cog.wavelink.NodePool, 'create_node', fake_create_node)
     monkeypatch.setenv('LAVALINK_HOST', 'example.com')
     monkeypatch.setenv('LAVALINK_PORT', '9999')
     monkeypatch.setenv('LAVALINK_PASSWORD', 'secret')
@@ -26,7 +27,8 @@ def test_connect_nodes_uses_env(monkeypatch):
 
     cog = music_cog.Music(bot)
     loop.run_until_complete(cog.connect_task)
-    assert recorded['uri'] == 'http://example.com:9999'
+    assert recorded['host'] == 'example.com'
+    assert recorded['port'] == 9999
     assert recorded['password'] == 'secret'
     loop.close()
 
@@ -47,12 +49,12 @@ def test_ensure_voice_calls_player_connect(monkeypatch):
             self._inactive_player_timeout = None
             self.client = bot
 
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'get_node', lambda *a, **k: DummyNode())
+    monkeypatch.setattr(music_cog.wavelink.NodePool, 'get_node', lambda *a, **k: DummyNode())
 
-    async def fake_pool_connect(*a, **k):
-        return None
+    async def fake_create_node(*a, **k):
+        return DummyNode()
 
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'connect', fake_pool_connect)
+    monkeypatch.setattr(music_cog.wavelink.NodePool, 'create_node', fake_create_node)
 
     async def fake_wait_until_ready(self):
         return None
