@@ -20,6 +20,7 @@ def test_music_cog_unload_disconnects_voice(monkeypatch):
     intents = nextcord.Intents.none()
     bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
     cog = music_cog.Music(bot)
+    cog.node = object()
 
     vc = DummyVoiceClient()
     dummy_guild = type("Guild", (), {"voice_client": vc})()
