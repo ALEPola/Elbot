@@ -165,13 +165,18 @@ You can also use the helper script:
 
 ## Running Lavalink
 
-The music cog expects a Lavalink server running on Java 17 or higher. You can
-download `Lavalink.jar` from the [releases page](https://github.com/freyacodes/Lavalink/releases)
-and start it manually:
+The music cog expects a Lavalink server running on Java 17 or higher.
+Run the helper script to download the JAR and start the server:
 
 ```bash
-java -jar Lavalink.jar
+./scripts/lavalink.sh start
 ```
+
+This creates `lavalink/` in the project root and writes an `application.yml`
+using the `LAVALINK_*` values from your `.env` file.  If you prefer manual
+setup, download `Lavalink.jar` from the
+[releases page](https://github.com/freyacodes/Lavalink/releases) and run it
+with `java -jar Lavalink.jar`.
 
 Docker users can launch Lavalink with:
 
