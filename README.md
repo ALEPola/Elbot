@@ -172,6 +172,18 @@ Run the helper script to download the JAR and start the server:
 ./scripts/lavalink.sh start
 ```
 
+If a Lavalink process is already running you can stop it with:
+
+```bash
+./scripts/lavalink.sh stop
+```
+
+After (re)starting Lavalink, restart the bot service with:
+
+```bash
+systemctl restart elbot.service
+```
+
 This creates `lavalink/` in the project root and writes an `application.yml`
 using the `LAVALINK_*` values from your `.env` file.  If you prefer manual
 setup, download `Lavalink.jar` from the

@@ -35,10 +35,23 @@ lavalink:
     password: ${PASSWORD}
 EOF_CONF
 
-if [ "${1:-}" = "start" ]; then
-    echo "Starting Lavalink..."
-    exec java -jar "$JAR"
-else
-    echo "Lavalink prepared in $LAVA_DIR"
-    echo "Run '$0 start' to launch it."
-fi
+case "${1:-}" in
+    start)
+        echo "Starting Lavalink..."
+        exec java -jar "$JAR"
+        ;;
+    stop)
+        echo "Stopping Lavalink..."
+        PIDS=$(pgrep -f "Lavalink.jar" || true)
+        if [ -n "$PIDS" ]; then
+            kill $PIDS
+            echo "Lavalink stopped."
+        else
+            echo "Lavalink is not running."
+        fi
+        ;;
+    *)
+        echo "Lavalink prepared in $LAVA_DIR"
+        echo "Run '$0 start' to launch it or '$0 stop' to terminate.";
+        ;;
+esac
