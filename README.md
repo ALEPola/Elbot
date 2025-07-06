@@ -172,7 +172,7 @@ Run the helper script to download the JAR and start the server:
 ./scripts/lavalink.sh start
 ```
 
-If a Lavalink process is already running you can stop it with:
+Stop an existing Lavalink instance with:
 
 ```bash
 ./scripts/lavalink.sh stop
