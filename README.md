@@ -212,6 +212,8 @@ docker run -p 2333:2333 \
 
 Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your `.env` file
 to match your Lavalink instance.
+The bot reads these variables when connecting, so you can change them without
+restarting Elbot.
 
 ### Systemd service
 
