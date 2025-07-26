@@ -161,6 +161,8 @@ You can also use the helper script:
 
 ```bash
 ./scripts/run.sh
+# Or start Lavalink automatically:
+./scripts/run.sh --with-lavalink
 ```
 
 ## Running Lavalink
@@ -170,6 +172,12 @@ Run the helper script to download the JAR and start the server:
 
 ```bash
 ./scripts/lavalink.sh start
+```
+
+You can also launch both the bot and Lavalink together using:
+
+```bash
+./scripts/run.sh --with-lavalink
 ```
 
 Stop it later with:
