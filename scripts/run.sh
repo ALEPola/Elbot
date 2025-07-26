@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Simple helper to launch Elbot from the project root.
-set -e
+set -euo pipefail
 
 START_LAVALINK=0
 

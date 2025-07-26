@@ -42,6 +42,7 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 - A running [Lavalink](https://github.com/lavalink-devs/Lavalink) server for music playback
 - A Discord bot token
 - An OpenAI API key
+- `wget` or `curl` for the Lavalink download script
 
 ## Quick start
 
@@ -173,6 +174,7 @@ Run the helper script to download the JAR and start the server:
 ```bash
 ./scripts/lavalink.sh start
 ```
+The script uses whichever of `wget` or `curl` is available to fetch `Lavalink.jar`.
 
 You can also launch both the bot and Lavalink together using:
 
