@@ -9,23 +9,6 @@ import nextcord
 from nextcord.ext import commands
 import wavelink
 
-if not hasattr(wavelink, "NodePool"):
-    class _NodePool:
-        """Compatibility layer for Wavelink >=3."""
-
-        @staticmethod
-        async def create_node(*, bot, host, port, password, **kwargs):
-            uri = f"http://{host}:{port}"
-            node = wavelink.Node(uri=uri, password=password, client=bot, **kwargs)
-            await wavelink.Pool.connect(nodes=[node], client=bot)
-            return node
-
-        @staticmethod
-        def get_node(*args, **kwargs):  # pragma: no cover - thin wrapper
-            return wavelink.Pool.get_node(*args, **kwargs)
-
-    wavelink.NodePool = _NodePool
-
 from elbot.config import Config
 
 logger = logging.getLogger("elbot.music")
@@ -45,14 +28,14 @@ class Music(commands.Cog):
 
         await self.bot.wait_until_ready()
 
-        uri = f"http://{Config.LAVALINK_HOST}:{Config.LAVALINK_PORT}"
+        host = os.getenv("LAVALINK_HOST", Config.LAVALINK_HOST)
+        port = int(os.getenv("LAVALINK_PORT", str(Config.LAVALINK_PORT)))
+        password = os.getenv("LAVALINK_PASSWORD", Config.LAVALINK_PASSWORD)
+        uri = f"http://{host}:{port}"
         try:
-            self.node = await wavelink.NodePool.create_node(
-                bot=self.bot,
-                host=Config.LAVALINK_HOST,
-                port=Config.LAVALINK_PORT,
-                password=Config.LAVALINK_PASSWORD,
-            )
+            node = wavelink.Node(identifier="MAIN", uri=uri, password=password, client=self.bot)
+            nodes = await wavelink.Pool.connect(nodes=[node], client=self.bot)
+            self.node = nodes.get("MAIN")
         except Exception as exc:  # pragma: no cover - network error handling
             logger.error("Failed to connect to Lavalink at %s: %s", uri, exc)
             self.node = None
@@ -64,8 +47,7 @@ class Music(commands.Cog):
         async with self._cleanup_lock:
             if self.node:
                 try:
-                    await self.node.disconnect()
-                    await self.node.cleanup()
+                    await self.node.close()
                 finally:
                     self.node = None
                     logger.info("Lavalink connection closed")
@@ -95,6 +77,12 @@ class Music(commands.Cog):
         if voice and not isinstance(voice, wavelink.Player):
             await voice.disconnect()
             voice = None
+        elif voice and voice.channel.id != channel.id:
+            await interaction.response.send_message(
+                "I'm already playing music in another channel.",
+                ephemeral=True,
+            )
+            return None
 
         if not self.node:
             await self.connect_nodes()
@@ -112,13 +100,21 @@ class Music(commands.Cog):
         if not player:
             return
 
-        node = wavelink.NodePool.get_node()
-        tracks = await node.get_tracks(wavelink.YouTubeTrack, query)
-        if not tracks:
-            await interaction.followup.send("No results found.", ephemeral=True)
+        node = wavelink.Pool.get_node()
+        try:
+            search = await wavelink.Playable.search(query, node=node)
+        except Exception as exc:  # pragma: no cover - search failure
+            logger.error("Track search failed: %s", exc)
+            await interaction.followup.send("Search failed.", ephemeral=True)
             return
 
-        track = tracks[0]
+        if isinstance(search, wavelink.Playlist):
+            track = search[0]
+        else:
+            if not search:
+                await interaction.followup.send("No results found.", ephemeral=True)
+                return
+            track = search[0]
 
         await player.queue.put_wait(track)
         if not player.playing:
