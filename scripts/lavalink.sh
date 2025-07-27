@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Prepare and optionally launch a Lavalink server.
-set -e
+set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LAVA_DIR="$ROOT_DIR/lavalink"
@@ -15,7 +15,14 @@ cd "$LAVA_DIR"
 
 if [ ! -f "$JAR" ]; then
     echo "Downloading Lavalink ${VERSION}..."
-    wget "$JAR_URL" -O "$JAR"
+    if command -v wget >/dev/null 2>&1; then
+        wget "$JAR_URL" -O "$JAR"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L "$JAR_URL" -o "$JAR"
+    else
+        echo "Error: wget or curl is required to download Lavalink." >&2
+        exit 1
+    fi
 fi
 
 if [ -f "$ENV_FILE" ]; then

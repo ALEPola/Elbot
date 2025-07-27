@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pull the latest version of Elbot from GitHub
-set -e
+set -euo pipefail
 
 ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"
 BACKUP_FILE="$ENV_FILE.bak"
