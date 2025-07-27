@@ -65,6 +65,15 @@ class Config:
             missing.append("DISCORD_BOT_TOKEN")
         if not cls.OPENAI_API_KEY:
             missing.append("OPENAI_API_KEY")
+        if not os.getenv("LAVALINK_HOST"):
+            missing.append("LAVALINK_HOST")
+        if not os.getenv("LAVALINK_PASSWORD"):
+            missing.append("LAVALINK_PASSWORD")
+        port_var = os.getenv("LAVALINK_PORT")
+        try:
+            int(port_var) if port_var is not None else None
+        except ValueError:
+            missing.append("LAVALINK_PORT")
         if missing:
             raise RuntimeError(
                 f"Missing required environment variables: {', '.join(missing)}"

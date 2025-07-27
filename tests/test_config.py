@@ -7,6 +7,9 @@ import pytest
 def test_config_validate_missing_env(monkeypatch):
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LAVALINK_HOST", "ll")
+    monkeypatch.setenv("LAVALINK_PASSWORD", "pw")
+    monkeypatch.setenv("LAVALINK_PORT", "2333")
     import elbot.config as config
 
     importlib.reload(config)
@@ -17,6 +20,9 @@ def test_config_validate_missing_env(monkeypatch):
 def test_config_validate_pass(monkeypatch):
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
     monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("LAVALINK_HOST", "ll")
+    monkeypatch.setenv("LAVALINK_PASSWORD", "pw")
+    monkeypatch.setenv("LAVALINK_PORT", "2333")
     import elbot.config as config
 
     importlib.reload(config)
@@ -26,6 +32,9 @@ def test_config_validate_pass(monkeypatch):
 def test_invalid_guild_id_logs_warning(monkeypatch, caplog):
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
     monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("LAVALINK_HOST", "ll")
+    monkeypatch.setenv("LAVALINK_PASSWORD", "pw")
+    monkeypatch.setenv("LAVALINK_PORT", "2333")
     monkeypatch.setenv("GUILD_ID", "abc")
 
     import elbot.config as config
@@ -42,6 +51,9 @@ def test_invalid_f1_channel_id_logs_warning(monkeypatch, caplog):
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
     monkeypatch.setenv("OPENAI_API_KEY", "key")
     monkeypatch.setenv("F1_CHANNEL_ID", "nan")
+    monkeypatch.setenv("LAVALINK_HOST", "ll")
+    monkeypatch.setenv("LAVALINK_PASSWORD", "pw")
+    monkeypatch.setenv("LAVALINK_PORT", "2333")
 
     import elbot.config as config
 
