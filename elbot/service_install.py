@@ -5,12 +5,15 @@ from pathlib import Path
 import shutil
 
 
-def install_systemd_service(root_dir: Path) -> None:
+def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> None:
     service_file = Path("/etc/systemd/system/elbot.service")
     python = sys.executable
     unit = f"""[Unit]
 Description=Elbot Discord Bot
-After=network.target
+After=network.target"""
+    if require_lavalink:
+        unit += "\nRequires=lavalink.service\nAfter=lavalink.service"
+    unit += f"""
 
 [Service]
 Type=simple
@@ -66,6 +69,7 @@ def uninstall_windows_service() -> None:
 
 def main() -> None:
     remove = "--remove" in sys.argv
+    require_lavalink = "--require-lavalink" in sys.argv
     root_dir = Path(__file__).resolve().parents[1]
     if os.name == "nt":
         if remove:
@@ -76,7 +80,7 @@ def main() -> None:
         if remove:
             uninstall_systemd_service()
         else:
-            install_systemd_service(root_dir)
+            install_systemd_service(root_dir, require_lavalink=require_lavalink)
     else:
         print("Service management is not supported on this platform.")
 

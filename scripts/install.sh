@@ -135,10 +135,7 @@ fi
 
 echo "\n[5/6] Installing service..."
 
-if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
-    "$PYTHON" -m elbot.service_install
-fi
-
+INSTALL_LAVALINK=0
 if command -v systemctl >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/lavalink.service" ]; then
     if prompt_yes_no "Install, enable and start Lavalink as a service?" Y; then
         if sudo -n true 2>/dev/null; then
@@ -152,6 +149,15 @@ if command -v systemctl >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/lavalink.serv
         $SUDO systemctl enable lavalink.service
         $SUDO systemctl start lavalink.service
         echo "Lavalink systemd service installed."
+        INSTALL_LAVALINK=1
+    fi
+fi
+
+if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
+    if [ "$INSTALL_LAVALINK" -eq 1 ]; then
+        "$PYTHON" -m elbot.service_install --require-lavalink
+    else
+        "$PYTHON" -m elbot.service_install
     fi
 fi
 
