@@ -172,9 +172,9 @@ The music cog expects a Lavalink server running on Java 17 or higher.
 Run the helper script to download the JAR and start the server:
 
 ```bash
-./scripts/lavalink.sh start
+./scripts/run.sh lavalink start
 ```
-The script uses whichever of `wget` or `curl` is available to fetch `Lavalink.jar`.
+The command uses whichever of `wget` or `curl` is available to fetch `Lavalink.jar`.
 
 You can also launch both the bot and Lavalink together using:
 
@@ -185,7 +185,7 @@ You can also launch both the bot and Lavalink together using:
 Stop it later with:
 
 ```bash
-./scripts/lavalink.sh stop
+./scripts/run.sh lavalink stop
 ```
 
 This creates `lavalink/` in the project root and writes an `application.yml`
@@ -279,7 +279,7 @@ Running `elbot-install-service` will create and start a Windows service so the b
 To pull the latest version of Elbot from GitHub:
 
 ```bash
-./scripts/update.sh
+./scripts/run.sh update
 ```
 
 ## Web Portal
@@ -293,7 +293,7 @@ elbot-portal
 
 Open your browser to <http://localhost:8000> by default. The listening port can
 be changed with the `PORT` environment variable. The portal lets you view logs,
-switch Git branches and run the `update.sh` script. It also provides a button
+switch Git branches and run `run.sh update`. It also provides a button
 to restart the bot service.
 
 ### PORT
@@ -311,7 +311,7 @@ systemd unit has a different name.
 ### AUTO_UPDATE
 
 When `AUTO_UPDATE` is set to `1` the portal spawns a background thread that
-runs `scripts/update.sh` once per day and restarts the bot service after each
+runs `scripts/run.sh update` once per day and restarts the bot service after each
 update. This allows unattended updates and restarts.
 
 To enable the feature temporarily:

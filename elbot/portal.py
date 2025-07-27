@@ -21,7 +21,7 @@ from flask import (
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 LOG_FILE = ROOT_DIR / "elbot.log"
-UPDATE_SCRIPT = ROOT_DIR / "scripts" / "update.sh"
+UPDATE_SCRIPT = ROOT_DIR / "scripts" / "run.sh"
 SERVICE_NAME = os.environ.get("ELBOT_SERVICE", "elbot.service")
 AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "0") == "1"
 
@@ -82,9 +82,9 @@ def branch():
 @app.route("/update", methods=["POST"])
 def update():
     try:
-        subprocess.run(["bash", str(UPDATE_SCRIPT)], cwd=ROOT_DIR, check=True)
+        subprocess.run(["bash", str(UPDATE_SCRIPT), "update"], cwd=ROOT_DIR, check=True)
     except subprocess.CalledProcessError as e:
-        logger.error("update.sh failed: %s", e)
+        logger.error("run.sh update failed: %s", e)
     return redirect(url_for("index"))
 
 
@@ -120,7 +120,7 @@ def main():
         def updater():
             while True:
                 try:
-                    subprocess.run(["bash", str(UPDATE_SCRIPT)], cwd=ROOT_DIR, check=True)
+                    subprocess.run(["bash", str(UPDATE_SCRIPT), "update"], cwd=ROOT_DIR, check=True)
                     subprocess.run(["systemctl", "restart", SERVICE_NAME], check=False)
                 except Exception as e:
                     logger.error("Auto update failed: %s", e)
