@@ -2,6 +2,7 @@
 
 import sys
 import logging
+from logging.handlers import RotatingFileHandler
 import nextcord
 from nextcord.ext import commands
 from .config import Config
@@ -11,13 +12,15 @@ from .utils import load_all_cogs
 logger = logging.getLogger("elbot")
 logger.setLevel(logging.INFO)
 
-# File handler (writes to elbot.log)
-file_handler = logging.FileHandler("elbot.log")
+logger.handlers.clear()
+
+file_handler = RotatingFileHandler(
+    "elbot.log", maxBytes=10 * 1024 * 1024, backupCount=3
+)
 file_formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
 file_handler.setFormatter(file_formatter)
 logger.addHandler(file_handler)
 
-# Console handler
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(file_formatter)
 logger.addHandler(console_handler)
