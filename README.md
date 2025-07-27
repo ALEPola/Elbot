@@ -72,7 +72,7 @@ python -m elbot.main
 To run Elbot continually in the background use:
 
 ```bash
-elbot-install-service
+elbot-install-service [--require-lavalink]
 ```
 
 Windows users can follow the manual steps below and use `elbot-install-service`
@@ -102,10 +102,12 @@ pip install -r requirements.txt
 After the dependencies are installed, run:
 
 ```bash
-elbot-install-service
+elbot-install-service [--require-lavalink]
 ```
 
 This command installs, enables and starts a system service so Elbot runs automatically.
+Pass `--require-lavalink` if you installed `lavalink.service` and want Elbot to
+wait for it on startup.
 To remove the service later run:
 
 ```bash
@@ -195,7 +197,8 @@ setup, download `Lavalink.jar` from the
 with `java -jar Lavalink.jar`.
 
 `scripts/install.sh` can optionally install `lavalink.service` so the server
-runs automatically:
+runs automatically. If you install Lavalink this way, the Elbot service is
+configured to depend on it so both start together:
 
 ```bash
 sudo systemctl status lavalink.service
@@ -245,14 +248,10 @@ sudo systemctl enable lavalink.service
 sudo systemctl start lavalink.service
 ```
 
-Optionally edit `/etc/systemd/system/elbot.service` and add under `[Unit]`:
-
-```ini
-Requires=lavalink.service
-After=lavalink.service
-```
-
-This ensures Elbot waits for Lavalink and keeps it running when the bot restarts.
+This replaces manually editing `/etc/systemd/system/elbot.service` with the
+`Requires=lavalink.service` and `After=lavalink.service` directives.
+The installer sets these automatically so Elbot waits for Lavalink and keeps it
+running when the bot restarts.
 
 ## Docker
 
