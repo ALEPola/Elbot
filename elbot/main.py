@@ -2,6 +2,7 @@
 
 import sys
 import logging
+from pathlib import Path
 from logging.handlers import RotatingFileHandler
 import nextcord
 from nextcord.ext import commands
@@ -14,8 +15,10 @@ logger.setLevel(logging.INFO)
 
 logger.handlers.clear()
 
+log_path = Path(Config.BASE_DIR) / "logs" / "elbot.log"
+log_path.parent.mkdir(exist_ok=True)
 file_handler = RotatingFileHandler(
-    "elbot.log", maxBytes=10 * 1024 * 1024, backupCount=3
+    log_path, maxBytes=10 * 1024 * 1024, backupCount=3
 )
 file_formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
 file_handler.setFormatter(file_formatter)
