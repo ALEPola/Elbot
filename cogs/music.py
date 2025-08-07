@@ -144,8 +144,7 @@ class Music(commands.Cog):
         player.queue.clear()
         await player.stop()
         await player.disconnect()
-        await self.close_node()
-        await interaction.response.send_message("🛑 Stopped and cleaned up.", ephemeral=True)
+        await interaction.response.send_message("🛑 Stopped playback.", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload) -> None:
@@ -156,7 +155,6 @@ class Music(commands.Cog):
             await player.play(next_track)
         elif player and not player.queue:
             await player.disconnect()
-            await self.close_node()
 
 
 def setup(bot: commands.Bot) -> None:
