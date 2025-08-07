@@ -22,6 +22,7 @@ class Music(commands.Cog):
         self.node: wavelink.Node | None = None
         self.connect_task = bot.loop.create_task(self.connect_nodes())
         self._cleanup_lock = asyncio.Lock()
+        self._idle_timers: dict[int, asyncio.Task] = {}
 
     async def connect_nodes(self) -> None:
         """Connect to the Lavalink node configured in :class:`Config`."""
@@ -58,6 +59,16 @@ class Music(commands.Cog):
         for guild in self.bot.guilds:
             if guild.voice_client:
                 await guild.voice_client.disconnect()
+
+    async def _idle_disconnect(self, player: wavelink.Player, delay: int = 30) -> None:
+        """Disconnect the player after a period of inactivity."""
+        try:
+            await asyncio.sleep(delay)
+            if not player.playing and not player.queue:
+                await player.disconnect()
+                await self.close_node()
+        finally:
+            self._idle_timers.pop(player.guild.id, None)
 
     async def ensure_voice(
         self, interaction: nextcord.Interaction
@@ -154,9 +165,22 @@ class Music(commands.Cog):
         if player and player.queue:
             next_track = await player.queue.get()
             await player.play(next_track)
-        elif player and not player.queue:
-            await player.disconnect()
-            await self.close_node()
+        elif player:
+            guild_id = player.guild.id
+            task = self._idle_timers.get(guild_id)
+            if task:
+                task.cancel()
+            self._idle_timers[guild_id] = self.bot.loop.create_task(
+                self._idle_disconnect(player)
+            )
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_start(
+        self, payload: wavelink.TrackStartEventPayload
+    ) -> None:
+        task = self._idle_timers.pop(payload.player.guild.id, None)
+        if task:
+            task.cancel()
 
 
 def setup(bot: commands.Bot) -> None:
