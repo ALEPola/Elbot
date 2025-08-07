@@ -88,11 +88,12 @@ class Music(commands.Cog):
             await voice.disconnect()
             voice = None
         elif voice and voice.channel.id != channel.id:
-            await interaction.response.send_message(
-                "I'm already playing music in another channel.",
-                ephemeral=True,
-            )
-            return None
+            await voice.move_to(channel)
+            message = f"Moved to {channel.mention}."
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
 
         if not voice:
             voice = await channel.connect(cls=wavelink.Player)
