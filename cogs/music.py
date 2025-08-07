@@ -74,6 +74,16 @@ class Music(commands.Cog):
         channel = interaction.user.voice.channel
         voice = interaction.guild.voice_client
 
+        if self.connect_task and not self.connect_task.done():
+            await self.connect_task
+
+        if not self.node or self.node.status != wavelink.NodeStatus.CONNECTED:
+            await interaction.response.send_message(
+                "The music node is not ready. Please try again in a moment.",
+                ephemeral=True,
+            )
+            return None
+
         if voice and not isinstance(voice, wavelink.Player):
             await voice.disconnect()
             voice = None
@@ -84,9 +94,6 @@ class Music(commands.Cog):
             )
             return None
 
-        if not self.node:
-            await self.connect_nodes()
-
         if not voice:
             voice = await channel.connect(cls=wavelink.Player)
 
@@ -94,10 +101,21 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="play", description="Play a song from YouTube")
     async def play(self, interaction: nextcord.Interaction, query: str) -> None:
-        await interaction.response.defer()
-
         player = await self.ensure_voice(interaction)
         if not player:
+            return
+
+        await interaction.response.defer()
+
+        if self.connect_task and not self.connect_task.done():
+            await self.connect_task
+
+        node = self.node if self.node else None
+        if not node or node.status != wavelink.NodeStatus.CONNECTED:
+            await interaction.followup.send(
+                "The music node is not ready. Please try again in a moment.",
+                ephemeral=True,
+            )
             return
 
         node = wavelink.Pool.get_node()
