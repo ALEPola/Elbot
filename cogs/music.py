@@ -32,15 +32,34 @@ class Music(commands.Cog):
         port = int(os.getenv("LAVALINK_PORT", str(Config.LAVALINK_PORT)))
         password = os.getenv("LAVALINK_PASSWORD", Config.LAVALINK_PASSWORD)
         uri = f"http://{host}:{port}"
+
+        reconnecting = False
+        if wavelink.Pool.is_connected():
+            reconnecting = True
+            for existing in list(wavelink.Pool.nodes.values()):
+                try:
+                    await existing.close()
+                    logger.info("Closed Lavalink node %s", existing.identifier)
+                except Exception as exc:  # pragma: no cover - best effort cleanup
+                    logger.warning(
+                        "Failed to close Lavalink node %s: %s", existing.identifier, exc
+                    )
+
         try:
             node = wavelink.Node(identifier="MAIN", uri=uri, password=password, client=self.bot)
             nodes = await wavelink.Pool.connect(nodes=[node], client=self.bot)
             self.node = nodes.get("MAIN")
         except Exception as exc:  # pragma: no cover - network error handling
-            logger.error("Failed to connect to Lavalink at %s: %s", uri, exc)
+            if reconnecting:
+                logger.error("Failed to reconnect to Lavalink at %s: %s", uri, exc)
+            else:
+                logger.error("Failed to connect to Lavalink at %s: %s", uri, exc)
             self.node = None
         else:
-            logger.info("Connected to Lavalink at %s", uri)
+            if reconnecting:
+                logger.info("Reconnected to Lavalink at %s", uri)
+            else:
+                logger.info("Connected to Lavalink at %s", uri)
 
     async def close_node(self) -> None:
         """Close the Lavalink connection if active."""
