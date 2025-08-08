@@ -225,7 +225,7 @@ def setup(bot: commands.Bot) -> None:
 
     @bot.slash_command(name="moan", description="Play a moan sound effect")
     async def moan(interaction: nextcord.Interaction) -> None:
-        if not interaction.user.voice:
+        if not interaction.user or not interaction.user.voice:
             await interaction.response.send_message(
                 "You need to be in a voice channel to use this command!",
                 ephemeral=True,
