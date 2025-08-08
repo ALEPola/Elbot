@@ -122,6 +122,29 @@ class Music(commands.Cog):
 
         await interaction.followup.send(f"Queued **{track.title}**", ephemeral=True)
 
+    @nextcord.slash_command(name="queue", description="Show the upcoming tracks")
+    async def queue(self, interaction: nextcord.Interaction) -> None:
+        """Display the current music queue."""
+        player = interaction.guild.voice_client
+
+        if not player or not isinstance(player, wavelink.Player):
+            await interaction.response.send_message(
+                "Nothing is playing.", ephemeral=True
+            )
+            return
+
+        queue = list(player.queue)
+        if not queue:
+            await interaction.response.send_message(
+                "The queue is empty.", ephemeral=True
+            )
+            return
+
+        lines = [f"{index + 1}. {track.title}" for index, track in enumerate(queue)]
+        message = "\n".join(lines)
+
+        await interaction.response.send_message(message, ephemeral=True)
+
     @nextcord.slash_command(name="skip", description="Skip the current song")
     async def skip(self, interaction: nextcord.Interaction) -> None:
         player = interaction.guild.voice_client
