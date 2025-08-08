@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import logging
 import asyncio
+from pathlib import Path
 import nextcord
 from nextcord.ext import commands
 import wavelink
@@ -238,13 +239,10 @@ def setup(bot: commands.Bot) -> None:
             )
             return
 
-        sound_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "sounds",
-            "56753004_girl-moaning_by_a-sfx_preview.mp3",
-        )
+        base = Path(__file__).resolve().parent.parent / "sfx"
+        sound_path = base / "moan.mp3"
 
-        if not os.path.exists(sound_path):
+        if not sound_path.exists():
             await interaction.response.send_message(
                 "❌ Sound effect not found! Contact the bot administrator.",
                 ephemeral=True,
@@ -259,7 +257,7 @@ def setup(bot: commands.Bot) -> None:
         if voice_client.is_playing():
             voice_client.stop()
 
-        voice_client.play(nextcord.FFmpegPCMAudio(sound_path))
+        voice_client.play(nextcord.FFmpegPCMAudio(str(sound_path)))
         await interaction.response.send_message("😏", ephemeral=True)
 
     bot.add_application_command(moan)
