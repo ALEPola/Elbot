@@ -11,13 +11,14 @@ requires-python = ">=3.9"
 authors = [{name = "Elbot Team"}]
 license = {text = "MIT"}
 dependencies = [
-    "nextcord",
-    "PyNaCl",
+    "nextcord>=2.6",
+    "PyNaCl>=1.5.0",
     "openai",
     "textblob",
     "python-dotenv",
     "psutil",
-    "wavelink",
+    "wavelink>=3.3.2",
+    "yt-dlp>=2025.1.1",
     "Flask",
     "icalendar",
     "aiohttp",
