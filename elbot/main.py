@@ -1,5 +1,6 @@
 # elbot/main.py
 
+import os
 import sys
 import logging
 from pathlib import Path
@@ -30,6 +31,16 @@ logger.addHandler(console_handler)
 
 
 def main():
+    # 0) Optionally start a local Lavalink instance
+    if os.getenv("AUTO_LAVALINK", "1") == "1":
+        try:
+            from elbot.auto_lavalink import start as start_lavalink
+
+            port, pw = start_lavalink()
+            print(f"[bot] Auto-Lavalink: 127.0.0.1:{port}")
+        except Exception as e:
+            print(f"[bot] Auto-Lavalink failed: {e}")
+
     # 1) Verify required environment variables
     Config.validate()
 

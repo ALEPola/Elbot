@@ -27,8 +27,8 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 - **DALL·E** – generate images using the `/dalle` command.
 - **F1** – receive Formula&nbsp;1 schedules, countdowns and race results. Set `ICS_URL` for the calendar feed and `LOCAL_TIMEZONE` for your local zone.
 - **Music** – stream audio from YouTube via a Lavalink server. Requires
-  `ffmpeg` installed and Lavalink running. Use the `/play`, `/skip` and `/stop`
-  commands to control playback.
+  `ffmpeg` installed and Java 17. Lavalink downloads and starts automatically.
+  Use the `/play`, `/skip` and `/stop` commands to control playback.
 - **Diagnostic** – utility commands for bot admins.
 - **Moderation** – `/kick`, `/ban`, `/clear_messages` and `/clear_bot_messages` commands for server admins.
 - **Portal auto-update** – the Flask portal can report update status and optionally run daily updates.
@@ -39,30 +39,35 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 
 - Python 3.9+
 - `ffmpeg` installed and on your `PATH` (required for music commands; also listed in `requirements.txt`)
-- A running [Lavalink](https://github.com/lavalink-devs/Lavalink) server for music playback
+- Java 17 (OpenJDK) for the bundled Lavalink server
 - A Discord bot token
 - An OpenAI API key
-- `wget` or `curl` for the Lavalink download script
 
 ## Quick start
 
-1. Clone the repository and change into the project directory:
+For a minimal manual setup:
 
 ```bash
 git clone <repository-url>
 cd Elbot
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+# Install system deps once:
+#   ffmpeg + Java 17 (OpenJDK)
+#   - Ubuntu/Debian: sudo apt-get install ffmpeg openjdk-17-jre
+export DISCORD_BOT_TOKEN=YOUR_TOKEN
+python -m elbot.main
 ```
 
-2. Run the guided setup script (Linux/macOS):
+Lavalink downloads and starts automatically on first run.  For a guided setup
+that installs system packages and can register a service (Linux/macOS):
 
 ```bash
 ./scripts/install.sh
 ```
 
-This installs dependencies, creates a virtual environment and can register a
-system service so the bot starts on boot. The script now prompts for your
-Discord bot token, OpenAI API key and optional guild ID. When finished, launch
-the bot with:
+The script prompts for your Discord bot token, OpenAI API key and optional
+guild ID. When finished, launch the bot with:
 
 ```bash
 source .venv/bin/activate
@@ -72,11 +77,11 @@ python -m elbot.main
 To run Elbot continually in the background use:
 
 ```bash
-elbot-install-service [--require-lavalink]
+elbot-install-service
 ```
 
-Windows users can follow the manual steps below and use `elbot-install-service`
-to create a service after installing the dependencies.
+Windows users can follow the manual steps above and use `elbot-install-service` to
+create a service after installing the dependencies.
 
 ## Installation
 
@@ -102,12 +107,10 @@ pip install -r requirements.txt
 After the dependencies are installed, run:
 
 ```bash
-elbot-install-service [--require-lavalink]
+elbot-install-service
 ```
 
 This command installs, enables and starts a system service so Elbot runs automatically.
-Pass `--require-lavalink` if you installed `lavalink.service` and want Elbot to
-wait for it on startup.
 To remove the service later run:
 
 ```bash
@@ -170,43 +173,12 @@ You can also use the helper script:
 
 ## Running Lavalink
 
-The music cog expects a Lavalink server running on Java 17 or higher.
-Run the helper script to download the JAR and start the server:
-
-```bash
-./scripts/run.sh lavalink start
-```
-The command uses whichever of `wget` or `curl` is available to fetch `Lavalink.jar`.
-
-You can also launch both the bot and Lavalink together using:
-
-```bash
-./scripts/run.sh --with-lavalink
-```
-
-Stop it later with:
-
-```bash
-./scripts/run.sh lavalink stop
-```
-
-This creates `lavalink/` in the project root and writes an `application.yml`
-using the `LAVALINK_*` values from your `.env` file.  If you prefer manual
-setup, download `Lavalink.jar` from the
-[releases page](https://github.com/freyacodes/Lavalink/releases) and run it
-with `java -jar Lavalink.jar`.
-
-`scripts/install.sh` can optionally install `lavalink.service` so the server
-runs automatically. If you install Lavalink this way, the Elbot service is
-configured to depend on it so both start together:
-
-```bash
-sudo systemctl status lavalink.service
-sudo systemctl stop lavalink.service   # stop if Lavalink is already running
-sudo systemctl disable lavalink.service   # optional: prevent automatic start
-```
-
-Docker users can launch Lavalink with:
+Elbot now bundles an auto-launcher that downloads and starts Lavalink when the
+bot runs, selecting a free local port and writing logs to
+`~/.elbot_lavalink/lavalink.log`. Override the port or password with
+`LAVALINK_PORT` or `LAVALINK_PASSWORD`, or disable the helper with
+`AUTO_LAVALINK=0` if you host Lavalink separately. For example, to run it in
+Docker:
 
 ```bash
 docker run -p 2333:2333 \
@@ -215,43 +187,8 @@ docker run -p 2333:2333 \
   ghcr.io/lavalink-devs/lavalink:latest
 ```
 
-Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your `.env` file
-to match your Lavalink instance.
-The bot reads these variables when connecting, so you can change them without
-restarting Elbot.
-
-### Systemd service
-
-To keep Lavalink running automatically, create `/etc/systemd/system/lavalink.service`:
-
-```ini
-[Unit]
-Description=Lavalink Audio Node
-After=network.target
-
-[Service]
-User=alex
-WorkingDirectory=/home/alex/Elbot/lavalink
-ExecStart=/usr/bin/java -jar Lavalink.jar
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Adjust `User`, `WorkingDirectory` and the paths to Java and `Lavalink.jar` as needed. Then enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable lavalink.service
-sudo systemctl start lavalink.service
-```
-
-This replaces manually editing `/etc/systemd/system/elbot.service` with the
-`Requires=lavalink.service` and `After=lavalink.service` directives.
-The installer sets these automatically so Elbot waits for Lavalink and keeps it
-running when the bot restarts.
+Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your environment
+to match your Lavalink instance when auto-launch is disabled.
 
 ## Docker
 
