@@ -31,6 +31,7 @@ def test_music_cog_unload_disconnects_voice(monkeypatch):
         return None
 
     monkeypatch.setattr(commands.Bot, "wait_until_ready", fake_wait_until_ready)
+    monkeypatch.setattr(music_cog.wavelink.Pool, 'is_connected', lambda: False, raising=False)
 
     closed = {"closed": False}
 

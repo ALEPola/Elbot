@@ -21,6 +21,12 @@ def test_connect_nodes_uses_env(monkeypatch):
     monkeypatch.setenv('LAVALINK_PORT', '9999')
     monkeypatch.setenv('LAVALINK_PASSWORD', 'secret')
 
+    async def fake_wait_until_ready(self):
+        return None
+
+    monkeypatch.setattr(commands.Bot, 'wait_until_ready', fake_wait_until_ready)
+    monkeypatch.setattr(music_cog.wavelink.Pool, 'is_connected', lambda: False, raising=False)
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     intents = nextcord.Intents.none()
@@ -37,13 +43,20 @@ def test_connect_nodes_uses_env(monkeypatch):
 def test_ensure_voice_calls_player_connect(monkeypatch):
     recorded = {}
 
-    async def fake_player_connect(self, *, guild_id, channel, **_):
-        recorded['guild_id'] = guild_id
-        recorded['channel'] = channel
+    class DummyPlayer:
+        def __init__(self, client, channel):
+            self.client = client
+            self.channel = channel
 
-    monkeypatch.setattr(music_cog.wavelink.Player, 'connect', fake_player_connect)
+        async def connect(self, *, guild_id, channel, **_):
+            recorded['guild_id'] = guild_id
+            recorded['channel'] = channel
+
+    monkeypatch.setattr(music_cog.wavelink, 'Player', DummyPlayer)
 
     class DummyNode:
+        status = music_cog.wavelink.NodeStatus.CONNECTED
+
         def __init__(self):
             self.client = bot
 
@@ -58,6 +71,7 @@ def test_ensure_voice_calls_player_connect(monkeypatch):
         return None
 
     monkeypatch.setattr(commands.Bot, 'wait_until_ready', fake_wait_until_ready)
+    monkeypatch.setattr(music_cog.wavelink.Pool, 'is_connected', lambda: False, raising=False)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
