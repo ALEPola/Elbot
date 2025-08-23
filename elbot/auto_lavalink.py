@@ -87,16 +87,18 @@ logging:
     )
 
 
-def _healthy(port: int, timeout: int = 30) -> bool:
+def _healthy(port: int, password: str, timeout: int = 60) -> bool:
     import http.client
 
     start = time.time()
     while time.time() - start < timeout:
         try:
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
-            conn.request("GET", "/version")
-            r = conn.getresponse()
-            if r.status == 200:
+            conn.putrequest("GET", "/version")
+            conn.putheader("Authorization", password)
+            conn.endheaders()
+            resp = conn.getresponse()
+            if resp.status == 200:
                 return True
         except Exception:
             time.sleep(1)
@@ -148,7 +150,7 @@ def start() -> tuple[int, str]:
     )
     _port = port
 
-    if not _healthy(port, timeout=60):
+    if not _healthy(port, password, timeout=60):
         try:
             _proc.terminate()
         except Exception:
