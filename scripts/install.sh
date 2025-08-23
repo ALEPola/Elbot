@@ -111,7 +111,7 @@ if [ "$ASK" -eq 1 ]; then
     read -rp "Discord bot token: " discord_token
     read -rp "OpenAI API key: " openai_key
     read -rp "Guild ID (optional): " guild_id
-    update_env_var "DISCORD_BOT_TOKEN" "$discord_token"
+    update_env_var "DISCORD_TOKEN" "$discord_token"
     update_env_var "OPENAI_API_KEY" "$openai_key"
     if [ -n "$guild_id" ]; then
         update_env_var "GUILD_ID" "$guild_id"
@@ -154,10 +154,12 @@ if command -v systemctl >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/lavalink.serv
 fi
 
 if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
+    DISCORD_TOKEN=$(grep -E '^DISCORD_TOKEN=' "$ROOT_DIR/.env" | cut -d= -f2-)
+    FFMPEG_PATH=$(command -v ffmpeg || echo /usr/bin/ffmpeg)
     if [ "$INSTALL_LAVALINK" -eq 1 ]; then
-        "$PYTHON" -m elbot.service_install --require-lavalink
+        DISCORD_TOKEN="$DISCORD_TOKEN" FFMPEG_PATH="$FFMPEG_PATH" "$PYTHON" -m elbot.service_install --require-lavalink
     else
-        "$PYTHON" -m elbot.service_install
+        DISCORD_TOKEN="$DISCORD_TOKEN" FFMPEG_PATH="$FFMPEG_PATH" "$PYTHON" -m elbot.service_install
     fi
 fi
 

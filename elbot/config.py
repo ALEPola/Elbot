@@ -22,9 +22,9 @@ class Config:
     ``0`` when the corresponding variables are not set.
     """
 
-    # Your Discord bot token must live in an environment variable called DISCORD_BOT_TOKEN
+    # Your Discord bot token must live in an environment variable called DISCORD_TOKEN
     BASE_DIR = BASE_DIR
-    DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+    DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
     ICS_URL = os.getenv("ICS_URL", "")
@@ -64,7 +64,7 @@ class Config:
 
         auto = os.getenv("AUTO_LAVALINK", "1") == "1"
 
-        required = ["DISCORD_BOT_TOKEN"]
+        required = ["DISCORD_TOKEN"]
         if not auto:
             required += ["LAVALINK_HOST", "LAVALINK_PASSWORD"]
 

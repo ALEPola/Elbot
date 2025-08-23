@@ -13,7 +13,7 @@ import elbot.config as config
 
 
 def _setup_config(monkeypatch):
-    monkeypatch.setenv("DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setenv("DISCORD_TOKEN", "token")
     monkeypatch.setenv("OPENAI_API_KEY", "key")
     importlib.reload(config)
     # Inject attributes expected by the cog

@@ -55,7 +55,7 @@ pip install -r requirements.txt
 # Install system deps once:
 #   ffmpeg + Java 17 (OpenJDK)
 #   - Ubuntu/Debian: sudo apt-get install ffmpeg openjdk-17-jre
-export DISCORD_BOT_TOKEN=YOUR_TOKEN
+export DISCORD_TOKEN=YOUR_TOKEN
 python -m elbot.main
 ```
 
@@ -125,7 +125,7 @@ If you ran `./scripts/install.sh` the script created a `.env` file and asked for
 the most important values. Otherwise copy the example and fill in the required
 variables:
 
-* `DISCORD_BOT_TOKEN` &ndash; your Discord bot token
+* `DISCORD_TOKEN` &ndash; your Discord bot token
 * `OPENAI_API_KEY` &ndash; your OpenAI API key
 
 Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `LAVALINK_HOST`,
