@@ -8,19 +8,29 @@ import os
 def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> None:
     service_file = Path("/etc/systemd/system/elbot.service")
     python = sys.executable
-    unit = """[Unit]
+    user = os.getenv("SUDO_USER") or os.getenv("USER", "root")
+    token = os.getenv("DISCORD_TOKEN", "YOUR_REAL_TOKEN")
+    ffmpeg = os.getenv("FFMPEG_PATH", "/usr/bin/ffmpeg")
+    unit = f"""[Unit]
 Description=Elbot Discord Bot
-After=network.target"""
+After=network-online.target
+Wants=network-online.target"""
     if require_lavalink:
         unit += "\nRequires=lavalink.service\nAfter=lavalink.service"
     unit += f"""
 
 [Service]
-Type=simple
+User={user}
 WorkingDirectory={root_dir}
+Environment=AUTO_LAVALINK=1
+Environment=DISCORD_TOKEN={token}
+Environment=FFMPEG_PATH={ffmpeg}
+# Environment=LAVALINK_PASSWORD=changeme
+# Environment=LAVALINK_PORT=2333
 ExecStart={python} -m elbot.main
-EnvironmentFile={root_dir}/.env
-Restart=on-failure
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
