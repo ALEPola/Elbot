@@ -134,6 +134,14 @@ class Music(commands.Cog):
 
         return voice, None
 
+    async def _get_player(self, interaction: nextcord.Interaction) -> wavelink.Player | None:
+        """Return the active wavelink player or send an error message."""
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+            return None
+        return player
+
     @nextcord.slash_command(name="play", description="Play a song from YouTube")
     async def play(self, interaction: nextcord.Interaction, query: str) -> None:
         # Always defer first (so anything that follows uses followup)
@@ -184,9 +192,8 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="queue", description="Show the upcoming tracks")
     async def queue(self, interaction: nextcord.Interaction) -> None:
-        player = interaction.guild.voice_client
-        if not player or not isinstance(player, wavelink.Player):
-            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+        player = await self._get_player(interaction)
+        if not player:
             return
 
         queue = list(player.queue)
@@ -199,10 +206,8 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="skip", description="Skip the current song")
     async def skip(self, interaction: nextcord.Interaction) -> None:
-        player = interaction.guild.voice_client
-
-        if not player or not isinstance(player, wavelink.Player):
-            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+        player = await self._get_player(interaction)
+        if not player:
             return
 
         await player.skip()
@@ -210,10 +215,8 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="stop", description="Stop playback and disconnect")
     async def stop(self, interaction: nextcord.Interaction) -> None:
-        player = interaction.guild.voice_client
-
-        if not player or not isinstance(player, wavelink.Player):
-            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+        player = await self._get_player(interaction)
+        if not player:
             return
 
         player.queue.clear()
