@@ -6,7 +6,6 @@ import pathlib
 import signal
 import socket
 import subprocess
-import sys
 import time
 import urllib.request
 
@@ -58,6 +57,7 @@ def _ensure_jar() -> None:
 def _write_conf(port: int, password: str) -> None:
     CONF.write_text(
         f"""server:
+  address: 127.0.0.1
   port: {port}
 lavalink:
   server:
@@ -95,7 +95,7 @@ def _healthy(port: int, timeout: int = 30) -> bool:
 
 
 def start() -> tuple[int, str]:
-    """Start Lavalink locally if not already started by this launcher."""
+    """Start Lavalink locally; export LAVALINK_* envs for the bot."""
 
     global _proc, _port
     if _proc and _proc.poll() is None:
@@ -111,24 +111,42 @@ def start() -> tuple[int, str]:
     _write_conf(port, password)
 
     env = os.environ.copy()
-    env["LAVALINK_CONFIG_LOCATION"] = str(CONF)
+    BASE.mkdir(parents=True, exist_ok=True)
+    # ensure log is a FILE, not a directory
+    if LOG.exists() and LOG.is_dir():
+        import shutil
 
+        shutil.rmtree(LOG)
+
+    log_fp = open(LOG, "a", buffering=1, encoding="utf-8", errors="ignore")
+
+    # >>> KEY FIX: force Spring to load our config file <<<
+    spring_loc = f"file:{CONF.as_posix()}"
     _proc = subprocess.Popen(
-        ["java", "-jar", str(JAR)],
+        ["java", f"-Dspring.config.location={spring_loc}", "-jar", str(JAR)],
         cwd=str(BASE),
-        stdout=subprocess.PIPE,
+        stdout=log_fp,
         stderr=subprocess.STDOUT,
         text=True,
         env=env,
     )
     _port = port
 
-    if not _healthy(port, timeout=35):
+    if not _healthy(port, timeout=60):
         try:
             _proc.terminate()
         except Exception:
             pass
-        raise RuntimeError("Lavalink failed healthcheck (didn't answer /version)")
+        # show last log lines to explain the failure
+        try:
+            tail = "\n".join(
+                open(LOG, encoding="utf-8", errors="ignore")
+                .read()
+                .splitlines()[-120:]
+            )
+        except Exception:
+            tail = "<no log available>"
+        raise RuntimeError("Lavalink failed healthcheck (/version). Recent log:\n" + tail)
 
     os.environ["LAVALINK_HOST"] = "127.0.0.1"
     os.environ["LAVALINK_PORT"] = str(port)
@@ -153,4 +171,4 @@ def stop() -> None:
             _proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             _proc.kill()
-
+    _proc = None
