@@ -59,6 +59,14 @@ def _write_conf(port: int, password: str) -> None:
         f"""server:
   address: 127.0.0.1
   port: {port}
+
+spring:
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+
 lavalink:
   server:
     password: "{password}"
@@ -71,6 +79,7 @@ lavalink:
       http: true
     bufferDurationMs: 400
     resamplingQuality: LOW
+
 logging:
   file:
     path: "{LOG.as_posix()}"
@@ -123,7 +132,14 @@ def start() -> tuple[int, str]:
     # >>> KEY FIX: force Spring to load our config file <<<
     spring_loc = f"file:{CONF.as_posix()}"
     _proc = subprocess.Popen(
-        ["java", f"-Dspring.config.location={spring_loc}", "-jar", str(JAR)],
+        [
+            "java",
+            f"-Dspring.config.location={spring_loc}",
+            "-Dspring.cloud.config.enabled=false",
+            "-Dspring.cloud.config.import-check.enabled=false",
+            "-jar",
+            str(JAR),
+        ],
         cwd=str(BASE),
         stdout=log_fp,
         stderr=subprocess.STDOUT,
