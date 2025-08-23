@@ -7,6 +7,7 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 import nextcord
 from nextcord.ext import commands
+import wavelink
 from .config import Config
 from .utils import load_all_cogs
 
@@ -47,6 +48,7 @@ def main():
     # 2) Create bot with intents
     intents = nextcord.Intents.default()
     intents.message_content = True
+    intents.voice_states = True
     bot = commands.Bot(command_prefix=Config.PREFIX, intents=intents)
 
     # 3) Global error handler
@@ -72,6 +74,15 @@ def main():
 
     # 5) Load every cog in the cogs/ directory
     load_all_cogs(bot, cogs_dir="cogs")
+
+    @bot.slash_command(name="musicdebug", description="Show Lavalink/Wavelink status")
+    async def musicdebug(inter: nextcord.Interaction):
+        try:
+            node = wavelink.Pool.get_node(identifier="MAIN")
+            status = f"{node.identifier} {node.status.name}, players={len(node.players)}"
+        except Exception as e:
+            status = f"no node: {type(e).__name__}: {e}"
+        await inter.response.send_message(status, ephemeral=True)
 
     # 6) Run the bot
     try:
