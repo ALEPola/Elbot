@@ -35,53 +35,29 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 
 See `.env.example` for all configuration variables, including `ELBOT_SERVICE` and `PORT` which are used by the management portal.
 
-## Requirements
-
-- Python 3.9+
-- `ffmpeg` installed and on your `PATH` (required for music commands; also listed in `requirements.txt`)
-- Java 17 (OpenJDK) for the bundled Lavalink server
-- A Discord bot token
-- An OpenAI API key
-
-## Quick start
-
-For a minimal manual setup:
+## Quick start (Linux/macOS)
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ALEPola/Elbot.git
 cd Elbot
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# Install system deps once:
-#   ffmpeg + Java 17 (OpenJDK)
-#   - Ubuntu/Debian: sudo apt-get install ffmpeg openjdk-17-jre
-export DISCORD_TOKEN=YOUR_TOKEN
-python -m elbot.main
+./scripts/run.sh
+# then edit .env and paste your DISCORD_TOKEN, run again
 ```
 
-Lavalink downloads and starts automatically on first run.  For a guided setup
-that installs system packages and can register a service (Linux/macOS):
+## Quick start (Windows)
 
-```bash
-./scripts/install.sh
+```powershell
+git clone https://github.com/ALEPola/Elbot.git
+cd Elbot
+.\scripts\run.ps1
+# edit .env, re-run
 ```
 
-The script prompts for your Discord bot token, OpenAI API key and optional
-guild ID. When finished, launch the bot with:
+### Requirements
 
-```bash
-source .venv/bin/activate
-python -m elbot.main
-```
-
-To run Elbot continually in the background use:
-
-```bash
-elbot-install-service
-```
-
-Windows users can follow the manual steps above and use `elbot-install-service` to
-create a service after installing the dependencies.
+* Python 3.10+ (3.12 recommended)
+* Java 17+ (OpenJDK). On Debian/Ubuntu: `sudo apt-get install openjdk-17-jre`
+* ffmpeg in PATH (or set `FFMPEG_PATH` in `.env`)
 
 ## Installation
 

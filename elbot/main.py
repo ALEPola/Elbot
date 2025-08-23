@@ -8,6 +8,7 @@ from logging.handlers import RotatingFileHandler
 import nextcord
 from nextcord.ext import commands
 import wavelink
+from dotenv import load_dotenv
 from .config import Config
 from .utils import load_all_cogs
 
@@ -32,6 +33,7 @@ logger.addHandler(console_handler)
 
 
 def main():
+    load_dotenv()
     # 0) Optionally start a local Lavalink instance
     if os.getenv("AUTO_LAVALINK", "1") == "1":
         try:

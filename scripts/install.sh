@@ -155,7 +155,7 @@ fi
 
 if prompt_yes_no "Install, enable and start Elbot as a service?" Y; then
     DISCORD_TOKEN=$(grep -E '^DISCORD_TOKEN=' "$ROOT_DIR/.env" | cut -d= -f2-)
-    FFMPEG_PATH=$(command -v ffmpeg || echo /usr/bin/ffmpeg)
+    FFMPEG_PATH=$(command -v ffmpeg || echo ffmpeg)
     if [ "$INSTALL_LAVALINK" -eq 1 ]; then
         DISCORD_TOKEN="$DISCORD_TOKEN" FFMPEG_PATH="$FFMPEG_PATH" "$PYTHON" -m elbot.service_install --require-lavalink
     else

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import logging
 import asyncio
 from pathlib import Path
@@ -15,7 +16,7 @@ from elbot.config import Config
 
 logger = logging.getLogger("elbot.music")
 
-FFMPEG_PATH = os.environ.get("FFMPEG_PATH", "/usr/bin/ffmpeg")
+FFMPEG_PATH = os.getenv("FFMPEG_PATH") or shutil.which("ffmpeg") or "ffmpeg"
 
 
 class Music(commands.Cog):
@@ -251,8 +252,9 @@ def setup(bot: commands.Bot) -> None:
             )
             return
 
-        base = Path(__file__).resolve().parent.parent / "sfx"
-        sound_path = base / "moan.mp3"
+        BASE_DIR = Path(__file__).resolve().parents[1]
+        SFX_DIR = BASE_DIR / "sfx"
+        sound_path = SFX_DIR / "moan.mp3"
         if not sound_path.exists():
             await interaction.response.send_message("❌ Sound effect not found!", ephemeral=True)
             return

@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import atexit
 import os
-import pathlib
+from pathlib import Path
 import signal
 import socket
 import subprocess
 import time
 import urllib.request
 
-BASE = pathlib.Path.home() / ".elbot_lavalink"
+from platformdirs import user_data_dir
+
+APP_DIR = Path(user_data_dir("Elbot", "ALEPola"))
+BASE = APP_DIR
 JAR = BASE / "Lavalink.jar"
 CONF = BASE / "application.yml"
 LOG = BASE / "lavalink.log"
+BASE.mkdir(parents=True, exist_ok=True)
 
 # See: https://github.com/lavalink-devs/Lavalink
 LAVALINK_URL = (
@@ -136,6 +140,8 @@ def start() -> tuple[int, str]:
     _proc = subprocess.Popen(
         [
             "java",
+            "-Xms128m",
+            "-Xmx512m",
             f"-Dspring.config.location={spring_loc}",
             "-Dspring.cloud.config.enabled=false",
             "-Dspring.cloud.config.import-check.enabled=false",
