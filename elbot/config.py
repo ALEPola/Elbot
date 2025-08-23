@@ -58,22 +58,17 @@ class Config:
     else:
         GUILD_ID = None
 
-    @classmethod
-    def validate(cls):
-        missing = []
-        if not cls.DISCORD_TOKEN:
-            missing.append("DISCORD_BOT_TOKEN")
-        if not cls.OPENAI_API_KEY:
-            missing.append("OPENAI_API_KEY")
-        if not os.getenv("LAVALINK_HOST"):
-            missing.append("LAVALINK_HOST")
-        if not os.getenv("LAVALINK_PASSWORD"):
-            missing.append("LAVALINK_PASSWORD")
-        port_var = os.getenv("LAVALINK_PORT")
-        try:
-            int(port_var) if port_var is not None else None
-        except ValueError:
-            missing.append("LAVALINK_PORT")
+    @staticmethod
+    def validate():
+        import os
+
+        auto = os.getenv("AUTO_LAVALINK", "1") == "1"
+
+        required = ["DISCORD_BOT_TOKEN"]
+        if not auto:
+            required += ["LAVALINK_HOST", "LAVALINK_PASSWORD"]
+
+        missing = [k for k in required if not os.getenv(k)]
         if missing:
             raise RuntimeError(
                 f"Missing required environment variables: {', '.join(missing)}"

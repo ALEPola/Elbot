@@ -1,14 +1,14 @@
-import os
-import sys
 import subprocess
 from pathlib import Path
 import shutil
+import sys
+import os
 
 
 def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> None:
     service_file = Path("/etc/systemd/system/elbot.service")
     python = sys.executable
-    unit = f"""[Unit]
+    unit = """[Unit]
 Description=Elbot Discord Bot
 After=network.target"""
     if require_lavalink:
