@@ -24,6 +24,7 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.node: wavelink.Node | None = None
+        self.node_ready = asyncio.Event()
         self.connect_task = bot.loop.create_task(self.connect_nodes())
         self._cleanup_lock = asyncio.Lock()
 
@@ -37,24 +38,30 @@ class Music(commands.Cog):
         password = os.getenv("LAVALINK_PASSWORD", Config.LAVALINK_PASSWORD)
         uri = f"http://{host}:{port}"
 
+        # close stale nodes
         if wavelink.Pool.is_connected():
             for existing in list(wavelink.Pool.nodes.values()):
                 try:
                     await existing.close()
-                    logger.info("Closed Lavalink node %s", existing.identifier)
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to close Lavalink node %s: %s", existing.identifier, exc
-                    )
+                except Exception:
+                    pass
 
-        try:
-            node = wavelink.Node(identifier="MAIN", uri=uri, password=password, client=self.bot)
-            nodes = await wavelink.Pool.connect(nodes=[node], client=self.bot)
-            self.node = nodes.get("MAIN")
-            logger.info("Connected to Lavalink at %s", uri)
-        except Exception as exc:
-            logger.error("Failed to connect to Lavalink at %s: %s", uri, exc)
-            self.node = None
+        # retry loop until connected
+        for attempt in range(1, 8):
+            try:
+                node = wavelink.Node(identifier="MAIN", uri=uri, password=password, client=self.bot)
+                nodes = await wavelink.Pool.connect(nodes=[node], client=self.bot)
+                self.node = nodes.get("MAIN")
+                if self.node and self.node.status == wavelink.NodeStatus.CONNECTED:
+                    self.node_ready.set()
+                    logger.info("Connected to Lavalink at %s", uri)
+                    return
+            except Exception as exc:
+                logger.error("Lavalink connect attempt %s failed: %s", attempt, exc)
+
+            await asyncio.sleep(min(2 * attempt, 10))
+
+        logger.error("Gave up connecting to Lavalink at %s", uri)
 
     async def close_node(self) -> None:
         """Close the Lavalink connection if active."""
@@ -73,6 +80,19 @@ class Music(commands.Cog):
             if guild.voice_client:
                 await guild.voice_client.disconnect()
 
+    @commands.Cog.listener()
+    async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload):
+        if payload.node.identifier == "MAIN":
+            self.node = payload.node
+            self.node_ready.set()
+            logger.info("Wavelink node %s is READY", payload.node.identifier)
+
+    @commands.Cog.listener()
+    async def on_wavelink_node_closed(self, payload: wavelink.NodeClosedEventPayload):
+        if payload.node.identifier == "MAIN":
+            self.node_ready.clear()
+            self.connect_task = self.bot.loop.create_task(self.connect_nodes())
+
     async def ensure_voice(
         self, interaction: nextcord.Interaction
     ) -> tuple[wavelink.Player | None, str | None]:
@@ -81,12 +101,15 @@ class Music(commands.Cog):
         **No interaction responses here**. We return (player, message_if_any).
         """
 
+        # wait briefly for node if it’s still booting
+        if not self.node_ready.is_set():
+            try:
+                await asyncio.wait_for(self.node_ready.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                return None, "The music node is not ready. Try again in a moment."
+
         if not interaction.user or not interaction.user.voice:
             return None, "You must be in a voice channel to use this command."
-
-        # Wait for node connect attempt to finish (first call after bot boot)
-        if self.connect_task and not self.connect_task.done():
-            await self.connect_task
 
         if not self.node or self.node.status != wavelink.NodeStatus.CONNECTED:
             return None, "The music node is not ready. Try again in a moment."

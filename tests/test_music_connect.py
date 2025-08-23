@@ -14,6 +14,7 @@ def test_connect_nodes_uses_env(monkeypatch):
         recorded['uri'] = node.uri
         recorded['password'] = node.password
         recorded['identifier'] = node.identifier
+        node.status = music_cog.wavelink.NodeStatus.CONNECTED
         return {node.identifier: node}
 
     monkeypatch.setattr(music_cog.wavelink.Pool, 'connect', fake_connect)

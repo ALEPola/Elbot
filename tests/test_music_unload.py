@@ -36,6 +36,8 @@ def test_music_cog_unload_disconnects_voice(monkeypatch):
     closed = {"closed": False}
 
     class DummyNode:
+        status = music_cog.wavelink.NodeStatus.CONNECTED
+
         async def close(self):
             closed["closed"] = True
 
