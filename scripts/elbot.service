@@ -1,0 +1,16 @@
+[Unit]
+Description=Elbot Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=%i
+WorkingDirectory=/opt/elbot               # tell users to place repo here or edit this
+EnvironmentFile=/opt/elbot/.env
+ExecStart=/opt/elbot/.venv/bin/python -m elbot.main
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
