@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import sys
 import os
+import platform
 
 
 def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> None:
@@ -44,22 +45,59 @@ WantedBy=multi-user.target
 
 
 def install_windows_service(root_dir: Path) -> None:
+    """Install Windows service via pywin32 helper."""
     python = sys.executable
-    cmd = f'"{python}" -m elbot.main'
+    # Install with auto startup and working directory argument so .env resolves
     subprocess.run(
-        [
-            "sc",
-            "create",
-            "Elbot",
-            "binPath=",
-            cmd,
-            "start=",
-            "auto",
-        ],
+        [python, "-m", "elbot.win_service", "install", "--startup=auto", "--working-dir", str(root_dir)],
         check=True,
     )
-    subprocess.run(["sc", "start", "Elbot"], check=True)
-    print("Elbot Windows service installed, set to start automatically, and started.")
+    subprocess.run([python, "-m", "elbot.win_service", "start"], check=True)
+    print("Elbot Windows service installed and started.")
+
+
+def install_launchd_service(root_dir: Path, require_lavalink: bool = False) -> None:
+    """Install a user LaunchAgent on macOS (Darwin)."""
+    python = sys.executable
+    label = "com.elbot.bot"
+    agents = Path.home() / "Library" / "LaunchAgents"
+    agents.mkdir(parents=True, exist_ok=True)
+    plist = agents / f"{label}.plist"
+
+    # Build EnvironmentVariables dict for launchd
+    env_lines = """
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>AUTO_LAVALINK</key><string>1</string>
+        </dict>
+    """.strip()
+
+    content = f"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{python}</string>
+        <string>-m</string>
+        <string>elbot.main</string>
+    </array>
+    <key>WorkingDirectory</key><string>{root_dir}</string>
+    {env_lines}
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>{root_dir}/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key><string>{root_dir}/logs/launchd.err.log</string>
+</dict>
+</plist>
+"""
+    plist.write_text(content)
+    # Load and start the agent
+    subprocess.run(["launchctl", "load", str(plist)], check=False)
+    subprocess.run(["launchctl", "start", label], check=False)
+    print(f"Elbot LaunchAgent installed: {plist}")
 
 
 def uninstall_systemd_service() -> None:
@@ -72,20 +110,37 @@ def uninstall_systemd_service() -> None:
 
 
 def uninstall_windows_service() -> None:
-    subprocess.run(["sc", "stop", "Elbot"], check=False)
-    subprocess.run(["sc", "delete", "Elbot"], check=False)
+    python = sys.executable
+    subprocess.run([python, "-m", "elbot.win_service", "stop"], check=False)
+    subprocess.run([python, "-m", "elbot.win_service", "remove"], check=False)
     print("Elbot Windows service removed.")
+
+
+def uninstall_launchd_service() -> None:
+    label = "com.elbot.bot"
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+    subprocess.run(["launchctl", "stop", label], check=False)
+    subprocess.run(["launchctl", "unload", str(plist)], check=False)
+    if plist.exists():
+        plist.unlink()
+    print("Elbot LaunchAgent removed.")
 
 
 def main() -> None:
     remove = "--remove" in sys.argv
     require_lavalink = "--require-lavalink" in sys.argv
     root_dir = Path(__file__).resolve().parents[1]
+    system = platform.system().lower()
     if os.name == "nt":
         if remove:
             uninstall_windows_service()
         else:
             install_windows_service(root_dir)
+    elif system == "darwin":
+        if remove:
+            uninstall_launchd_service()
+        else:
+            install_launchd_service(root_dir, require_lavalink=require_lavalink)
     elif shutil.which("systemctl"):
         if remove:
             uninstall_systemd_service()

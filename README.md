@@ -49,8 +49,9 @@ cd Elbot
 ```powershell
 git clone https://github.com/ALEPola/Elbot.git
 cd Elbot
-.\scripts\run.ps1
-# edit .env, re-run
+# One-time setup (creates venv, installs deps, prompts for token, installs service)
+./scripts/install.ps1
+# The "Elbot" Windows service will start automatically on boot.
 ```
 
 ### Requirements
@@ -87,6 +88,7 @@ elbot-install-service
 ```
 
 This command installs, enables and starts a system service so Elbot runs automatically.
+On Windows and macOS this command also installs the equivalent service/agent.
 To remove the service later run:
 
 ```bash
@@ -186,8 +188,14 @@ environment variable.
 
 ## Windows notes
 
-On Windows, you may need to install [FFmpeg](https://ffmpeg.org/) separately and ensure `ffmpeg.exe` is in your `PATH`.
-Running `elbot-install-service` will create and start a Windows service so the bot runs in the background.
+- Use `scripts\install.ps1` for a guided setup that installs dependencies and the Windows service.
+- `elbot-install-service` can also be run manually; it installs and starts the service using pywin32.
+- Optional `/moan` requires [FFmpeg](https://ffmpeg.org/) in `PATH` or set `FFMPEG_PATH` in `.env`.
+
+## macOS notes
+
+`elbot-install-service` installs a LaunchAgent in `~/Library/LaunchAgents/com.elbot.bot.plist` that runs at login
+and restarts the bot if it exits.
 
 ## Updating
 
