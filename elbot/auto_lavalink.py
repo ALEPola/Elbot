@@ -3,11 +3,14 @@ from __future__ import annotations
 import atexit
 import os
 from pathlib import Path
+import platform
 import signal
 import socket
 import subprocess
 import time
 import urllib.request
+import zipfile
+import tarfile
 
 from platformdirs import user_data_dir
 
@@ -40,14 +43,100 @@ def _find_free_port(start: int = 2333, tries: int = 40) -> int:
     raise RuntimeError("No free TCP port available in 2333-2372")
 
 
-def _ensure_java() -> None:
+def _detect_os_arch() -> tuple[str, str]:
+    sysname = platform.system().lower()
+    machine = platform.machine().lower()
+
+    # os
+    if "windows" in sysname or sysname.startswith("msys") or sysname.startswith("cygwin"):
+        os_name = "windows"
+    elif "darwin" in sysname or "mac" in sysname:
+        os_name = "mac"
+    else:
+        os_name = "linux"
+
+    # arch
+    if machine in ("x86_64", "amd64"):
+        arch = "x64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "aarch64"
+    else:
+        # best-effort default
+        arch = "x64"
+
+    return os_name, arch
+
+
+def _extract_archive(archive: Path, target_dir: Path) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    # Try zip, then tar.*
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(target_dir)
+            return
+    except zipfile.BadZipFile:
+        pass
+
+    try:
+        with tarfile.open(archive) as tf:
+            tf.extractall(target_dir)
+            return
+    except tarfile.TarError as e:
+        raise RuntimeError(f"Unsupported JRE archive format: {archive.name}: {e}")
+
+
+def _find_java_in(dir_path: Path) -> Path | None:
+    # Search for bin/java or bin/java.exe under dir_path
+    cand = []
+    for p in dir_path.rglob("bin/java*"):
+        # Prefer exact java(.exe)
+        if p.name in ("java", "java.exe"):
+            return p
+        cand.append(p)
+    return cand[0] if cand else None
+
+
+def _download_jre(base: Path) -> Path:
+    os_name, arch = _detect_os_arch()
+    jre_dir = base / "jre"
+    jre_dir.mkdir(parents=True, exist_ok=True)
+
+    # If already present, reuse
+    existing = _find_java_in(jre_dir)
+    if existing and existing.exists():
+        return existing
+
+    # Adoptium (Eclipse Temurin) latest GA JRE 17 URL
+    url = f"https://api.adoptium.net/v3/binary/latest/17/ga/{os_name}/{arch}/jre/hotspot/normal/eclipse"
+    tmp_name = jre_dir / ("jre17.zip" if os_name == "windows" else "jre17.tar.gz")
+
+    print(f"[auto-lavalink] Downloading OpenJDK 17 JRE ({os_name}/{arch}) ...")
+    urllib.request.urlretrieve(url, tmp_name)
+
+    # Extract into jre_dir, then locate bin/java
+    _extract_archive(tmp_name, jre_dir)
+    java_bin = _find_java_in(jre_dir)
+    if not java_bin:
+        raise RuntimeError("Downloaded JRE does not contain a java binary.")
+    return java_bin
+
+
+def _get_java_bin() -> str:
     from shutil import which
 
     j = which("java")
-    if not j:
+    if j:
+        return j
+
+    # Attempt to download a portable JRE into APP_DIR
+    try:
+        java_bin = _download_jre(BASE)
+        return str(java_bin)
+    except Exception as e:
         raise RuntimeError(
-            "Java 17+ is required to run Lavalink. Install OpenJDK 17 and retry "
-            "(e.g., sudo apt-get install openjdk-17-jre)."
+            "Java 17+ is required to run Lavalink and could not be found. "
+            "Tried downloading a portable JRE automatically but failed. "
+            f"Error: {e}"
         )
 
 
@@ -116,7 +205,7 @@ def start() -> tuple[int, str]:
     if _proc and _proc.poll() is None:
         return _port, os.environ["LAVALINK_PASSWORD"]
 
-    _ensure_java()
+    java_bin = _get_java_bin()
     _ensure_jar()
 
     wanted = int(os.getenv("LAVALINK_PORT", "0"))
@@ -139,7 +228,7 @@ def start() -> tuple[int, str]:
     spring_loc = f"file:{CONF.as_posix()}"
     _proc = subprocess.Popen(
         [
-            "java",
+            java_bin,
             "-Xms128m",
             "-Xmx512m",
             f"-Dspring.config.location={spring_loc}",

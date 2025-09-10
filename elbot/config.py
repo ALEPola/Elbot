@@ -24,7 +24,8 @@ class Config:
 
     # Your Discord bot token must live in an environment variable called DISCORD_TOKEN
     BASE_DIR = BASE_DIR
-    DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
+    # Accept both DISCORD_TOKEN and legacy DISCORD_BOT_TOKEN for convenience
+    DISCORD_TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
     ICS_URL = os.getenv("ICS_URL", "")

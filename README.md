@@ -149,12 +149,15 @@ You can also use the helper script:
 
 ## Running Lavalink
 
-Elbot now bundles an auto-launcher that downloads and starts Lavalink when the
+Elbot includes an auto-launcher that downloads and starts Lavalink when the
 bot runs, selecting a free local port and writing logs to
-`~/.elbot_lavalink/lavalink.log`. Override the port or password with
-`LAVALINK_PORT` or `LAVALINK_PASSWORD`, or disable the helper with
-`AUTO_LAVALINK=0` if you host Lavalink separately. For example, to run it in
-Docker:
+`~/.elbot_lavalink/lavalink.log`. If Java 17+ is not present on the system,
+Elbot will automatically download a portable Temurin (Adoptium) JRE 17 to the
+same directory and use it, so music works out of the box.
+
+Override the port or password with `LAVALINK_PORT` or `LAVALINK_PASSWORD`, or
+disable the helper with `AUTO_LAVALINK=0` if you host Lavalink separately.
+For example, to run it in Docker:
 
 ```bash
 docker run -p 2333:2333 \
