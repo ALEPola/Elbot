@@ -24,7 +24,9 @@ from elbot.config import Config
 # discord.py so we will still bind to nextcord in mixed environments).
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 
-import mafic
+from .mafic_compat import get_mafic
+
+mafic = get_mafic()
 
 logger = logging.getLogger("elbot.audio.lavalink")
 
@@ -89,6 +91,32 @@ class LavalinkTrack:
             artwork_url=info.thumbnail,
             is_stream=track.stream,
         )
+
+
+class DisabledLavalinkManager:
+    """Fallback manager used when Mafic is unavailable."""
+
+    __slots__ = ("bot", "reason", "closed")
+
+    def __init__(self, bot, reason: str) -> None:
+        self.bot = bot
+        self.reason = reason
+        self.closed = False
+
+    async def wait_ready(self, timeout: float | None = None) -> bool:
+        return False
+
+    async def close(self) -> None:
+        self.closed = True
+
+    def handle_node_ready(self, node) -> None:  # pragma: no cover - no-op
+        return None
+
+    def handle_node_unavailable(self, node) -> None:  # pragma: no cover - no-op
+        return None
+
+    async def resolve(self, *args, **kwargs):
+        raise NodeNotReadyError(self.reason)
 
 
 class LavalinkManager:

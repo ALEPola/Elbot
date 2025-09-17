@@ -14,6 +14,7 @@ import nextcord
 from nextcord.ext import commands
 
 from elbot.audio.lavalink_client import (
+    DisabledLavalinkManager,
     LavalinkManager,
     LavalinkTrack,
     MusicError,
@@ -21,8 +22,9 @@ from elbot.audio.lavalink_client import (
     NoResultsError,
 )
 from elbot.config import Config
+from elbot.audio.mafic_compat import get_mafic
 
-import mafic
+mafic = get_mafic()
 
 logger = logging.getLogger("elbot.music")
 
@@ -64,7 +66,13 @@ class Music(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.manager = LavalinkManager(bot)
+        self._manager_error: str | None = None
+        try:
+            self.manager = LavalinkManager(bot)
+        except RuntimeError as exc:
+            reason = str(exc)
+            self._manager_error = reason
+            self.manager = DisabledLavalinkManager(bot, reason)
         self._states: dict[int, MusicState] = {}
 
     # ------------------------------------------------------------------
@@ -90,7 +98,8 @@ class Music(commands.Cog):
         self._states.pop(guild_id, None)
 
     async def cog_unload(self) -> None:  # type: ignore[override]
-        await self.manager.close()
+        if self.manager:
+            await self.manager.close()
         for guild in list(self.bot.guilds):
             state = self._states.get(guild.id)
             if state and state.player:
@@ -113,6 +122,9 @@ class Music(commands.Cog):
 
         state = self._get_state(guild.id)
         voice = guild.voice_client
+
+        if self._manager_error:
+            return None, self._manager_error
 
         if not await self.manager.wait_ready(timeout=5):
             return None, "The music node is not ready. Try again shortly."
@@ -213,7 +225,9 @@ class Music(commands.Cog):
         state.player = player
 
         try:
-            lavalink_track = await self.manager.resolve(query, requester_id=interaction.user.id)
+            lavalink_track = await self.manager.resolve(
+                query, requester_id=interaction.user.id
+            )
         except NodeNotReadyError as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
             return
