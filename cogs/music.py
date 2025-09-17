@@ -1,238 +1,342 @@
-"""Music playback using Lavalink and Wavelink."""
+"""Music playback using Mafic (Lavalink v4) with yt-dlp fallback."""
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import shutil
-import logging
-import asyncio
-from pathlib import Path
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Deque
 
 import nextcord
 from nextcord.ext import commands
-import wavelink
 
+from elbot.audio.lavalink_client import (
+    LavalinkManager,
+    LavalinkTrack,
+    MusicError,
+    NodeNotReadyError,
+    NoResultsError,
+)
 from elbot.config import Config
+
+import mafic
 
 logger = logging.getLogger("elbot.music")
 
 FFMPEG_PATH = os.getenv("FFMPEG_PATH") or shutil.which("ffmpeg") or "ffmpeg"
 
 
+@dataclass(slots=True)
+class QueueEntry:
+    """A queued track request."""
+
+    track: LavalinkTrack
+    channel_id: int
+    query: str
+
+
+@dataclass(slots=True)
+class MusicState:
+    """Per-guild music state management."""
+
+    guild_id: int
+    player: mafic.Player | None = None
+    queue: Deque[QueueEntry] = field(default_factory=deque)
+    now_playing: QueueEntry | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    def reset(self) -> None:
+        self.queue.clear()
+        self.now_playing = None
+
+
+def truncate(text: str, limit: int = 80) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
 class Music(commands.Cog):
-    """A minimal music cog powered by Lavalink via Wavelink."""
+    """Discord music commands backed by Lavalink."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.node: wavelink.Node | None = None
-        self.node_ready = asyncio.Event()
-        self.connect_task = bot.loop.create_task(self.connect_nodes())
-        self._cleanup_lock = asyncio.Lock()
+        self.manager = LavalinkManager(bot)
+        self._states: dict[int, MusicState] = {}
 
-    async def connect_nodes(self) -> None:
-        """Connect to the Lavalink node configured in :class:`Config`."""
+    # ------------------------------------------------------------------
+    # Utility helpers
+    # ------------------------------------------------------------------
+    def _get_state(self, guild_id: int) -> MusicState:
+        state = self._states.get(guild_id)
+        if state is None:
+            state = MusicState(guild_id=guild_id)
+            self._states[guild_id] = state
+        return state
 
-        await self.bot.wait_until_ready()
+    async def _cleanup_state(self, guild_id: int) -> None:
+        state = self._states.get(guild_id)
+        if not state:
+            return
+        if state.player:
+            try:
+                await state.player.disconnect(force=True)
+            except Exception:  # pragma: no cover - defensive cleanup
+                pass
+            state.player = None
+        self._states.pop(guild_id, None)
 
-        host = os.getenv("LAVALINK_HOST", Config.LAVALINK_HOST)
-        port = int(os.getenv("LAVALINK_PORT", str(Config.LAVALINK_PORT)))
-        password = os.getenv("LAVALINK_PASSWORD", Config.LAVALINK_PASSWORD)
-        uri = f"http://{host}:{port}"
-
-        # close stale nodes
-        if wavelink.Pool.is_connected():
-            for existing in list(wavelink.Pool.nodes.values()):
+    async def cog_unload(self) -> None:  # type: ignore[override]
+        await self.manager.close()
+        for guild in list(self.bot.guilds):
+            state = self._states.get(guild.id)
+            if state and state.player:
                 try:
-                    await existing.close()
+                    await state.player.disconnect(force=True)
                 except Exception:
                     pass
-
-        # retry loop until connected
-        for attempt in range(1, 8):
-            try:
-                node = wavelink.Node(identifier="MAIN", uri=uri, password=password, client=self.bot)
-                nodes = await wavelink.Pool.connect(nodes=[node], client=self.bot)
-                self.node = nodes.get("MAIN")
-                if self.node and self.node.status == wavelink.NodeStatus.CONNECTED:
-                    self.node_ready.set()
-                    logger.info("Connected to Lavalink at %s", uri)
-                    return
-            except Exception as exc:
-                logger.error("Lavalink connect attempt %s failed: %s", attempt, exc)
-
-            await asyncio.sleep(min(2 * attempt, 10))
-
-        logger.error("Gave up connecting to Lavalink at %s", uri)
-
-    async def close_node(self) -> None:
-        """Close the Lavalink connection if active."""
-        async with self._cleanup_lock:
-            if self.node:
-                try:
-                    await self.node.close()
-                finally:
-                    self.node = None
-                    logger.info("Lavalink connection closed")
-
-    async def cog_unload(self) -> None:
-        await self.close_node()
-
-        for guild in self.bot.guilds:
-            if guild.voice_client:
-                await guild.voice_client.disconnect()
-
-    @commands.Cog.listener()
-    async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload):
-        if payload.node.identifier == "MAIN":
-            self.node = payload.node
-            self.node_ready.set()
-            logger.info("Wavelink node %s is READY", payload.node.identifier)
-
-    @commands.Cog.listener()
-    async def on_wavelink_node_closed(self, payload: wavelink.NodeClosedEventPayload):
-        if payload.node.identifier == "MAIN":
-            self.node_ready.clear()
-            self.connect_task = self.bot.loop.create_task(self.connect_nodes())
+        self._states.clear()
 
     async def ensure_voice(
         self, interaction: nextcord.Interaction
-    ) -> tuple[wavelink.Player | None, str | None]:
-        """
-        Ensure a wavelink.Player is connected to the user's channel.
-        **No interaction responses here**. We return (player, message_if_any).
-        """
-
-        # wait briefly for node if it’s still booting
-        if not self.node_ready.is_set():
-            try:
-                await asyncio.wait_for(self.node_ready.wait(), timeout=10)
-            except asyncio.TimeoutError:
-                return None, "The music node is not ready. Try again in a moment."
+    ) -> tuple[mafic.Player | None, str | None]:
+        """Ensure we are connected to the requester's voice channel."""
 
         if not interaction.user or not interaction.user.voice:
-            return None, "You must be in a voice channel to use this command."
+            return None, "You must join a voice channel first."
 
-        if not self.node or self.node.status != wavelink.NodeStatus.CONNECTED:
-            return None, "The music node is not ready. Try again in a moment."
+        guild = interaction.guild
+        assert guild is not None  # for type checkers
 
-        channel = interaction.user.voice.channel
-        voice = interaction.guild.voice_client
+        state = self._get_state(guild.id)
+        voice = guild.voice_client
 
-        # If something else claimed the voice client, drop it so we can get a Wavelink player
-        if voice and not isinstance(voice, wavelink.Player):
-            await voice.disconnect()
+        if not await self.manager.wait_ready(timeout=5):
+            return None, "The music node is not ready. Try again shortly."
+
+        if voice and not isinstance(voice, mafic.Player):
+            try:
+                await voice.disconnect(force=True)
+            except Exception:
+                pass
             voice = None
+            state.player = None
 
-        # Move if we’re in another channel
-        if voice and voice.channel.id != channel.id:
-            await voice.move_to(channel)
-            return voice, f"Moved to {channel.mention}."
+        if voice and voice.channel.id != interaction.user.voice.channel.id:
+            try:
+                await voice.disconnect(force=True)
+            except Exception:
+                pass
+            voice = None
+            state.player = None
 
-        # Fresh connect
-        if not voice:
-            voice = await channel.connect(cls=wavelink.Player)
+        if voice is None:
+            try:
+                voice = await interaction.user.voice.channel.connect(cls=mafic.Player)
+            except Exception as exc:
+                logger.error("Voice connection failed: %s", exc)
+                return None, "Could not join your voice channel."
 
+        state.player = voice
         return voice, None
 
-    async def _get_player(self, interaction: nextcord.Interaction) -> wavelink.Player | None:
-        """Return the active wavelink player or send an error message."""
-        player = interaction.guild.voice_client
-        if not player or not isinstance(player, wavelink.Player):
-            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
-            return None
-        return player
+    async def _start_next(self, guild_id: int) -> None:
+        state = self._states.get(guild_id)
+        if not state or not state.player:
+            return
 
+        async with state.lock:
+            if state.now_playing is not None:
+                return
+            if not state.queue:
+                # Nothing queued – disconnect after stopping playback.
+                try:
+                    await state.player.disconnect(force=True)
+                except Exception:
+                    pass
+                await self._cleanup_state(guild_id)
+                return
+
+            entry = state.queue.popleft()
+            state.now_playing = entry
+
+        try:
+            await state.player.play(entry.track.track)
+        except Exception as exc:
+            logger.error("Failed to start playback: %s", exc)
+            state.now_playing = None
+            await self._notify_channel(
+                guild_id, entry.channel_id, "Playback failed. Trying the next track."
+            )
+            await self._start_next(guild_id)
+            return
+
+        await self._notify_channel(
+            guild_id,
+            entry.channel_id,
+            f"▶️ Now playing **{truncate(entry.track.title)}**",
+        )
+
+    async def _notify_channel(self, guild_id: int, channel_id: int, message: str) -> None:
+        channel = self.bot.get_channel(channel_id)
+        if not channel or not isinstance(channel, nextcord.TextChannel):
+            return
+        try:
+            await channel.send(message)
+        except Exception:  # pragma: no cover - ignore permission failures
+            pass
+
+    # ------------------------------------------------------------------
+    # Slash commands
+    # ------------------------------------------------------------------
     @nextcord.slash_command(name="play", description="Play a song from YouTube")
     async def play(self, interaction: nextcord.Interaction, query: str) -> None:
-        # Always defer first (so anything that follows uses followup)
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=False)
 
         player, msg = await self.ensure_voice(interaction)
         if msg:
             await interaction.followup.send(msg, ephemeral=True)
-        if not player:
+            return
+        if player is None:
             return
 
-        # Node sanity (Pool.get_node returns a connected node or raises)
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+            return
+
+        state = self._get_state(guild.id)
+        state.player = player
+
         try:
-            node = wavelink.Pool.get_node(identifier="MAIN")
-        except Exception:
-            await interaction.followup.send(
-                "The music node is not ready. Try again in a moment.",
-                ephemeral=True,
-            )
+            lavalink_track = await self.manager.resolve(query, requester_id=interaction.user.id)
+        except NodeNotReadyError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return
+        except NoResultsError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return
+        except MusicError as exc:  # pragma: no cover - safety net
+            await interaction.followup.send(f"Playback failed: {exc}", ephemeral=True)
             return
 
-        # Search
-        try:
-            # Let Lavalink handle source managers (YouTube/etc.). If your node
-            # lacks YouTube, this returns empty. Prefix with "ytsearch:" if needed.
-            search = await wavelink.Playable.search(query, node=node)
-        except Exception as exc:
-            logger.error("Track search failed: %s", exc)
-            await interaction.followup.send("Search failed.", ephemeral=True)
-            return
+        entry = QueueEntry(track=lavalink_track, channel_id=interaction.channel_id, query=query)
+        state.queue.append(entry)
 
-        track = None
-        if isinstance(search, wavelink.Playlist):
-            track = search[0] if len(search) else None
+        suffix = " (yt-dlp fallback)" if lavalink_track.source == "yt-dlp" else ""
+
+        if state.now_playing is None and getattr(player, "current", None) is None:
+            state.now_playing = None  # ensure start picks new track
+            await self._start_next(guild.id)
+            response = f"▶️ Now playing **{truncate(lavalink_track.title)}**{suffix}"
         else:
-            track = search[0] if search else None
+            response = f"⏭ Queued **{truncate(lavalink_track.title)}**{suffix}"
 
-        if not track:
-            await interaction.followup.send("No results found.", ephemeral=True)
-            return
-
-        await player.queue.put_wait(track)
-        if not player.playing:
-            await player.play(await player.queue.get())
-
-        await interaction.followup.send(f"▶️ Queued **{track.title}**")
+        await interaction.followup.send(response)
 
     @nextcord.slash_command(name="queue", description="Show the upcoming tracks")
     async def queue(self, interaction: nextcord.Interaction) -> None:
-        player = await self._get_player(interaction)
-        if not player:
-            return
-
-        queue = list(player.queue)
-        if not queue:
+        state = self._states.get(interaction.guild_id or 0)
+        if not state or (not state.queue and not state.now_playing):
             await interaction.response.send_message("The queue is empty.", ephemeral=True)
             return
 
-        lines = [f"{idx + 1}. {t.title}" for idx, t in enumerate(queue)]
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        embed = nextcord.Embed(title="Music queue", color=nextcord.Color.blurple())
+        if state.now_playing:
+            embed.add_field(
+                name="Now playing",
+                value=truncate(state.now_playing.track.title),
+                inline=False,
+            )
+        if state.queue:
+            lines = [
+                f"{idx + 1}. {truncate(entry.track.title)}" for idx, entry in enumerate(state.queue)
+            ]
+            embed.add_field(name="Up next", value="\n".join(lines), inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @nextcord.slash_command(name="skip", description="Skip the current song")
     async def skip(self, interaction: nextcord.Interaction) -> None:
-        player = await self._get_player(interaction)
-        if not player:
+        state = self._states.get(interaction.guild_id or 0)
+        if not state or not state.player:
+            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
             return
 
-        await player.skip()
+        try:
+            await state.player.stop()
+        except Exception as exc:
+            logger.error("Skip failed: %s", exc)
+            await interaction.response.send_message("Unable to skip right now.", ephemeral=True)
+            return
+
+        state.now_playing = None
         await interaction.response.send_message("⏭ Skipped.", ephemeral=True)
 
     @nextcord.slash_command(name="stop", description="Stop playback and disconnect")
     async def stop(self, interaction: nextcord.Interaction) -> None:
-        player = await self._get_player(interaction)
-        if not player:
+        state = self._states.get(interaction.guild_id or 0)
+        if not state or not state.player:
+            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
             return
 
-        player.queue.clear()
-        await player.stop()
-        await player.disconnect()
+        state.reset()
+        try:
+            await state.player.stop()
+        except Exception:
+            pass
+        try:
+            await state.player.disconnect(force=True)  # type: ignore[arg-type]
+        except Exception:
+            pass
         await interaction.response.send_message("🛑 Stopped playback.", ephemeral=True)
+        await self._cleanup_state(interaction.guild_id or 0)
+
+    # ------------------------------------------------------------------
+    # Mafic event listeners
+    # ------------------------------------------------------------------
+    @commands.Cog.listener()
+    async def on_node_ready(self, node: mafic.Node) -> None:  # type: ignore[override]
+        self.manager.handle_node_ready(node)
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload) -> None:
-        player = payload.player
+    async def on_node_unavailable(self, node: mafic.Node) -> None:  # type: ignore[override]
+        self.manager.handle_node_unavailable(node)
 
-        if player and player.queue:
-            next_track = await player.queue.get()
-            await player.play(next_track)
-        elif player and not player.queue:
-            await player.disconnect()
+    @commands.Cog.listener()
+    async def on_track_end(self, event: mafic.TrackEndEvent) -> None:  # type: ignore[override]
+        guild_id = getattr(event.player.guild, "id", None)
+        if guild_id is None:
+            return
+        state = self._states.get(guild_id)
+        if not state:
+            return
+        if state.now_playing and event.track:
+            current_id = state.now_playing.track.track.id
+            if current_id != event.track.id:
+                return
+        state.now_playing = None
+        await self._start_next(guild_id)
+
+    @commands.Cog.listener()
+    async def on_track_exception(self, event: mafic.TrackExceptionEvent) -> None:  # type: ignore[override]
+        guild_id = getattr(event.player.guild, "id", None)
+        if guild_id is None:
+            return
+        state = self._states.get(guild_id)
+        if not state or not state.now_playing:
+            return
+        await self._notify_channel(
+            guild_id,
+            state.now_playing.channel_id,
+            "⚠️ Encountered a playback error. Retrying with the next track...",
+        )
+        state.now_playing = None
+        await self._start_next(guild_id)
 
 
 def setup(bot: commands.Bot) -> None:
@@ -248,16 +352,15 @@ def setup(bot: commands.Bot) -> None:
             )
             return
 
-        if isinstance(interaction.guild.voice_client, wavelink.Player):
+        if isinstance(interaction.guild.voice_client, mafic.Player):
             await interaction.response.send_message(
                 "Stop music playback before using this command.",
                 ephemeral=True,
             )
             return
 
-        BASE_DIR = Path(__file__).resolve().parents[1]
-        SFX_DIR = BASE_DIR / "sfx"
-        sound_path = SFX_DIR / "moan.mp3"
+        base_dir = Config.BASE_DIR
+        sound_path = base_dir / "sfx" / "moan.mp3"
         if not sound_path.exists():
             await interaction.response.send_message("❌ Sound effect not found!", ephemeral=True)
             return
@@ -269,7 +372,6 @@ def setup(bot: commands.Bot) -> None:
         if vc.is_playing():
             vc.stop()
 
-        # Use absolute ffmpeg path so it works under systemd
         source = nextcord.FFmpegPCMAudio(str(sound_path), executable=FFMPEG_PATH)
         vc.play(source)
         await interaction.response.send_message("😏", ephemeral=True)

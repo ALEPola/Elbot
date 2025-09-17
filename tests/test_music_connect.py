@@ -6,102 +6,103 @@ from nextcord.ext import commands
 from cogs import music as music_cog
 
 
-def test_connect_nodes_uses_env(monkeypatch):
-    recorded = {}
+class DummyManager:
+    def __init__(self, bot):
+        self.bot = bot
+        self.ready = True
+        self.closed = False
 
-    async def fake_connect(*, nodes, client=None, cache_capacity=None):
-        node = nodes[0]
-        recorded['uri'] = node.uri
-        recorded['password'] = node.password
-        recorded['identifier'] = node.identifier
-        node.status = music_cog.wavelink.NodeStatus.CONNECTED
-        return {node.identifier: node}
+    async def wait_ready(self, timeout=None):
+        return self.ready
 
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'connect', fake_connect)
-    monkeypatch.setenv('LAVALINK_HOST', 'example.com')
-    monkeypatch.setenv('LAVALINK_PORT', '9999')
-    monkeypatch.setenv('LAVALINK_PASSWORD', 'secret')
+    async def close(self):
+        self.closed = True
 
-    async def fake_wait_until_ready(self):
-        return None
+    async def resolve(self, *args, **kwargs):  # pragma: no cover - not used here
+        raise NotImplementedError
 
-    monkeypatch.setattr(commands.Bot, 'wait_until_ready', fake_wait_until_ready)
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'is_connected', lambda: False, raising=False)
+    def handle_node_ready(self, node):  # pragma: no cover - not used here
+        self.ready = True
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    intents = nextcord.Intents.none()
-    bot = commands.Bot(command_prefix='!', intents=intents, loop=loop)
-
-    cog = music_cog.Music(bot)
-    loop.run_until_complete(cog.connect_task)
-    assert recorded['uri'] == 'http://example.com:9999'
-    assert recorded['password'] == 'secret'
-    assert recorded['identifier'] == 'MAIN'
-    loop.close()
+    def handle_node_unavailable(self, node):  # pragma: no cover - not used here
+        self.ready = False
 
 
-def test_ensure_voice_calls_player_connect(monkeypatch):
+def test_ensure_voice_connects_with_mafic_player(monkeypatch):
+    monkeypatch.setattr(music_cog, "LavalinkManager", DummyManager)
+
     recorded = {}
 
     class DummyPlayer:
         def __init__(self, client, channel):
             self.client = client
             self.channel = channel
+            self.disconnected = False
 
-        async def connect(self, *, guild_id, channel, **_):
-            recorded['guild_id'] = guild_id
-            recorded['channel'] = channel
+        async def disconnect(self, *, force=False):
+            self.disconnected = True
 
-    monkeypatch.setattr(music_cog.wavelink, 'Player', DummyPlayer)
-
-    class DummyNode:
-        status = music_cog.wavelink.NodeStatus.CONNECTED
-
-        def __init__(self):
-            self.client = bot
-
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'get_node', lambda *a, **k: DummyNode())
-
-    async def fake_connect(*, nodes, client=None, cache_capacity=None):
-        return {"MAIN": DummyNode()}
-
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'connect', fake_connect)
-
-    async def fake_wait_until_ready(self):
-        return None
-
-    monkeypatch.setattr(commands.Bot, 'wait_until_ready', fake_wait_until_ready)
-    monkeypatch.setattr(music_cog.wavelink.Pool, 'is_connected', lambda: False, raising=False)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    intents = nextcord.Intents.none()
-    bot = commands.Bot(command_prefix='!', intents=intents, loop=loop)
-    cog = music_cog.Music(bot)
-    loop.run_until_complete(cog.connect_task)
-
-    guild = type('Guild', (), {'id': 123, 'voice_client': None})()
+    monkeypatch.setattr(music_cog.mafic, "Player", DummyPlayer)
 
     class DummyChannel:
         def __init__(self, guild):
             self.guild = guild
 
         async def connect(self, *, cls):
+            recorded["cls"] = cls
             player = cls(bot, self)
-            await player.connect(guild_id=self.guild.id, channel=self)
+            self.guild.voice_client = player
             return player
 
+    guild = type("Guild", (), {"id": 42, "voice_client": None})()
     channel = DummyChannel(guild)
-    user = type('User', (), {'voice': type('VS', (), {'channel': channel})()})()
-    interaction = type('Interaction', (), {
-        'user': user,
-        'guild': guild,
-        'response': type('Resp', (), {'send_message': lambda *a, **k: None})()
-    })()
+    user = type("User", (), {"voice": type("VS", (), {"channel": channel})()})()
+    interaction = type(
+        "Interaction",
+        (),
+        {
+            "user": user,
+            "guild": guild,
+        },
+    )()
 
-    loop.run_until_complete(cog.ensure_voice(interaction))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    intents = nextcord.Intents.none()
+    bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
+    cog = music_cog.Music(bot)
 
-    assert recorded['guild_id'] == guild.id
-    assert recorded['channel'] is channel
+    player, message = loop.run_until_complete(cog.ensure_voice(interaction))
+    assert message is None
+    assert isinstance(player, DummyPlayer)
+    assert recorded["cls"] is DummyPlayer
+
+    loop.run_until_complete(cog.manager.close())
+    loop.close()
+
+
+def test_ensure_voice_errors_when_node_unready(monkeypatch):
+    class SlowManager(DummyManager):
+        async def wait_ready(self, timeout=None):
+            return False
+
+    monkeypatch.setattr(music_cog, "LavalinkManager", SlowManager)
+    monkeypatch.setattr(music_cog.mafic, "Player", object)
+
+    guild = type("Guild", (), {"id": 99, "voice_client": None})()
+    channel = type("Chan", (), {"guild": guild, "connect": lambda *a, **k: None})()
+    user = type("User", (), {"voice": type("VS", (), {"channel": channel})()})()
+    interaction = type("Interaction", (), {"user": user, "guild": guild})()
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    intents = nextcord.Intents.none()
+    bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
+    cog = music_cog.Music(bot)
+
+    player, message = loop.run_until_complete(cog.ensure_voice(interaction))
+    assert player is None
+    assert "not ready" in message.lower()
+
+    loop.run_until_complete(cog.manager.close())
     loop.close()

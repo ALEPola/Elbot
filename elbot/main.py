@@ -7,7 +7,8 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 import nextcord
 from nextcord.ext import commands
-import wavelink
+os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
+import mafic
 from dotenv import load_dotenv
 from .config import Config
 from .utils import load_all_cogs
@@ -77,13 +78,17 @@ def main():
     # 5) Load every cog in the cogs/ directory
     load_all_cogs(bot, cogs_dir="cogs")
 
-    @bot.slash_command(name="musicdebug", description="Show Lavalink/Wavelink status")
+    @bot.slash_command(name="musicdebug", description="Show Lavalink status")
     async def musicdebug(inter: nextcord.Interaction):
-        try:
-            node = wavelink.Pool.get_node(identifier="MAIN")
-            status = f"{node.identifier} {node.status.name}, players={len(node.players)}"
-        except Exception as e:
-            status = f"no node: {type(e).__name__}: {e}"
+        nodes = mafic.NodePool.label_to_node
+        if not nodes:
+            status = "No Lavalink nodes are connected."
+        else:
+            node = next(iter(nodes.values()))
+            status = (
+                f"{node.label} available={node.available} "
+                f"players={len(node.players)}"
+            )
         await inter.response.send_message(status, ephemeral=True)
 
     # 6) Run the bot

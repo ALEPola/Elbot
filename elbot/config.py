@@ -48,6 +48,7 @@ class Config:
     LAVALINK_HOST = os.getenv("LAVALINK_HOST", "localhost")
     LAVALINK_PORT = int(os.getenv("LAVALINK_PORT", "2333"))
     LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
+    YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE") or os.getenv("YTDLP_COOKIES_PATH")
 
     # (Optional) If you want to store a guild ID for guild-specific logic
     if _gid_str:
