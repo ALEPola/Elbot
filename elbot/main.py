@@ -1,62 +1,144 @@
 # elbot/main.py
 
+from __future__ import annotations
+
+import asyncio
+import logging
 import os
 import sys
-import logging
-from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Optional
+
+import aiohttp
 import nextcord
-from nextcord.ext import commands
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 import mafic
-from dotenv import load_dotenv
-from .config import Config
-from .utils import load_all_cogs
+from nextcord.ext import commands
 
-# ── Logging Setup ────────────────────────────────────────────────────────────
-logger = logging.getLogger("elbot")
-logger.setLevel(logging.INFO)
-
-logger.handlers.clear()
-
-log_path = Path(Config.BASE_DIR) / "logs" / "elbot.log"
-log_path.parent.mkdir(exist_ok=True)
-file_handler = RotatingFileHandler(
-    log_path, maxBytes=10 * 1024 * 1024, backupCount=3
-)
-file_formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
-file_handler.setFormatter(file_formatter)
-logger.addHandler(file_handler)
-
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(file_formatter)
-logger.addHandler(console_handler)
+from .config import Config, log_cookie_status
+from .utils import load_all_cogs, safe_reply
 
 
-def main():
-    load_dotenv()
-    # 0) Optionally start a local Lavalink instance
+def _setup_logging() -> logging.Logger:
+    logger = logging.getLogger("elbot")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+
+    log_path = Path(Config.BASE_DIR) / "logs" / "elbot.log"
+    log_path.parent.mkdir(exist_ok=True)
+
+    formatter = logging.Formatter("%(asctime)s | %(name)s | %(levelname)s | %(message)s")
+
+    file_handler = RotatingFileHandler(
+        log_path, maxBytes=10 * 1024 * 1024, backupCount=3
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    logging.getLogger("nextcord").setLevel(logging.INFO)
+    logging.getLogger("mafic").setLevel(logging.INFO)
+    return logger
+
+
+logger = _setup_logging()
+
+
+async def _fetch_lavalink_plugins(response_json: Any) -> str:
+    if not isinstance(response_json, dict):
+        return "unknown"
+
+    plugins = response_json.get("plugins") or response_json.get("pluginInfo")
+    if isinstance(plugins, dict):
+        plugins = [plugins]
+    if not isinstance(plugins, list):
+        return "unknown"
+
+    for plugin in plugins:
+        if not isinstance(plugin, dict):
+            continue
+        dependency = plugin.get("dependency") or plugin.get("artifactId")
+        version = plugin.get("version")
+        name = plugin.get("name")
+        if dependency and "youtube" in dependency:
+            if version:
+                return version
+            parts = dependency.split(":")
+            if len(parts) >= 3:
+                return parts[-1]
+        if name and "youtube" in name.lower():
+            return version or "unknown"
+    return "unknown"
+
+
+async def _lavalink_health_check() -> None:
+    host = Config.LAVALINK_HOST
+    port = Config.LAVALINK_PORT
+    password = Config.LAVALINK_PASSWORD
+    secure = os.getenv("LAVALINK_SSL", "false").lower() == "true"
+    scheme = "https" if secure else "http"
+    base_url = f"{scheme}://{host}:{port}"
+
+    timeout = aiohttp.ClientTimeout(total=5)
+    handshake = False
+    yt_version = "unknown"
+    failure_reason: Optional[str] = None
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{base_url}/version", headers={"Authorization": password}
+            ) as response:
+                if response.status == 200:
+                    handshake = True
+                    try:
+                        data = await response.json(content_type=None)
+                    except Exception:  # pragma: no cover - Lavalink version quirks
+                        data = None
+                    yt_version = await _fetch_lavalink_plugins(data)
+                else:
+                    failure_reason = f"status={response.status}"
+    except Exception as exc:  # pragma: no cover - network failures
+        failure_reason = str(exc)
+
+    status = "ok" if handshake else "failed"
+    if failure_reason:
+        status = f"{status} ({failure_reason})"
+
+    logger.info(
+        "lavalink health host=%s port=%s youtube_plugin=%s handshake=%s",
+        host,
+        port,
+        yt_version,
+        status,
+    )
+
+
+def main() -> None:
     if Config.AUTO_LAVALINK:
         try:
             from elbot.auto_lavalink import start as start_lavalink
 
             port, pw = start_lavalink()
-            print(f"[bot] Auto-Lavalink: 127.0.0.1:{port}")
-        except Exception as e:
-            print(f"[bot] Auto-Lavalink failed: {e}")
+            logger.info("auto-lavalink started host=127.0.0.1 port=%s", port)
+        except Exception as exc:  # pragma: no cover - startup helper fallback
+            logger.error("auto-lavalink failed: %s", exc)
 
-    # 1) Verify required environment variables
     Config.validate()
+    log_cookie_status()
+    asyncio.run(_lavalink_health_check())
 
-    # 2) Create bot with intents
     intents = nextcord.Intents.default()
     intents.message_content = True
     intents.voice_states = True
     bot = commands.Bot(command_prefix=Config.PREFIX, intents=intents)
 
-    # 3) Global error handler
     @bot.event
-    async def on_command_error(ctx, error):
+    async def on_command_error(ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CommandNotFound):
             await ctx.send(f"❌ Command not found. Use `{Config.PREFIX}help`.")
         elif isinstance(error, commands.MissingRequiredArgument):
@@ -66,20 +148,33 @@ def main():
                 f"⏳ Command on cooldown. Try in {round(error.retry_after, 2)}s."
             )
         else:
-            logger.error(f"Unhandled error: {error}", exc_info=True)
+            logger.exception("command error")
             await ctx.send("❌ An unexpected error occurred. Contact the admin.")
 
-    # 4) on_ready logging
-    @bot.event
-    async def on_ready():
-        logger.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
-        print(f"ℹ️  Bot is ready as {bot.user}")
+    @bot.listen()
+    async def on_application_command_error(
+        interaction: nextcord.Interaction, error: Exception
+    ) -> None:
+        logger.exception(
+            "slash command error", extra={"command": getattr(interaction, "data", {})}
+        )
+        await safe_reply(
+            interaction,
+            "⚠️ Something went wrong while running that command. The team has been notified.",
+            ephemeral=True,
+        )
 
-    # 5) Load every cog in the cogs/ directory
+    @bot.event
+    async def on_ready() -> None:
+        if bot.user is None:  # pragma: no cover - defensive
+            return
+        logger.info("bot ready user=%s id=%s", bot.user, bot.user.id)
+
     load_all_cogs(bot, cogs_dir="cogs")
 
     @bot.slash_command(name="musicdebug", description="Show Lavalink status")
-    async def musicdebug(inter: nextcord.Interaction):
+    async def musicdebug(inter: nextcord.Interaction) -> None:
+        await inter.response.defer(thinking=True, ephemeral=True)
         nodes = mafic.NodePool.label_to_node
         if not nodes:
             status = "No Lavalink nodes are connected."
@@ -89,14 +184,13 @@ def main():
                 f"{node.label} available={node.available} "
                 f"players={len(node.players)}"
             )
-        await inter.response.send_message(status, ephemeral=True)
+        await safe_reply(inter, status, ephemeral=True)
 
-    # 6) Run the bot
     try:
         bot.run(Config.DISCORD_TOKEN)
-    except Exception as e:
-        logger.exception("Bot failed to start:")
-        raise e
+    except Exception:  # pragma: no cover - network/auth failures
+        logger.exception("bot failed to start")
+        raise
 
 
 if __name__ == "__main__":

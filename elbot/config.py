@@ -1,34 +1,32 @@
-# elbot/config.py
+"""Environment-backed configuration helpers."""
 
-import os
+from __future__ import annotations
+
 import logging
+import os
+import sys
+from datetime import datetime
 from pathlib import Path
+from typing import Iterable, List
+
 from dotenv import load_dotenv
 
-# Look for a “.env” file one level up (in your project root)
 BASE_DIR = Path(__file__).parent.parent
-env_path = BASE_DIR / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
+load_dotenv(BASE_DIR / ".env")
 
 logger = logging.getLogger("elbot.config")
 _gid_str = os.getenv("GUILD_ID")
 
 
 class Config:
-    """Central configuration loaded from environment variables.
+    """Central configuration loaded from environment variables."""
 
-    `ICS_URL` defaults to an empty string and `F1_CHANNEL_ID` defaults to
-    ``0`` when the corresponding variables are not set.
-    """
-
-    # Your Discord bot token must live in an environment variable called DISCORD_TOKEN
     BASE_DIR = BASE_DIR
-    # Accept both DISCORD_TOKEN and legacy DISCORD_BOT_TOKEN for convenience
     DISCORD_TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
     ICS_URL = os.getenv("ICS_URL", "")
+
     _f1_channel_str = os.getenv("F1_CHANNEL_ID")
     if _f1_channel_str:
         try:
@@ -41,18 +39,24 @@ class Config:
     else:
         F1_CHANNEL_ID = 0
 
-    # The command prefix (e.g. “!”, or “/” if you prefer slash commands only)
     PREFIX = os.getenv("COMMAND_PREFIX", "!")
 
-    # Lavalink connection details
     LAVALINK_HOST = os.getenv("LAVALINK_HOST", "localhost")
-    LAVALINK_PORT = int(os.getenv("LAVALINK_PORT", "2333"))
     LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
-    YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE") or os.getenv("YTDLP_COOKIES_PATH")
+
+    _port_raw = os.getenv("LAVALINK_PORT", "2333")
+    try:
+        LAVALINK_PORT = int(_port_raw)
+    except ValueError:
+        logger.error("Invalid LAVALINK_PORT value; expected integer, got '%s'", _port_raw)
+        raise SystemExit(1)
+
+    YT_COOKIES_FILE = os.getenv("YT_COOKIES_FILE") or os.getenv("YTDLP_COOKIES_FILE")
+    if not YT_COOKIES_FILE:
+        YT_COOKIES_FILE = os.getenv("YTDLP_COOKIES_PATH")
 
     AUTO_LAVALINK = os.getenv("AUTO_LAVALINK", "0") == "1"
 
-    # (Optional) If you want to store a guild ID for guild-specific logic
     if _gid_str:
         try:
             GUILD_ID = int(_gid_str)
@@ -63,17 +67,39 @@ class Config:
         GUILD_ID = None
 
     @staticmethod
-    def validate():
-        import os
+    def _missing_keys(keys: Iterable[str]) -> List[str]:
+        return [key for key in keys if not os.getenv(key)]
 
-        auto = Config.AUTO_LAVALINK
+    @staticmethod
+    def validate() -> None:
+        required = ["DISCORD_TOKEN", "LAVALINK_HOST", "LAVALINK_PASSWORD"]
+        missing = Config._missing_keys(required)
 
-        required = ["DISCORD_TOKEN"]
-        if not auto:
-            required += ["LAVALINK_HOST", "LAVALINK_PASSWORD"]
-
-        missing = [k for k in required if not os.getenv(k)]
         if missing:
-            raise RuntimeError(
-                f"Missing required environment variables: {', '.join(missing)}"
-            )
+            joined = ", ".join(missing)
+            logger.error("configuration missing required keys: %s", joined)
+            sys.exit(1)
+
+        port_value = os.getenv("LAVALINK_PORT", str(Config.LAVALINK_PORT))
+        try:
+            int(port_value)
+        except (TypeError, ValueError):
+            logger.error("configuration invalid: LAVALINK_PORT must be an integer")
+            sys.exit(1)
+
+
+def log_cookie_status() -> None:
+    """Log the configured YouTube cookie file, if any."""
+
+    path = Config.YT_COOKIES_FILE
+    if not path:
+        logger.info("cookies: none")
+        return
+
+    resolved = Path(path).expanduser()
+    if not resolved.exists():
+        logger.info("cookies: path=%s missing", resolved)
+        return
+
+    mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
+    logger.info("cookies: path=%s mtime=%s", resolved, mtime.isoformat())

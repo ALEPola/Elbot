@@ -14,6 +14,7 @@ from textblob import TextBlob
 from openai import OpenAI
 
 from elbot.config import Config
+from elbot.utils import safe_reply
 
 logger = logging.getLogger("elbot.chat")
 
@@ -74,24 +75,26 @@ class ChatCog(commands.Cog):
         """
         Respond to a user's message, with a per-user rate limit.
         """
+        await interaction.response.defer(thinking=True)
         user_id = interaction.user.id
         now = time.monotonic()
         last = self.user_last_interaction.get(user_id, 0)
         if now - last < RATE_LIMIT:
-            await interaction.response.send_message(
-                "🕑 Please wait a few seconds before chatting again.", ephemeral=True
+            await safe_reply(
+                interaction,
+                "🕑 Please wait a few seconds before chatting again.",
+                ephemeral=True,
             )
             return
         self.user_last_interaction[user_id] = now
-
-        await interaction.response.defer()
 
         text = message.strip()
         sentiment = TextBlob(text).sentiment
         logger.info(f"User {user_id} sentiment: {sentiment}")
         if sentiment.polarity < -0.5:
-            await interaction.followup.send(
-                "It seems like you're upset. How can I help?"
+            await safe_reply(
+                interaction,
+                "It seems like you're upset. How can I help?",
             )
             return
 
@@ -117,7 +120,7 @@ class ChatCog(commands.Cog):
             logger.error("OpenAI error while generating response.", exc_info=True)
             content = "⚠️ Sorry, something went wrong with the chat bot."
 
-        await interaction.followup.send(content)
+        await safe_reply(interaction, content)
         history.append((now, "user", text))
         history.append((now, "assistant", content))
         self._persist_history(user_id, "user", text)
@@ -127,6 +130,7 @@ class ChatCog(commands.Cog):
 
     @nextcord.slash_command(name="chat_reset", description="Clear chat history")
     async def chat_reset(self, interaction: nextcord.Interaction):
+        await interaction.response.defer(thinking=True, ephemeral=True)
         self.histories.pop(interaction.user.id, None)
         history_file = self.history_dir / f"{interaction.user.id}.json"
         try:
@@ -135,18 +139,18 @@ class ChatCog(commands.Cog):
             pass
         except OSError as exc:
             logger.warning("Failed to remove chat history for %s: %s", interaction.user.id, exc)
-        await interaction.response.send_message(
-            "✅ Chat history cleared.", ephemeral=True
-        )
+        await safe_reply(interaction, "✅ Chat history cleared.", ephemeral=True)
 
     @nextcord.slash_command(name="chat_summary", description="Summarize recent chat")
     async def chat_summary(self, interaction: nextcord.Interaction):
         """Summarize the persisted conversation with the user."""
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(thinking=True, ephemeral=True)
         user_id = interaction.user.id
         history = self._load_history(user_id)
         if not history:
-            await interaction.followup.send("No chat history found.", ephemeral=True)
+            await safe_reply(
+                interaction, "No chat history found.", ephemeral=True
+            )
             return
         conversation = "\n".join(f"{h['role']}: {h['content']}" for h in history[-20:])
         try:
@@ -163,7 +167,7 @@ class ChatCog(commands.Cog):
         except Exception:
             logger.error("OpenAI error while summarizing.", exc_info=True)
             content = "⚠️ Failed to generate summary."
-        await interaction.followup.send(content, ephemeral=True)
+        await safe_reply(interaction, content, ephemeral=True)
 
 
 def setup(bot: commands.Bot):

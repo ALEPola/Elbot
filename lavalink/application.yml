@@ -9,7 +9,7 @@ lavalink:
       http: true
     playerUpdateInterval: 5
 plugins:
-  - dependency: "dev.lavalink.youtube:youtube-plugin:1.4.4" # youtube-source plugin pinned for Lavalink v4
+  - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.5" # youtube-source plugin pinned for Lavalink v4
     repository: "https://maven.lavalink.dev/releases"
     config:
       providers:

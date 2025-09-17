@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from cachetools import TTLCache
 
 from elbot.config import Config
+from elbot.utils import safe_reply
 
 logger = logging.getLogger("elbot.f1")
 
@@ -247,11 +248,10 @@ class F1Cog(commands.Cog):
 
     @nextcord.slash_command(name="f1_schedule", description="Show upcoming F1 sessions")
     async def f1_schedule(self, interaction: nextcord.Interaction, count: int = 5):
+        await interaction.response.defer(thinking=True)
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            return await interaction.response.send_message(
-                "Not available in this server.", ephemeral=True
-            )
-        await interaction.response.defer()
+            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+            return
         events = self.get_schedule()
         if inspect.iscoroutine(events):
             events = await events
@@ -261,17 +261,16 @@ class F1Cog(commands.Cog):
         embed = nextcord.Embed(title=f"Next {len(events)} F1 Sessions", color=0xE10600)
         for name, when in format_event_details(events):
             embed.add_field(name=name, value=when, inline=False)
-        await interaction.followup.send(embed=embed)
+        await safe_reply(interaction, embed=embed)
 
     @nextcord.slash_command(
         name="f1_countdown", description="Countdown to next F1 session"
     )
     async def f1_countdown(self, interaction: nextcord.Interaction):
+        await interaction.response.defer(thinking=True)
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            return await interaction.response.send_message(
-                "Not available in this server.", ephemeral=True
-            )
-        await interaction.response.defer()
+            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+            return
         events = self.get_schedule()
         if inspect.iscoroutine(events):
             events = await events
@@ -279,43 +278,51 @@ class F1Cog(commands.Cog):
             events = await fetch_events(limit=1)
         events = events[:1]
         if not events:
-            return await interaction.followup.send("⚠️ No upcoming Grand Prix found.")
+            await safe_reply(interaction, "⚠️ No upcoming Grand Prix found.")
+            return
         dt, name = events[0]
-        await interaction.followup.send(
-            f"⏱ **{name}** starts in {format_countdown(dt)}"
+        await safe_reply(
+            interaction,
+            f"⏱ **{name}** starts in {format_countdown(dt)}",
         )
 
     @nextcord.slash_command(name="f1_results", description="Latest race results")
     async def f1_results(self, interaction: nextcord.Interaction):
+        await interaction.response.defer(thinking=True)
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            return await interaction.response.send_message(
-                "Not available in this server.", ephemeral=True
-            )
-        await interaction.response.defer()
+            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+            return
         race_name, results = await fetch_race_results()
         if not race_name:
-            return await interaction.followup.send("⚠️ Unable to fetch results.")
+            await safe_reply(interaction, "⚠️ Unable to fetch results.")
+            return
         embed = nextcord.Embed(title=f"{race_name} Results", color=0xE10600)
         for pos, driver, team in results:
             embed.add_field(name=f"#{pos} {driver}", value=team, inline=False)
-        await interaction.followup.send(embed=embed)
+        await safe_reply(interaction, embed=embed)
 
     @nextcord.slash_command(
         name="f1_subscribe", description="DM reminders 1 hour before each session"
     )
     async def f1_subscribe(self, interaction: nextcord.Interaction):
+        await interaction.response.defer(thinking=True, ephemeral=True)
         self.subscribers.add(interaction.user.id)
         save_subscribers(self.subscribers)
-        await interaction.response.send_message(
-            "✅ You will receive session reminders.", ephemeral=True
+        await safe_reply(
+            interaction,
+            "✅ You will receive session reminders.",
+            ephemeral=True,
         )
 
     @nextcord.slash_command(name="f1_unsubscribe", description="Stop session reminders")
     async def f1_unsubscribe(self, interaction: nextcord.Interaction):
+        await interaction.response.defer(thinking=True, ephemeral=True)
         self.subscribers.discard(interaction.user.id)
         save_subscribers(self.subscribers)
-        await interaction.response.send_message(
-            "🛑 You have been unsubscribed.", ephemeral=True
+        await safe_reply(
+            interaction,
+            "🛑 You have been unsubscribed.",
+            ephemeral=True,
         )
 
 
