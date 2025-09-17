@@ -1,19 +1,32 @@
-version: '3'
+version: "3.9"
+
 services:
-  bot:
-    build: .
-    command: python -m elbot.main
-    env_file: .env
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: lavalink
+    restart: unless-stopped
     environment:
       SERVER_PORT: ${LAVALINK_PORT:-2333}
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
     ports:
       - "${LAVALINK_PORT:-2333}:${LAVALINK_PORT:-2333}"
-  portal:
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${LAVALINK_PORT:-2333}/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # youtube-source plugin v1.4.4 pairs with Lavalink v4.0.6
+  bot:
     build: .
-    command: elbot-portal
+    command: python -m elbot.main
     env_file: .env
-    ports:
-      - "8000:8000"
+    environment:
+      - LAVALINK_HOST=lavalink
+      - LAVALINK_PORT=${LAVALINK_PORT:-2333}
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+    depends_on:
+      lavalink:
+        condition: service_healthy
+

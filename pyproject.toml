@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
-    "nextcord[voice]",
+    "nextcord",
     "aiohttp[speedups]",
     "pytest-asyncio",
 ]

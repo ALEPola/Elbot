@@ -1,0 +1,19 @@
+server:
+  port: ${SERVER_PORT:-2333}
+  address: 0.0.0.0
+lavalink:
+  server:
+    password: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}
+    sources:
+      youtube: false
+      http: true
+    playerUpdateInterval: 5
+plugins:
+  - dependency: "dev.lavalink.youtube:youtube-plugin:1.4.4" # youtube-source plugin pinned for Lavalink v4
+    repository: "https://maven.lavalink.dev/releases"
+    config:
+      providers:
+        - youtube
+spring:
+  main:
+    banner-mode: off

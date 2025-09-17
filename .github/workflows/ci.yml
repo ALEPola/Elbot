@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[test] ruff
+      - name: Lint
+        run: ruff check .
+      - name: Run unit tests
+        run: pytest tests/test_music_queue_utils.py tests/test_music_fallback.py tests/test_music_cookies.py
+      - name: Launch Lavalink
+        run: docker compose up -d lavalink
+        env:
+          LAVALINK_PASSWORD: youshallnotpass
+      - name: Wait for Lavalink
+        run: |
+          for i in {1..10}; do
+            if curl -sf http://localhost:2333/version > /dev/null; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Lavalink did not become ready" >&2
+          exit 1
+      - name: Canary playback
+        env:
+          LAVALINK_PASSWORD: youshallnotpass
+        run: python scripts/canary_playback.py
+      - name: Deploy
+        if: success()
+        run: ./deploy.sh
