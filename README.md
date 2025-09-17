@@ -17,8 +17,7 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 11. [Web Portal](#web-portal)
 12. [Architecture overview](#architecture-overview)
 13. [Command summary](#command-summary)
-14. [Sound assets](#sound-assets)
-15. [Testing](#testing)
+14. [Testing](#testing)
 
 ## Features
 
@@ -68,40 +67,13 @@ repository.
 
 ## Installation
 
-### 1. Create a virtual environment
+For platform-specific setup steps (Linux/macOS, Windows, Docker) see [INSTALL.md](INSTALL.md).
 
-```bash
-python3 -m venv .venv
-# Windows
-#   .venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-```
+Quick start:
+- Linux/macOS: `./scripts/run.sh`
+- Windows: `./scripts/install.ps1`
+- Docker: `docker compose up --build`
 
-### 2. Install dependencies
-
-```bash
-pip install -U pip
-pip install -e .
-# Alternatively you can install from requirements.txt
-pip install -r requirements.txt
-```
-
-After the dependencies are installed, run:
-
-```bash
-elbot-install-service
-```
-
-This command installs, enables and starts a system service so Elbot runs automatically.
-On Windows and macOS this command also installs the equivalent service/agent.
-To remove the service later run:
-
-```bash
-elbot-install-service --remove
-```
-
-Linux users can run `./scripts/install.sh` to be guided through installing system packages (including `ffmpeg`) and Python dependencies. Pass `--yes` to skip the prompts and install automatically.
 
 ## Configuration
 
