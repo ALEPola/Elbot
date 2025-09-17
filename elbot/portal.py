@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import Iterable
 
 from flask import (
     Flask,
@@ -30,6 +31,38 @@ logger = logging.getLogger("elbot.portal")
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
 
+def _log_missing(command: str) -> None:
+    """Log a warning when an external command is unavailable."""
+
+    logger.warning("Command %s is not available in this environment", command)
+
+
+def _run_command(args: Iterable[str], **kwargs) -> subprocess.CompletedProcess | None:
+    """Run a subprocess command returning ``None`` if it is unavailable."""
+
+    try:
+        return subprocess.run(args, **kwargs)
+    except FileNotFoundError:
+        _log_missing(args[0])
+        return None
+    except subprocess.CalledProcessError as exc:
+        logger.error("Command %s failed: %s", args[0], exc)
+        return None
+
+
+def _check_output(args: Iterable[str], **kwargs) -> bytes | None:
+    """Wrapper around :func:`subprocess.check_output` with graceful fallbacks."""
+
+    try:
+        return subprocess.check_output(args, **kwargs)
+    except FileNotFoundError:
+        _log_missing(args[0])
+        return None
+    except subprocess.CalledProcessError as exc:
+        logger.error("Command %s failed: %s", args[0], exc)
+        return None
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -49,69 +82,57 @@ def branch():
     if request.method == "POST":
         branch = request.form.get("branch")
         if branch:
-            subprocess.run(["git", "checkout", branch], cwd=ROOT_DIR)
+            _run_command(["git", "checkout", branch], cwd=ROOT_DIR, check=True)
         return redirect(url_for("branch"))
 
-    current = (
-        subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT_DIR
+    current_bytes = _check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT_DIR)
+    current = current_bytes.decode().strip() if current_bytes else "unknown"
+
+    branch_bytes = _check_output(
+        [
+            "git",
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads",
+        ],
+        cwd=ROOT_DIR,
+    )
+    all_branches = branch_bytes.decode().splitlines() if branch_bytes else []
+
+    if all_branches:
+        options = "".join(
+            f'<option value="{b}" {"selected" if b == current else ""}>{b}</option>'
+            for b in all_branches
         )
-        .decode()
-        .strip()
-    )
-    all_branches = (
-        subprocess.check_output(
-            [
-                "git",
-                "for-each-ref",
-                "--format=%(refname:short)",
-                "refs/heads",
-            ],
-            cwd=ROOT_DIR,
-        )
-        .decode()
-        .splitlines()
-    )
-    options = "".join(
-        f'<option value="{b}" {"selected" if b == current else ""}>{b}</option>'
-        for b in all_branches
-    )
+    else:
+        options = '<option value="" disabled>Git is not available in this environment.</option>'
     return render_template("branch.html", options=options)
 
 
 @app.route("/update", methods=["POST"])
 def update():
-    try:
-        subprocess.run(["bash", str(UPDATE_SCRIPT), "update"], cwd=ROOT_DIR, check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error("run.sh update failed: %s", e)
+    _run_command(["bash", str(UPDATE_SCRIPT), "update"], cwd=ROOT_DIR, check=True)
     return redirect(url_for("index"))
 
 
 @app.route("/update_status")
 def update_status():
-    try:
-        subprocess.run(["git", "remote", "update"], cwd=ROOT_DIR, check=True)
-        status = subprocess.check_output(["git", "status", "-uno"], cwd=ROOT_DIR).decode()
-    except subprocess.CalledProcessError as e:
-        logger.error("Failed to check update status: %s", e)
-        status = "error"
+    result = _run_command(["git", "remote", "update"], cwd=ROOT_DIR, check=True)
+    if result is None:
+        status = "Git is not available in this environment."
+    else:
+        output = _check_output(["git", "status", "-uno"], cwd=ROOT_DIR)
+        status = output.decode() if output else "Git is not available in this environment."
     return render_template_string("<pre>{{s}}</pre>", s=status)
 
 
 @app.route("/restart", methods=["POST"])
 def restart():
-    try:
-        subprocess.run(
-            [
-                "systemctl",
-                "restart",
-                SERVICE_NAME,
-            ],
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        logger.error("Failed to restart %s: %s", SERVICE_NAME, e)
+    _run_command([
+        "systemctl",
+        "restart",
+        SERVICE_NAME,
+    ], check=True)
     return redirect(url_for("index"))
 
 
@@ -120,8 +141,8 @@ def main():
         def updater():
             while True:
                 try:
-                    subprocess.run(["bash", str(UPDATE_SCRIPT), "update"], cwd=ROOT_DIR, check=True)
-                    subprocess.run(["systemctl", "restart", SERVICE_NAME], check=False)
+                    _run_command(["bash", str(UPDATE_SCRIPT), "update"], cwd=ROOT_DIR, check=True)
+                    _run_command(["systemctl", "restart", SERVICE_NAME], check=False)
                 except Exception as e:
                     logger.error("Auto update failed: %s", e)
                 time.sleep(86400)

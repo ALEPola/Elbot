@@ -346,6 +346,23 @@ is missing, the command will respond that the sound effect could not be found.
 
 
 
+## Remote development (OpenAI Codex & GitHub Codespaces)
+
+OpenAI Codex and GitHub Codespaces provide lightweight, containerised development environments. They usually lack `systemd` and only expose a shallow Git checkout. Elbot's management portal now handles those constraints gracefully: the branch selector, update status and restart endpoints fall back to informative messages when the required system commands are unavailable instead of raising errors.
+
+To bootstrap either environment quickly:
+
+1. Install the editable package along with the testing extras so Nextcord's voice dependencies and pytest plugins are available.
+2. Copy `.env.example` to `.env` and configure the keys you need (for example `DISCORD_TOKEN` and `OPENAI_API_KEY`).
+3. Run the automated test suite to verify everything works.
+
+```bash
+pip install -e .[test]
+pytest
+```
+
+When you launch the Flask portal inside Codex or Codespaces, routes that depend on `git` or `systemctl` will return explanatory placeholders instead of failing. You can still inspect logs and run the bot normally.
+
 ## Testing
 
 Install Elbot in editable mode so the local package is available and the extras required by the tests (such as `nextcord[voice]`, `aiohttp[speedups]` and `pytest-asyncio`) are installed. These packages are bundled in the `test` extras group:
