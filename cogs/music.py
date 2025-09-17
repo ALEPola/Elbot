@@ -341,38 +341,4 @@ class Music(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(Music(bot))
-    logger.info("✅ Loaded Music cog")
-
-    @bot.slash_command(name="moan", description="Play a moan sound effect")
-    async def moan(interaction: nextcord.Interaction) -> None:
-        if not interaction.user or not interaction.user.voice:
-            await interaction.response.send_message(
-                "You need to be in a voice channel to use this command!",
-                ephemeral=True,
-            )
-            return
-
-        if isinstance(interaction.guild.voice_client, mafic.Player):
-            await interaction.response.send_message(
-                "Stop music playback before using this command.",
-                ephemeral=True,
-            )
-            return
-
-        base_dir = Config.BASE_DIR
-        sound_path = base_dir / "sfx" / "moan.mp3"
-        if not sound_path.exists():
-            await interaction.response.send_message("❌ Sound effect not found!", ephemeral=True)
-            return
-
-        vc = interaction.guild.voice_client
-        if not vc:
-            vc = await interaction.user.voice.channel.connect()
-
-        if vc.is_playing():
-            vc.stop()
-
-        source = nextcord.FFmpegPCMAudio(str(sound_path), executable=FFMPEG_PATH)
-        vc.play(source)
-        await interaction.response.send_message("😏", ephemeral=True)
-
+    logger.info("Loaded Music cog")

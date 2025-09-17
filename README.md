@@ -244,7 +244,6 @@ environment variable.
 
 - Use `scripts\install.ps1` for a guided setup that installs dependencies and the Windows service.
 - `elbot-install-service` can also be run manually; it installs and starts the service using pywin32.
-- Optional `/moan` requires [FFmpeg](https://ffmpeg.org/) in `PATH` or set `FFMPEG_PATH` in `.env`.
 
 ## macOS notes
 
@@ -327,24 +326,12 @@ Elbot exposes several slash commands once invited to your server:
 - `/chat`, `/chat_reset` and `/chat_summary` – converse with the bot and view a summary.
 - `/dalle` – generate an image from a text prompt.
 - Music commands: `/play`, `/skip` and `/stop`.
-- Optional `/moan` – plays a moan sound effect from `sfx/moan.mp3` if present.
   You must supply this file yourself because it is not included in the
   repository.
 - Formula&nbsp;1 commands: `/f1_schedule`, `/f1_countdown`, `/f1_results`,
   `/f1_subscribe` and `/f1_unsubscribe`.
 - Diagnostic commands: `/uptime` and `/ping`.
 - Moderation commands: `/kick`, `/ban`, `/clear_messages` and `/clear_bot_messages`.
-
-## Sound assets
-
-The optional `/moan` slash command in the music cog expects the file
-`sfx/moan.mp3` to exist relative to the project root. This MP3 is not bundled
-with the repository. To enable the command, create an `sfx/` directory at the
-root of the project and place the downloaded file there (for example from
-[Freesound](https://freesound.org/people/a-sfx/sounds/56753004/)). If the file
-is missing, the command will respond that the sound effect could not be found.
-
-
 
 ## Remote development (OpenAI Codex & GitHub Codespaces)
 
