@@ -13,9 +13,9 @@ Regardless of platform you need:
 
 Platform-specific notes:
 
-- **Linux/macOS** – install build tools (e.g. `build-essential`, `libffi-dev`, `python3-dev`) when prompted.
-- **Windows** – ensure the "Desktop development with C++" workload or the stand-alone Build Tools are installed for compiling voice dependencies.
-- **Docker** – Docker Desktop or a compatible engine.
+- **Linux/macOS** ï¿½ install build tools (e.g. `build-essential`, `libffi-dev`, `python3-dev`) when prompted.
+- **Windows** ï¿½ ensure the "Desktop development with C++" workload or the stand-alone Build Tools are installed for compiling voice dependencies.
+- **Docker** ï¿½ Docker Desktop or a compatible engine.
 
 ## 2. Linux & macOS
 
@@ -101,7 +101,13 @@ Provide configuration via environment variables or bind-mount a `.env` file.
 
 Whenever you change `.env`, restart the bot.
 
-## 6. Running the management portal
+## 6. Keep the YouTube stack current
+
+- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin. Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release.
+- `yt-dlp` is used as a fallback resolver. Keep it updated with `pip install -U yt-dlp` whenever YouTube changes break playback.
+- If you run a remote Lavalink node, mirror the same plugin configuration in its `application.yml`.
+
+## 7. Running the management portal
 
 Install the package in editable mode (already done by the scripts) and launch:
 
@@ -111,11 +117,12 @@ elbot-portal
 
 By default the portal listens on http://localhost:8000. Set the `PORT` environment variable to change the port. The portal can also restart the bot service when `ELBOT_SERVICE` is set (defaults to `elbot.service`).
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
-- **Voice playback fails** – confirm `ffmpeg` is installed and accessible. Set `FFMPEG_PATH` if it lives outside `PATH`.
-- **Lavalink not available** – ensure Java 17 is installed or let `AUTO_LAVALINK=1` download and run the bundled server.
-- **Slash commands missing** – invite the bot with the `applications.commands` scope and wait a few minutes for global registration.
-- **Permission errors on Linux/macOS** – run the scripts with `sudo` only when prompted to install system packages. The bot itself should run as your regular user.
+- **Voice playback fails** ï¿½ confirm `ffmpeg` is installed and accessible. Set `FFMPEG_PATH` if it lives outside `PATH`.
+- **Lavalink not available** ï¿½ ensure Java 17 is installed or let `AUTO_LAVALINK=1` download and run the bundled server.
+- **Slash commands missing** ï¿½ invite the bot with the `applications.commands` scope and wait a few minutes for global registration.
+- **Permission errors on Linux/macOS** ï¿½ run the scripts with `sudo` only when prompted to install system packages. The bot itself should run as your regular user.
 
 If you run into platform-specific issues, open an issue with details about your OS, Python version and any error logs.
+

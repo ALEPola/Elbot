@@ -31,6 +31,8 @@ LAVALINK_URL = (
 )
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
+YOUTUBE_PLUGIN_VERSION = os.getenv("LAVALINK_YOUTUBE_PLUGIN_VERSION", "1.13.5")
+
 _proc: subprocess.Popen[str] | None = None
 _port: int | None = None
 
@@ -152,23 +154,18 @@ def _ensure_jar() -> None:
 
 
 def _write_conf(port: int, password: str) -> None:
+
+
     CONF.write_text(
-        f"""server:
-  address: 127.0.0.1
-  port: {port}
-
-spring:
-  cloud:
-    config:
-      enabled: false
-      import-check:
-        enabled: false
-
+        f"""
 lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:{YOUTUBE_PLUGIN_VERSION}"
+      snapshot: false
   server:
     password: "{password}"
     sources:
-      youtube: true
+      youtube: false
       soundcloud: true
       bandcamp: true
       twitch: true
