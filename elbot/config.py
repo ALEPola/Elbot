@@ -50,6 +50,8 @@ class Config:
     LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
     YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE") or os.getenv("YTDLP_COOKIES_PATH")
 
+    AUTO_LAVALINK = os.getenv("AUTO_LAVALINK", "0") == "1"
+
     # (Optional) If you want to store a guild ID for guild-specific logic
     if _gid_str:
         try:
@@ -64,7 +66,7 @@ class Config:
     def validate():
         import os
 
-        auto = os.getenv("AUTO_LAVALINK", "1") == "1"
+        auto = Config.AUTO_LAVALINK
 
         required = ["DISCORD_TOKEN"]
         if not auto:

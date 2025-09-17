@@ -36,7 +36,7 @@ logger.addHandler(console_handler)
 def main():
     load_dotenv()
     # 0) Optionally start a local Lavalink instance
-    if os.getenv("AUTO_LAVALINK", "1") == "1":
+    if Config.AUTO_LAVALINK:
         try:
             from elbot.auto_lavalink import start as start_lavalink
 
