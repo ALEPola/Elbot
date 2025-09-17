@@ -227,7 +227,7 @@ To pull the latest version of Elbot from GitHub:
 
 To upgrade the YouTube stack:
 
-- Update `yt-dlp` with `pip install -U yt-dlp` (or bump the version in `pyproject.toml`) and restart the bot. The helper module lives in `elbot/audio/ytdlp_helper.py` if you need to adjust extraction options.
+- Update `yt-dlp` with `pip install -U yt-dlp` (or bump the version in `pyproject.toml`) and restart the bot. You can tweak yt-dlp settings in `elbot/music/cookies.py` if you need custom extraction options.
 - Update the Lavalink YouTube plugin by setting `LAVALINK_YOUTUBE_PLUGIN_VERSION` (or editing the dependency in your remote `application.yml`) and restarting Lavalink.
 
 ## Web Portal
