@@ -6,15 +6,20 @@ import subprocess
 from elbot import portal
 
 
-def make_client(monkeypatch):
+def make_client(monkeypatch, *, check_output=None, run=None):
     importlib.reload(portal)
     monkeypatch.setattr(portal, "LOG_FILE", Path(__file__))
     monkeypatch.setattr(portal, "AUTO_UPDATE", False)
-    monkeypatch.setattr(
-        subprocess,
-        "check_output",
-        lambda *a, **k: b"main\n" if b"rev-parse" in a[0] else b"main\n",
-    )
+    if check_output is None:
+        monkeypatch.setattr(
+            subprocess,
+            "check_output",
+            lambda *a, **k: b"main\n" if b"rev-parse" in a[0] else b"main\n",
+        )
+    else:
+        monkeypatch.setattr(subprocess, "check_output", check_output)
+    if run is not None:
+        monkeypatch.setattr(subprocess, "run", run)
     portal.app.config["TESTING"] = True
     return portal.app.test_client()
 
@@ -37,6 +42,16 @@ def test_branch_get(monkeypatch):
     resp = client.get("/branch")
     assert resp.status_code == 200
     assert b"Switch Branch" in resp.data
+
+
+def test_branch_git_missing(monkeypatch):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    client = make_client(monkeypatch, check_output=missing)
+    resp = client.get("/branch")
+    assert resp.status_code == 200
+    assert b"Git is not available in this environment" in resp.data
 
 
 def test_update_and_restart(monkeypatch):
@@ -68,3 +83,22 @@ def test_update_status(monkeypatch):
     resp = client.get("/update_status")
     assert resp.status_code == 200
     assert ran
+
+
+def test_update_status_git_missing(monkeypatch):
+    def missing_run(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    client = make_client(monkeypatch, run=missing_run)
+    resp = client.get("/update_status")
+    assert resp.status_code == 200
+    assert b"Git is not available in this environment" in resp.data
+
+
+def test_restart_missing_systemctl(monkeypatch):
+    def missing_run(*args, **kwargs):
+        raise FileNotFoundError("systemctl")
+
+    client = make_client(monkeypatch, run=missing_run)
+    resp = client.post("/restart")
+    assert resp.status_code == 302
