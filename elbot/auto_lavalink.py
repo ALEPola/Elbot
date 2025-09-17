@@ -14,7 +14,11 @@ import tarfile
 
 from platformdirs import user_data_dir
 
-APP_DIR = Path(user_data_dir("Elbot", "ALEPola"))
+_env_data_dir = os.getenv("ELBOT_DATA_DIR")
+if _env_data_dir:
+    APP_DIR = Path(_env_data_dir).expanduser().resolve()
+else:
+    APP_DIR = Path(user_data_dir("Elbot", "ElbotTeam"))
 BASE = APP_DIR
 JAR = BASE / "Lavalink.jar"
 CONF = BASE / "application.yml"

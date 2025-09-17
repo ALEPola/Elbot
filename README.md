@@ -38,21 +38,27 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 ## Quick start (Linux/macOS)
 
 ```bash
-git clone https://github.com/ALEPola/Elbot.git
+git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
 ./scripts/run.sh
 # then edit .env and paste your DISCORD_TOKEN, run again
 ```
 
+Replace `<your-org>` with the account or organisation that hosts your copy of
+Elbot (for example your GitHub username).
+
 ## Quick start (Windows)
 
 ```powershell
-git clone https://github.com/ALEPola/Elbot.git
+git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
 # One-time setup (creates venv, installs deps, prompts for token, installs service)
 ./scripts/install.ps1
 # The "Elbot" Windows service will start automatically on boot.
 ```
+
+Again, replace `<your-org>` with the account or organisation that hosts the
+repository.
 
 ### Requirements
 
@@ -108,7 +114,27 @@ variables:
 
 Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `LAVALINK_HOST`,
 `LAVALINK_PORT`, `LAVALINK_PASSWORD`, `OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID`,
-and `LOCAL_TIMEZONE`.
+`LOCAL_TIMEZONE`, `ELBOT_DATA_DIR`, `ELBOT_SERVICE` and `PORT`.
+
+The table below summarises the most common options. Leave entries blank to use
+the built-in defaults.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DISCORD_TOKEN` | ✅ | Discord bot token used to authenticate with the gateway. |
+| `OPENAI_API_KEY` | ✅ (for chat/image features) | Enables the OpenAI-powered commands such as `/chat` and `/dalle`. |
+| `COMMAND_PREFIX` | ❌ | Prefix for legacy text commands when slash commands are unavailable. |
+| `AUTO_LAVALINK` | ❌ | Start the bundled Lavalink server automatically (`1` by default). |
+| `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_PASSWORD` | ❌ | Connection details for an external Lavalink server. |
+| `FFMPEG_PATH` | ❌ | Path to an ffmpeg executable if it is not already on `PATH`. |
+| `OPENAI_MODEL` | ❌ | Override the OpenAI model name used for chat completions. |
+| `ELBOT_DATA_DIR` | ❌ | Custom directory for Lavalink downloads, logs and cached data. |
+| `GUILD_ID` | ❌ | Restrict slash commands to a single guild (useful for testing). |
+| `ICS_URL` | ❌ | Formula 1 calendar feed URL used by the F1 cog. |
+| `F1_CHANNEL_ID` | ❌ | Channel ID that receives automated F1 schedule posts. |
+| `LOCAL_TIMEZONE` | ❌ | IANA timezone used for scheduling reminders (defaults to UTC). |
+| `ELBOT_SERVICE` | ❌ | Service name that the management portal restarts (default `elbot.service`). |
+| `PORT` | ❌ | Listening port for the management portal (defaults to 8000). |
 `ICS_URL` may use a `webcal://` address. It will be converted to `https://` automatically.
 `LOCAL_TIMEZONE` should be an [IANA timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) such as `America/New_York`.
 See `.env.example` for an example Formula&nbsp;1 feed and common timezone values.
@@ -152,10 +178,12 @@ You can also use the helper script:
 ## Running Lavalink
 
 Elbot includes an auto-launcher that downloads and starts Lavalink when the
-bot runs, selecting a free local port and writing logs to
-`~/.elbot_lavalink/lavalink.log`. If Java 17+ is not present on the system,
-Elbot will automatically download a portable Temurin (Adoptium) JRE 17 to the
-same directory and use it, so music works out of the box.
+bot runs, selecting a free local port and writing logs to a per-user data
+directory (for example `~/.local/share/Elbot/ElbotTeam` on Linux). Set
+`ELBOT_DATA_DIR` if you prefer to store the Lavalink files elsewhere. If Java
+17+ is not present on the system, Elbot will automatically download a portable
+Temurin (Adoptium) JRE 17 to the same directory and use it, so music works out
+of the box.
 
 Override the port or password with `LAVALINK_PORT` or `LAVALINK_PASSWORD`, or
 disable the helper with `AUTO_LAVALINK=0` if you host Lavalink separately.
