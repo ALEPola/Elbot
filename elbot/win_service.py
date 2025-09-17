@@ -14,7 +14,6 @@ import os
 import sys
 import time
 import subprocess
-from pathlib import Path
 
 try:
     import win32event

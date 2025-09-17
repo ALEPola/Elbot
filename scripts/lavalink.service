@@ -1,14 +1,15 @@
 [Unit]
-Description=Lavalink Audio Service
+Description=Lavalink v4 with youtube-source
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=__ROOT_DIR__/lavalink
-ExecStart=__ROOT_DIR__/scripts/run.sh lavalink start
-ExecStop=__ROOT_DIR__/scripts/run.sh lavalink stop
-EnvironmentFile=__ROOT_DIR__/.env
+WorkingDirectory=/opt/lavalink
+ExecStart=/usr/bin/java -jar Lavalink.jar
+Environment=LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+Environment=SERVER_PORT=2333
 Restart=on-failure
+# youtube-source plugin v1.4.4 is configured via application.yml
 
 [Install]
 WantedBy=multi-user.target
