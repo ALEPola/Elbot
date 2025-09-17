@@ -1,0 +1,21 @@
+# Example systemd unit for Lavalink.
+# Install alongside elbot.service and enable with:
+#   sudo cp lavalink.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now lavalink.service
+
+[Unit]
+Description=Lavalink audio server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alex
+WorkingDirectory=/home/alex/lavalink
+ExecStart=/usr/bin/java -jar /home/alex/lavalink/Lavalink.jar
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -103,7 +103,7 @@ Whenever you change `.env`, restart the bot.
 
 ## 6. Keep the YouTube stack current
 
-- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin. Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release.
+- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin (pinned to `1.13.5`). Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release, and keep `lavalink.server.sources.youtube` set to `false` in `application.yml` to avoid loading the deprecated source manager.
 - `yt-dlp` is used as a fallback resolver. Keep it updated with `pip install -U yt-dlp` whenever YouTube changes break playback.
 - If you run a remote Lavalink node, mirror the same plugin configuration in its `application.yml`.
 
@@ -123,6 +123,7 @@ By default the portal listens on http://localhost:8000. Set the `PORT` environme
 - **Lavalink not available** � ensure Java 17 is installed or let `AUTO_LAVALINK=1` download and run the bundled server.
 - **Slash commands missing** � invite the bot with the `applications.commands` scope and wait a few minutes for global registration.
 - **Permission errors on Linux/macOS** � run the scripts with `sudo` only when prompted to install system packages. The bot itself should run as your regular user.
+- **Port 2333 already in use** � check for listeners with `sudo lsof -i :2333` or `sudo ss -tulpn | grep 2333`. Stop stray Lavalink instances with `sudo pkill -f 'java.*Lavalink.jar'` (or `sudo kill $(pgrep -f 'java.*Lavalink.jar')`).
 
 If you run into platform-specific issues, open an issue with details about your OS, Python version and any error logs.
 
