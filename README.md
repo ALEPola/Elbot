@@ -127,6 +127,7 @@ the built-in defaults.
 | `AUTO_LAVALINK` | ❌ | Start the bundled Lavalink server automatically (`1` by default). |
 | `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_PASSWORD` | ❌ | Connection details for an external Lavalink server. |
 | `FFMPEG_PATH` | ❌ | Path to an ffmpeg executable if it is not already on `PATH`. |
+| `YTDLP_COOKIES_FILE` | ❌ | Optional path to a Netscape cookie file passed to yt-dlp for age-restricted videos. |
 | `OPENAI_MODEL` | ❌ | Override the OpenAI model name used for chat completions. |
 | `ELBOT_DATA_DIR` | ❌ | Custom directory for Lavalink downloads, logs and cached data. |
 | `GUILD_ID` | ❌ | Restrict slash commands to a single guild (useful for testing). |
@@ -199,6 +200,31 @@ docker run -p 2333:2333 \
 Set `LAVALINK_HOST`, `LAVALINK_PORT` and `LAVALINK_PASSWORD` in your environment
 to match your Lavalink instance when auto-launch is disabled.
 
+### YouTube playback configuration
+
+Elbot targets Lavalink v4 together with the maintained
+[`dev.lavalink.youtube`](https://github.com/lavalink-devs/youtube-source)
+plugin. Add the plugin to your `application.yml` (or docker environment) and
+remove the legacy `youtube` source block to avoid loading the deprecated
+implementation:
+
+```yaml
+plugins:
+  - dependency: "dev.lavalink.youtube:1.7.2"  # check GitHub for the latest tag
+
+source-managers:
+  youtube:
+    enabled: false
+```
+
+After editing the file restart Lavalink. To update the plugin later simply
+replace the entry above with the new version string and restart the server; no
+code changes in Elbot are required.
+
+Elbot will fall back to direct stream extraction with `yt-dlp` when Lavalink is
+unavailable or throttled. Set the `YTDLP_COOKIES_FILE` environment variable to
+point at a Netscape cookie file if you need to access age-restricted videos.
+
 ## Docker
 
 Build the container and run the bot and portal with Docker Compose:
@@ -232,6 +258,15 @@ To pull the latest version of Elbot from GitHub:
 ```bash
 ./scripts/run.sh update
 ```
+
+To upgrade the YouTube stack:
+
+- Update `yt-dlp` with `pip install -U yt-dlp` (or bump the version in
+  `pyproject.toml`) and restart the bot. The helper module lives in
+  `elbot/audio/ytdlp_helper.py` if you need to adjust extraction options.
+- Update the Lavalink YouTube plugin by editing the version in your
+  `application.yml` as shown above, then restart the Lavalink process. No Python
+  changes are necessary.
 
 ## Web Portal
 
