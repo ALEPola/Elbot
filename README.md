@@ -7,17 +7,19 @@ Elbot is a modular Discord bot powered by [Nextcord](https://github.com/nextcord
 1. [Features](#features)
 2. [Requirements](#requirements)
 3. [Quick start](#quick-start)
-4. [Installation](#installation)
-5. [Configuration](#configuration)
-6. [Running the bot](#running-the-bot)
-7. [Running Lavalink](#running-lavalink)
-8. [Docker](#docker)
-9. [Windows notes](#windows-notes)
-10. [Updating](#updating)
-11. [Web Portal](#web-portal)
-12. [Architecture overview](#architecture-overview)
-13. [Command summary](#command-summary)
-14. [Testing](#testing)
+4. [End-to-end platform guides](#end-to-end-platform-guides)
+5. [Installation](#installation)
+6. [Configuration](#configuration)
+7. [Running the bot](#running-the-bot)
+8. [Running Lavalink](#running-lavalink)
+9. [Docker](#docker)
+10. [Automated deployment](#automated-deployment)
+11. [Windows notes](#windows-notes)
+12. [Updating](#updating)
+13. [Web Portal](#web-portal)
+14. [Architecture overview](#architecture-overview)
+15. [Command summary](#command-summary)
+16. [Testing](#testing)
 
 ## Features
 
@@ -53,6 +55,103 @@ cd Elbot
 
 Again, replace `<your-org>` with the account or organisation that hosts the
 repository.
+
+## End-to-end platform guides
+
+The steps below take you from an empty machine to a running bot on the three mainstream operating systems. They cover installing prerequisites, cloning the repository, configuring credentials and keeping the bot running.
+
+### Linux (Ubuntu/Debian/Fedora)
+
+1. Install prerequisites (update the package names for non-Debian distributions):
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y python3 python3-venv python3-pip git ffmpeg openjdk-17-jre
+   ```
+   Fedora/RHEL users can run `sudo dnf install python3 python3-virtualenv git ffmpeg java-17-openjdk`.
+2. Clone the repository and enter the project directory:
+   ```bash
+   git clone https://github.com/<your-org>/Elbot.git
+   cd Elbot
+   ```
+3. Run the guided installer to create the virtual environment, install Python dependencies and prompt for your Discord/OpenAI keys. Add `--yes` for an unattended install:
+   ```bash
+   ./scripts/install.sh
+   ```
+4. Review `.env` (created by the script) and fill in any missing values such as `DISCORD_TOKEN`, `OPENAI_API_KEY`, `AUTO_LAVALINK`, or Lavalink credentials if you use a remote node.
+5. Start the bot in the foreground for a smoke test:
+   ```bash
+   source .venv/bin/activate
+   python -m elbot.main
+   ```
+   Press `Ctrl+C` to stop it.
+6. Optional: install the systemd service so the bot and Lavalink start on boot and restart on failure:
+   ```bash
+   elbot-install-service
+   ```
+   Manage it with `systemctl status|start|stop elbot.service`. Logs are available via `journalctl -u elbot.service`.
+7. To update later, pull changes and rerun `./scripts/run.sh update`, then restart the service.
+
+### macOS (Intel and Apple silicon)
+
+1. Install prerequisites with Homebrew. If you do not have Homebrew yet, follow the instructions on https://brew.sh first. Then run:
+   ```bash
+   brew install python@3.12 git ffmpeg openjdk@17
+   ```
+   Add Java 17 to your shell by appending `export JAVA_HOME="$(/usr/libexec/java_home -v 17)"` to `~/.zshrc` (or `~/.bash_profile`).
+2. Clone the repository and switch into it:
+   ```bash
+   git clone https://github.com/<your-org>/Elbot.git
+   cd Elbot
+   ```
+3. Allow the helper script to create the virtual environment, download dependencies and populate `.env`:
+   ```bash
+   ./scripts/install.sh
+   ```
+   When prompted, supply your Discord token and optional OpenAI key.
+4. If the script did not prompt you (for example you ran with `--yes`), edit `.env` manually: `cp .env.example .env` then set `DISCORD_TOKEN`, `OPENAI_API_KEY` and any optional values.
+5. Start the bot to verify everything works:
+   ```bash
+   source .venv/bin/activate
+   python -m elbot.main
+   ```
+6. Optional: install the LaunchAgent so Elbot starts automatically when you log in:
+   ```bash
+   elbot-install-service
+   ```
+   This writes `~/Library/LaunchAgents/com.elbot.bot.plist`. Load it immediately with `launchctl load ~/Library/LaunchAgents/com.elbot.bot.plist`. Use `launchctl unload` to remove it.
+7. Keep the environment current with `./scripts/run.sh update` and restart the LaunchAgent (or rerun step 5) after upgrades.
+
+### Windows 10/11
+
+1. Install prerequisites:
+   - [Python 3.12](https://www.python.org/downloads/windows/) with the "Add Python to PATH" option.
+   - [Git for Windows](https://git-scm.com/download/win).
+   - The Visual Studio Build Tools (Desktop development workload) so Nextcord's optional voice dependencies compile.
+   - [ffmpeg](https://www.gyan.dev/ffmpeg/builds/) added to your PATH, or plan to set `FFMPEG_PATH` in `.env`.
+2. Launch PowerShell and clone the repository:
+   ```powershell
+   git clone https://github.com/<your-org>/Elbot.git
+   Set-Location Elbot
+   ```
+3. Run the installer script. It creates `.venv`, installs requirements, collects secrets and offers to register the Windows service:
+   ```powershell
+   .\scripts\install.ps1
+   ```
+   Rerun with `-Force` later if you need to reinstall the service.
+4. Confirm `.env` contains `DISCORD_TOKEN` and any optional keys (`OPENAI_API_KEY`, Lavalink overrides). Edit it with your favourite editor if you skipped the prompts.
+5. Test drive the bot in the current shell:
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   python -m elbot.main
+   ```
+   Press `Ctrl+C` to stop it.
+6. Optional: manage the Windows service so Elbot runs headlessly:
+   ```powershell
+   Start-Service Elbot   # starts the service
+   Stop-Service Elbot    # stops it
+   sc.exe delete Elbot   # removes it when uninstalling
+   ```
+7. When updating, pull changes, rerun `.\scripts\install.ps1` to refresh dependencies, then restart the service or repeat step 5 for foreground runs.
 
 ### Requirements
 
@@ -206,6 +305,27 @@ The Dockerfile installs `ffmpeg` automatically so music playback works out of th
 
 The portal exposes port `8000` by default and can be changed with the `PORT`
 environment variable.
+
+## Automated deployment
+
+`deploy.sh` keeps deployments consistent whether you run it locally or from CI.
+
+- Without deployment variables the script simply runs `docker compose pull` followed by `docker compose up -d --build --remove-orphans` on the current machine.
+- Set `DEPLOY_HOST`, `DEPLOY_USER` (defaults to `deploy`) and `DEPLOY_PATH` to sync the repository to a remote host over SSH. Provide `SSH_PRIVATE_KEY` and optionally `DEPLOY_INCLUDE_ENV=1` if you want to copy the local `.env`. The script uses `rsync` to mirror the tree (skipping `.env` by default) and restarts the stack using either the Docker Compose plugin or the legacy `docker-compose` binary.
+- Set `DEPLOY_COMPOSE_FILE` when the remote deployment should use a compose file other than `docker-compose.yml`.
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) reads the same variables from repository secrets. The `Deploy` step only runs for pushes to `main` when `DEPLOY_HOST` is populated, so forks without secrets run the full test suite without touching production.
+
+| Secret | Description |
+| --- | --- |
+| `DEPLOY_HOST` | Remote hostname or IP address. |
+| `DEPLOY_USER` | SSH user (`deploy` by default). |
+| `DEPLOY_PATH` | Directory on the remote host that contains the compose file (for example `/opt/elbot`). |
+| `DEPLOY_SSH_KEY` | Private key with access to the host. |
+| `DEPLOY_INCLUDE_ENV` | Optional (`1`) to sync the repository `.env`; leave unset to keep secrets on the server. |
+
+Ensure the target host has Docker (with the Compose plugin or `docker-compose`) and `rsync` installed; the workflow takes care of the rest.
+
 
 ## Windows notes
 

@@ -8,6 +8,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_INCLUDE_ENV: ${{ secrets.DEPLOY_INCLUDE_ENV }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -41,5 +46,7 @@ jobs:
           LAVALINK_PASSWORD: youshallnotpass
         run: python scripts/canary_playback.py
       - name: Deploy
-        if: success()
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.DEPLOY_HOST != ''
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: ./deploy.sh
