@@ -290,7 +290,7 @@ class LavalinkManager:
     async def _load_direct_stream(self, info: YTDLPResult) -> mafic.Track | None:
         assert self._node is not None
         try:
-            results = await self._node.fetch_tracks(info.stream_url, search_type=mafic.SearchType.YOUTUBE.value)
+            results = await self._node.fetch_tracks(info.stream_url)
         except mafic.TrackLoadException as exc:  # pragma: no cover - depends on Lavalink state
             logger.error("Lavalink refused yt-dlp stream %s: %s", info.stream_url, exc)
             raise NoResultsError("Lavalink rejected the direct stream returned by yt-dlp.")

@@ -376,4 +376,3 @@ def setup(bot: commands.Bot) -> None:
         vc.play(source)
         await interaction.response.send_message("😏", ephemeral=True)
 
-    bot.add_application_command(moan)

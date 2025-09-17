@@ -128,6 +128,13 @@ class ChatCog(commands.Cog):
     @nextcord.slash_command(name="chat_reset", description="Clear chat history")
     async def chat_reset(self, interaction: nextcord.Interaction):
         self.histories.pop(interaction.user.id, None)
+        history_file = self.history_dir / f"{interaction.user.id}.json"
+        try:
+            history_file.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            logger.warning("Failed to remove chat history for %s: %s", interaction.user.id, exc)
         await interaction.response.send_message(
             "✅ Chat history cleared.", ephemeral=True
         )
