@@ -66,6 +66,25 @@ if [[ -n "${DEPLOY_HOST:-}" ]]; then
     exit 0
 fi
 
+# Local systemd deployment ----------------------------------------------------
+if [[ "${SYSTEMD_DEPLOY:-0}" == "1" ]]; then
+    need_cmd git
+    need_cmd python3
+    need_cmd systemctl
+
+    echo "=== Pulling latest changes ==="
+    git pull --ff-only
+
+    echo "=== Installing Python dependencies ==="
+    python3 -m pip install -r requirements.txt
+
+    echo "=== Restarting elbot.service ==="
+    systemctl restart elbot.service
+
+    echo "=== Deployment complete ==="
+    exit 0
+fi
+
 # Local deployment ----------------------------------------------------------
 need_cmd docker
 

@@ -89,6 +89,10 @@ The steps below take you from an empty machine to a running bot on the three mai
    elbot-install-service
    ```
    Manage it with `systemctl status|start|stop elbot.service`. Logs are available via `journalctl -u elbot.service`.
+   If you prefer a manual install, copy the bundled `elbot.service` example to
+   `/etc/systemd/system/`, adjust the paths, run `sudo systemctl daemon-reload`
+   and enable it with `sudo systemctl enable --now elbot.service`. A matching
+   `lavalink.service` template is included for the Java node.
 7. To update later, pull changes and rerun `./scripts/run.sh update`, then restart the service.
 
 ### macOS (Intel and Apple silicon)
@@ -288,8 +292,9 @@ lavalink:
 After editing the file restart Lavalink. If you use the built-in launcher, set `LAVALINK_YOUTUBE_PLUGIN_VERSION` instead of hand-editing the file. Remote nodes can replace the dependency string above and restart the server; no Python changes are required.
 
 Elbot will fall back to direct stream extraction with `yt-dlp` when Lavalink is
-unavailable or throttled. Set the `YTDLP_COOKIES_FILE` environment variable to
-point at a Netscape cookie file if you need to access age-restricted videos.
+unavailable or throttled. Set the `YT_COOKIES_FILE` (or legacy
+`YTDLP_COOKIES_FILE`) environment variable to point at a Netscape cookie file if
+you need to access age-restricted videos.
 
 ## Docker
 
@@ -313,6 +318,8 @@ environment variable.
 - Without deployment variables the script simply runs `docker compose pull` followed by `docker compose up -d --build --remove-orphans` on the current machine.
 - Set `DEPLOY_HOST`, `DEPLOY_USER` (defaults to `deploy`) and `DEPLOY_PATH` to sync the repository to a remote host over SSH. Provide `SSH_PRIVATE_KEY` and optionally `DEPLOY_INCLUDE_ENV=1` if you want to copy the local `.env`. The script uses `rsync` to mirror the tree (skipping `.env` by default) and restarts the stack using either the Docker Compose plugin or the legacy `docker-compose` binary.
 - Set `DEPLOY_COMPOSE_FILE` when the remote deployment should use a compose file other than `docker-compose.yml`.
+- Set `SYSTEMD_DEPLOY=1` to run `git pull`, `pip install -r requirements.txt` and
+  restart `elbot.service` on the current machine.
 
 The GitHub Actions workflow (`.github/workflows/ci.yml`) reads the same variables from repository secrets. The `Deploy` step only runs for pushes to `main` when `DEPLOY_HOST` is populated, so forks without secrets run the full test suite without touching production.
 

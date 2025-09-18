@@ -8,6 +8,8 @@ import time
 import nextcord
 from nextcord.ext import commands
 
+from elbot.utils import safe_reply
+
 logger = logging.getLogger("elbot.diagnostic")
 
 
@@ -25,32 +27,35 @@ class DiagnosticCog(commands.Cog):
         """
         Report how long the bot has been running.
         """
+        await interaction.response.defer(thinking=True)
         now = time.time()
         uptime_seconds = now - self.start_time
         hours, remainder = divmod(int(uptime_seconds), 3600)
         minutes, seconds = divmod(remainder, 60)
         uptime_str = f"{hours}h {minutes}m {seconds}s"
-        await interaction.response.send_message(f"🕒 Uptime: {uptime_str}")
+        await safe_reply(interaction, f"🕒 Uptime: {uptime_str}")
 
     @nextcord.slash_command(name="ping", description="Check the bot's latency.")
     async def ping(self, interaction: nextcord.Interaction):
         """
         Return the current bot latency in milliseconds.
         """
+        await interaction.response.defer(thinking=True)
         latency_ms = round(self.bot.latency * 1000)
-        await interaction.response.send_message(f"🏓 Latency: {latency_ms}ms")
+        await safe_reply(interaction, f"🏓 Latency: {latency_ms}ms")
 
     @nextcord.slash_command(name="cogs", description="List all loaded cogs.")
     async def cogs(self, interaction: nextcord.Interaction):
         """
         Show which cogs are currently loaded.
         """
+        await interaction.response.defer(thinking=True)
         loaded = list(self.bot.cogs.keys())
         if not loaded:
-            await interaction.response.send_message("No cogs are currently loaded.")
+            await safe_reply(interaction, "No cogs are currently loaded.")
         else:
             cog_list = "\n".join(f"- {name}" for name in loaded)
-            await interaction.response.send_message(f"📂 Loaded Cogs:\n{cog_list}")
+            await safe_reply(interaction, f"📂 Loaded Cogs:\n{cog_list}")
 
     @nextcord.slash_command(
         name="system_info", description="Get basic system information."
@@ -59,15 +64,17 @@ class DiagnosticCog(commands.Cog):
         """
         Report OS, CPU, and total RAM.
         """
+        await interaction.response.defer(thinking=True)
         system = platform.system()
         release = platform.release()
         cpu = platform.processor()
         total_ram = psutil.virtual_memory().total / (1024**3)  # Convert bytes to GB
-        await interaction.response.send_message(
+        await safe_reply(
+            interaction,
             f"🖥 **System Information:**\n"
             f"- OS: {system} {release}\n"
             f"- CPU: {cpu}\n"
-            f"- Memory: {total_ram:.2f} GB"
+            f"- Memory: {total_ram:.2f} GB",
         )
 
 

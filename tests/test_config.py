@@ -8,7 +8,7 @@ def test_config_validate_missing_env(monkeypatch):
     import elbot.config as config
 
     importlib.reload(config)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(SystemExit):
         config.Config.validate()
 
 

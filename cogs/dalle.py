@@ -6,6 +6,7 @@ from nextcord.ext import commands
 import openai
 
 from elbot.config import Config  # Use our central config
+from elbot.utils import safe_reply
 
 # Make sure OpenAI key is set in Config (Config.validate() will have caught a missing token).
 openai.api_key = (
@@ -29,7 +30,7 @@ class ImageCog(commands.Cog):
         # you can check `if interaction.guild.id != Config.GUILD_ID` at runtime and reject it.
     )
     async def generate_image(self, interaction: nextcord.Interaction, prompt: str):
-        await interaction.response.defer()
+        await interaction.response.defer(thinking=True)
 
         # Optional: if you really want to restrict to one guild:
         if (
@@ -37,8 +38,10 @@ class ImageCog(commands.Cog):
             and interaction.guild
             and interaction.guild.id != Config.GUILD_ID
         ):
-            await interaction.followup.send(
-                "This command is not available in this server.", ephemeral=True
+            await safe_reply(
+                interaction,
+                "This command is not available in this server.",
+                ephemeral=True,
             )
             return
 
@@ -54,20 +57,19 @@ class ImageCog(commands.Cog):
             image_url = response.data[0].url
             embed = nextcord.Embed(title="Here’s your generated image:")
             embed.set_image(url=image_url)
-            await interaction.followup.send(embed=embed)
+            await safe_reply(interaction, embed=embed)
 
         except openai.OpenAIError as e:
             # Handle content policy or other errors
             msg = str(e).lower()
             if "content_policy_violation" in msg:
-                await interaction.followup.send(
+                await safe_reply(
+                    interaction,
                     "The prompt you used violates the content policy. Please try a different prompt.",
                     ephemeral=True,
                 )
             else:
-                await interaction.followup.send(
-                    f"An error occurred: {e}", ephemeral=True
-                )
+                await safe_reply(interaction, f"An error occurred: {e}", ephemeral=True)
 
 
 def setup(bot: commands.Bot):
