@@ -38,7 +38,7 @@ def test_f1_commands_registered(monkeypatch):
     bot, loop = _create_bot(monkeypatch)
     try:
         # Avoid network calls when the cog loads
-        from cogs import F1 as f1
+        from elbot.cogs import F1 as f1
         monkeypatch.setattr(f1, "fetch_events", AsyncMock(return_value=[]))
         monkeypatch.setattr(f1.F1Cog, "get_schedule", lambda self: None)
         cog = f1.F1Cog(bot)
@@ -56,7 +56,7 @@ def test_reminder_triggers(monkeypatch):
     _setup_config(monkeypatch)
     bot, loop = _create_bot(monkeypatch)
     try:
-        from cogs import F1 as f1
+        from elbot.cogs import F1 as f1
 
         dt = datetime.now(f1.LOCAL_TZ) + timedelta(minutes=30)
         monkeypatch.setattr(f1, "fetch_events", AsyncMock(return_value=[(dt, "Test GP")]))
@@ -86,7 +86,7 @@ def test_reminder_triggers(monkeypatch):
 
 def test_fetch_events_client_error(monkeypatch):
     _setup_config(monkeypatch)
-    from cogs import F1 as f1
+    from elbot.cogs import F1 as f1
 
     def raise_error(self, url, *a, **k):
         class Resp:
@@ -108,7 +108,7 @@ def test_fetch_events_client_error(monkeypatch):
 async def test_fetch_events_empty_url(monkeypatch):
     _setup_config(monkeypatch)
     config.Config.ICS_URL = ""
-    from cogs import F1 as f1
+    from elbot.cogs import F1 as f1
     importlib.reload(f1)
     events = await f1.fetch_events()
     assert events == []
@@ -118,7 +118,7 @@ async def test_fetch_events_empty_url(monkeypatch):
 async def test_fetch_events_webcal(monkeypatch):
     _setup_config(monkeypatch)
     config.Config.ICS_URL = "webcal://example.com/f1.ics"
-    from cogs import F1 as f1
+    from elbot.cogs import F1 as f1
     importlib.reload(f1)
 
     sample_ics = (
@@ -156,7 +156,7 @@ async def test_fetch_events_webcal(monkeypatch):
 
 def test_fetch_race_results_client_error(monkeypatch):
     _setup_config(monkeypatch)
-    from cogs import F1 as f1
+    from elbot.cogs import F1 as f1
 
     def raise_error(self, url, *a, **k):
         class Resp:
@@ -199,7 +199,7 @@ async def test_fetch_events_no_unclosed_warning(monkeypatch):
     port = site._server.sockets[0].getsockname()[1]
 
     config.Config.ICS_URL = f"http://localhost:{port}/f1.ics"
-    from cogs import F1 as f1
+    from elbot.cogs import F1 as f1
     importlib.reload(f1)
 
     with warnings.catch_warnings(record=True) as w:
@@ -257,7 +257,7 @@ async def test_fetch_race_results_no_unclosed_warning(monkeypatch):
         return orig_get(self, url, *a, **k)
 
     monkeypatch.setattr(aiohttp.ClientSession, "get", local_get)
-    from cogs import F1 as f1
+    from elbot.cogs import F1 as f1
     importlib.reload(f1)
 
     with warnings.catch_warnings(record=True) as w:

@@ -193,6 +193,6 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 youtube_cookies.txt
-lavalink/*
-!lavalink/application.yml
 sfx/
+infra/docker/lavalink/*
+!infra/docker/lavalink/application.yml

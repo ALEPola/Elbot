@@ -170,7 +170,7 @@ def main() -> None:
             return
         logger.info("bot ready user=%s id=%s", bot.user, bot.user.id)
 
-    load_all_cogs(bot, cogs_dir="cogs")
+    load_all_cogs(bot)
 
     @bot.slash_command(name="musicdebug", description="Show Lavalink status")
     async def musicdebug(inter: nextcord.Interaction) -> None:

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Resolve repo root even if called via symlink
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 DELETE_SRC=0
 PURGE_PKGS=0
 
@@ -15,7 +15,7 @@ for arg in "${@:-}"; do
   esac
 done
 
-echo "==> Uninstalling Elbot …"
+echo "==> Uninstalling Elbot"
 
 # 1) Stop & remove systemd unit (if systemd exists)
 if command -v systemctl >/dev/null 2>&1; then
@@ -42,13 +42,13 @@ rm -rf ~/.elbot_lavalink ~/.local/share/Elbot
 if [[ $DELETE_SRC -eq 1 ]]; then
   echo " - Deleting source at: $ROOT_DIR"
 
-  # Deactivate venv if we’re inside it
+  # Deactivate venv if we're inside it
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
     echo "   (deactivating virtualenv)"
     deactivate 2>/dev/null || true
   fi
 
-  # cd out of the directory we’re about to delete
+  # cd out of the directory we're about to delete
   if [[ "$PWD" == "$ROOT_DIR"* ]]; then
     cd ~
   fi
@@ -68,4 +68,4 @@ if [[ $PURGE_PKGS -eq 1 ]] && command -v apt-get >/dev/null 2>&1; then
   sudo apt-get autoremove -y || true
 fi
 
-echo "✅ Elbot uninstalled."
+echo "[ok] Elbot uninstalled."

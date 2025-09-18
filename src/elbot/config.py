@@ -11,7 +11,7 @@ from typing import Iterable, List
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
 
 logger = logging.getLogger("elbot.config")

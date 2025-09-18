@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import nextcord
 from nextcord.ext import commands
 
-from cogs import chat as chat_cog
+from elbot.cogs import chat as chat_cog
 
 
 class DummyInteraction:

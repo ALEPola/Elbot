@@ -47,7 +47,7 @@ if [[ -n "${DEPLOY_HOST:-}" ]]; then
     log "Syncing repository to $remote:$remote_path"
     rsync -az --delete "${rsync_args[@]}" -e "ssh ${ssh_opts[*]}" ./ "$remote:$remote_path/"
 
-    remote_compose="${DEPLOY_COMPOSE_FILE:-docker-compose.yml}"
+    remote_compose="${DEPLOY_COMPOSE_FILE:-infra/docker/docker-compose.yml}"
     remote_cmd="cd '$remote_path' && "
     remote_cmd+="if docker compose version >/dev/null 2>&1; then "
     remote_cmd+="docker compose -f '$remote_compose' pull && "
@@ -77,6 +77,7 @@ if [[ "${SYSTEMD_DEPLOY:-0}" == "1" ]]; then
 
     echo "=== Installing Python dependencies ==="
     python3 -m pip install -r requirements.txt
+    python3 -m pip install -e .
 
     echo "=== Restarting elbot.service ==="
     systemctl restart elbot.service
@@ -90,12 +91,12 @@ need_cmd docker
 
 if docker compose version >/dev/null 2>&1; then
     log "Using docker compose plugin for local deployment"
-    docker compose pull
-    docker compose up -d --build --remove-orphans
+    docker compose -f infra/docker/docker-compose.yml pull
+    docker compose -f infra/docker/docker-compose.yml up -d --build --remove-orphans
 elif command -v docker-compose >/dev/null 2>&1; then
     log "Using docker-compose standalone for local deployment"
-    docker-compose pull
-    docker-compose up -d --build --remove-orphans
+    docker-compose -f infra/docker/docker-compose.yml pull
+    docker-compose -f infra/docker/docker-compose.yml up -d --build --remove-orphans
 else
     log "Neither 'docker compose' nor 'docker-compose' is available"
     exit 1

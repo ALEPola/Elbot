@@ -28,7 +28,7 @@ jobs:
       - name: Run unit tests
         run: pytest tests/test_music_queue_utils.py tests/test_music_fallback.py tests/test_music_cookies.py
       - name: Launch Lavalink
-        run: docker compose up -d lavalink
+        run: docker compose -f infra/docker/docker-compose.yml up -d lavalink
         env:
           LAVALINK_PASSWORD: youshallnotpass
       - name: Wait for Lavalink
@@ -44,9 +44,9 @@ jobs:
       - name: Canary playback
         env:
           LAVALINK_PASSWORD: youshallnotpass
-        run: python scripts/canary_playback.py
+        run: python infra/scripts/canary_playback.py
       - name: Deploy
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.DEPLOY_HOST != ''
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: ./deploy.sh
+        run: ./infra/scripts/deploy.sh

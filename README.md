@@ -36,7 +36,7 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 ```bash
 git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
-./scripts/run.sh
+./infra/scripts/run.sh
 # then edit .env and paste your DISCORD_TOKEN, run again
 ```
 
@@ -49,7 +49,7 @@ Elbot (for example your GitHub username).
 git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
 # One-time setup (creates venv, installs deps, prompts for token, installs service)
-./scripts/install.ps1
+./infra/scripts/install.ps1
 # The "Elbot" Windows service will start automatically on boot.
 ```
 
@@ -75,7 +75,7 @@ The steps below take you from an empty machine to a running bot on the three mai
    ```
 3. Run the guided installer to create the virtual environment, install Python dependencies and prompt for your Discord/OpenAI keys. Add `--yes` for an unattended install:
    ```bash
-   ./scripts/install.sh
+   ./infra/scripts/install.sh
    ```
 4. Review `.env` (created by the script) and fill in any missing values such as `DISCORD_TOKEN`, `OPENAI_API_KEY`, `AUTO_LAVALINK`, or Lavalink credentials if you use a remote node.
 5. Start the bot in the foreground for a smoke test:
@@ -89,11 +89,10 @@ The steps below take you from an empty machine to a running bot on the three mai
    elbot-install-service
    ```
    Manage it with `systemctl status|start|stop elbot.service`. Logs are available via `journalctl -u elbot.service`.
-   If you prefer a manual install, copy the bundled `elbot.service` example to
-   `/etc/systemd/system/`, adjust the paths, run `sudo systemctl daemon-reload`
-   and enable it with `sudo systemctl enable --now elbot.service`. A matching
-   `lavalink.service` template is included for the Java node.
-7. To update later, pull changes and rerun `./scripts/run.sh update`, then restart the service.
+   If you prefer a manual install, copy `infra/systemd/elbot.service` to `/etc/systemd/system/`, adjust the paths, run
+   `sudo systemctl daemon-reload` and enable it with `sudo systemctl enable --now elbot.service`. A matching
+   `infra/systemd/lavalink.service` template is included for the Java node.
+7. To update later, pull changes and rerun `./infra/scripts/run.sh update`, then restart the service.
 
 ### macOS (Intel and Apple silicon)
 
@@ -109,7 +108,7 @@ The steps below take you from an empty machine to a running bot on the three mai
    ```
 3. Allow the helper script to create the virtual environment, download dependencies and populate `.env`:
    ```bash
-   ./scripts/install.sh
+   ./infra/scripts/install.sh
    ```
    When prompted, supply your Discord token and optional OpenAI key.
 4. If the script did not prompt you (for example you ran with `--yes`), edit `.env` manually: `cp .env.example .env` then set `DISCORD_TOKEN`, `OPENAI_API_KEY` and any optional values.
@@ -123,7 +122,7 @@ The steps below take you from an empty machine to a running bot on the three mai
    elbot-install-service
    ```
    This writes `~/Library/LaunchAgents/com.elbot.bot.plist`. Load it immediately with `launchctl load ~/Library/LaunchAgents/com.elbot.bot.plist`. Use `launchctl unload` to remove it.
-7. Keep the environment current with `./scripts/run.sh update` and restart the LaunchAgent (or rerun step 5) after upgrades.
+7. Keep the environment current with `./infra/scripts/run.sh update` and restart the LaunchAgent (or rerun step 5) after upgrades.
 
 ### Windows 10/11
 
@@ -139,7 +138,7 @@ The steps below take you from an empty machine to a running bot on the three mai
    ```
 3. Run the installer script. It creates `.venv`, installs requirements, collects secrets and offers to register the Windows service:
    ```powershell
-   .\scripts\install.ps1
+   .\infra\scripts\install.ps1
    ```
    Rerun with `-Force` later if you need to reinstall the service.
 4. Confirm `.env` contains `DISCORD_TOKEN` and any optional keys (`OPENAI_API_KEY`, Lavalink overrides). Edit it with your favourite editor if you skipped the prompts.
@@ -155,7 +154,7 @@ The steps below take you from an empty machine to a running bot on the three mai
    Stop-Service Elbot    # stops it
    sc.exe delete Elbot   # removes it when uninstalling
    ```
-7. When updating, pull changes, rerun `.\scripts\install.ps1` to refresh dependencies, then restart the service or repeat step 5 for foreground runs.
+7. When updating, pull changes, rerun `.\infra\scripts\install.ps1` to refresh dependencies, then restart the service or repeat step 5 for foreground runs.
 
 ### Requirements
 
@@ -168,14 +167,14 @@ The steps below take you from an empty machine to a running bot on the three mai
 For platform-specific setup steps (Linux/macOS, Windows, Docker) see [INSTALL.md](INSTALL.md).
 
 Quick start:
-- Linux/macOS: `./scripts/run.sh`
-- Windows: `./scripts/install.ps1`
-- Docker: `docker compose up --build`
+- Linux/macOS: `./infra/scripts/run.sh`
+- Windows: `./infra/scripts/install.ps1`
+- Docker: `docker compose -f infra/docker/docker-compose.yml up --build`
 
 
 ## Configuration
 
-If you ran `./scripts/install.sh` the script created a `.env` file and asked for
+If you ran `./infra/scripts/install.sh` the script created a `.env` file and asked for
 the most important values. Otherwise copy the example and fill in the required
 variables:
 
@@ -241,9 +240,9 @@ python -m elbot.main
 You can also use the helper script:
 
 ```bash
-./scripts/run.sh
+./infra/scripts/run.sh
 # Or start Lavalink automatically:
-./scripts/run.sh --with-lavalink
+./infra/scripts/run.sh --with-lavalink
 ```
 
 ## Running Lavalink
@@ -301,7 +300,7 @@ you need to access age-restricted videos.
 Build the container and run the bot and portal with Docker Compose:
 
 ```bash
-docker compose up --build
+docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
 This starts the bot, management portal and a Lavalink instance for music playback.
@@ -313,9 +312,9 @@ environment variable.
 
 ## Automated deployment
 
-`deploy.sh` keeps deployments consistent whether you run it locally or from CI.
+`infra/scripts/deploy.sh` keeps deployments consistent whether you run it locally or from CI.
 
-- Without deployment variables the script simply runs `docker compose pull` followed by `docker compose up -d --build --remove-orphans` on the current machine.
+- Without deployment variables the script simply runs `docker compose -f infra/docker/docker-compose.yml pull` followed by `docker compose -f infra/docker/docker-compose.yml up -d --build --remove-orphans` on the current machine.
 - Set `DEPLOY_HOST`, `DEPLOY_USER` (defaults to `deploy`) and `DEPLOY_PATH` to sync the repository to a remote host over SSH. Provide `SSH_PRIVATE_KEY` and optionally `DEPLOY_INCLUDE_ENV=1` if you want to copy the local `.env`. The script uses `rsync` to mirror the tree (skipping `.env` by default) and restarts the stack using either the Docker Compose plugin or the legacy `docker-compose` binary.
 - Set `DEPLOY_COMPOSE_FILE` when the remote deployment should use a compose file other than `docker-compose.yml`.
 - Set `SYSTEMD_DEPLOY=1` to run `git pull`, `pip install -r requirements.txt` and
@@ -336,7 +335,7 @@ Ensure the target host has Docker (with the Compose plugin or `docker-compose`) 
 
 ## Windows notes
 
-- Use `scripts\install.ps1` for a guided setup that installs dependencies and the Windows service.
+- Use `infra\scripts\install.ps1` for a guided setup that installs dependencies and the Windows service.
 - `elbot-install-service` can also be run manually; it installs and starts the service using pywin32.
 
 ## macOS notes
@@ -349,7 +348,7 @@ and restarts the bot if it exits.
 To pull the latest version of Elbot from GitHub:
 
 ```bash
-./scripts/run.sh update
+./infra/scripts/run.sh update
 ```
 
 To upgrade the YouTube stack:
@@ -368,7 +367,7 @@ elbot-portal
 
 Open your browser to <http://localhost:8000> by default. The listening port can
 be changed with the `PORT` environment variable. The portal lets you view logs,
-switch Git branches and run `run.sh update`. It also provides a button
+switch Git branches and run `infra/scripts/run.sh update`. It also provides a button
 to restart the bot service.
 
 ### PORT
@@ -386,7 +385,7 @@ systemd unit has a different name.
 ### AUTO_UPDATE
 
 When `AUTO_UPDATE` is set to `1` the portal spawns a background thread that
-runs `scripts/run.sh update` once per day and restarts the bot service after each
+runs `./infra/scripts/run.sh update` once per day and restarts the bot service after each
 update. This allows unattended updates and restarts.
 
 To enable the feature temporarily:
@@ -401,13 +400,13 @@ Or export the variable in your shell for persistent use.
 
 The project is organised into a few key directories:
 
-- **`elbot/`** – core package with the main entry point, configuration helper,
-  service installation logic and the Flask management portal.
-- **`cogs/`** – individual modules implementing slash commands for chat,
-  image generation, music playback and Formula&nbsp;1 updates.
-- **`scripts/`** – helper shell scripts for installing dependencies,
-  running the bot and updating from Git.
-- **`tests/`** – pytest-based test suite.
+- **`src/elbot/`** - core package with the main entry point, configuration helper, service installation logic, and the Flask management portal.
+- **`src/elbot/cogs/`** - individual modules implementing slash commands for chat, image generation, music playback, and Formula 1 updates.
+- **`src/elbot/music/`** - shared music playback components used by the cogs.
+- **`infra/scripts/`** - helper shell/PowerShell scripts for install, update, and removal tasks.
+- **`infra/docker/`** - Dockerfile, compose stack, and Lavalink configuration.
+- **`infra/systemd/`** - systemd unit examples for the bot and Lavalink.
+- **`tests/`** - pytest-based test suite.
 
 ## Command summary
 
@@ -453,3 +452,4 @@ Then run the test suite:
 ```bash
 pytest
 ```
+

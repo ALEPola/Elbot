@@ -24,7 +24,7 @@ Platform-specific notes:
 ```bash
 git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
-./scripts/run.sh
+./infra/scripts/run.sh
 ```
 
 `run.sh` performs the first-time setup: it creates a virtual environment, installs dependencies and prompts for your Discord token. Rerun the script to start the bot after editing `.env`.
@@ -34,7 +34,7 @@ cd Elbot
 Use the helper script to install system packages (Java, ffmpeg), create the virtual environment and write a `.env` file:
 
 ```bash
-./scripts/install.sh
+./infra/scripts/install.sh
 ```
 
 Add `--yes` to accept all prompts automatically. After the script finishes you can start the bot with:
@@ -59,7 +59,7 @@ Use `elbot-install-service --remove` to uninstall it.
 ```powershell
 git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
-.\scripts\install.ps1
+.\infra\scripts\install.ps1
 ```
 
 The script creates a virtual environment, installs dependencies, prompts for required secrets and offers to register the Windows service. Once installed the "Elbot" service will start automatically on boot.
@@ -83,10 +83,10 @@ Remove-Service Elbot
 
 ## 4. Docker
 
-A bundled `docker-compose.yml` starts the bot, management portal and Lavalink in a single command:
+The bundled `infra/docker/docker-compose.yml` file starts the bot, management portal and Lavalink in a single command:
 
 ```bash
-docker compose up --build
+docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
 Provide configuration via environment variables or bind-mount a `.env` file.

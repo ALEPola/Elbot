@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 ## Guided setup script for the Elbot project.
 ## Creates a Python virtual environment, installs dependencies and optionally
@@ -136,14 +136,14 @@ fi
 echo "\n[5/6] Installing service..."
 
 INSTALL_LAVALINK=0
-if command -v systemctl >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/lavalink.service" ]; then
+if command -v systemctl >/dev/null 2>&1 && [ -f "$ROOT_DIR/infra/systemd/lavalink.service" ]; then
     if prompt_yes_no "Install, enable and start Lavalink as a service?" Y; then
         if sudo -n true 2>/dev/null; then
             SUDO="sudo -n"
         else
             SUDO="sudo"
         fi
-        sed "s|__ROOT_DIR__|$ROOT_DIR|g" "$ROOT_DIR/scripts/lavalink.service" \
+        sed "s|__ROOT_DIR__|$ROOT_DIR|g" "$ROOT_DIR/infra/systemd/lavalink.service" \
             | $SUDO tee /etc/systemd/system/lavalink.service >/dev/null
         $SUDO systemctl daemon-reload
         $SUDO systemctl enable lavalink.service

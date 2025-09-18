@@ -19,9 +19,11 @@ services:
       retries: 3
     # youtube-source plugin v1.4.4 pairs with Lavalink v4.0.6
   bot:
-    build: .
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
     command: python -m elbot.main
-    env_file: .env
+    env_file: ../../.env
     environment:
       - LAVALINK_HOST=lavalink
       - LAVALINK_PORT=${LAVALINK_PORT:-2333}
