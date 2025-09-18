@@ -27,7 +27,7 @@ cd Elbot
 ./infra/scripts/run.sh
 ```
 
-`run.sh` performs the first-time setup: it creates a virtual environment, installs dependencies and prompts for your Discord token. Rerun the script to start the bot after editing `.env`.
+`install.sh` performs the first-time setup: it creates a virtual environment, installs dependencies and prompts for your Discord token. Rerun the script with `--yes` for unattended installs or use `elbotctl` commands afterwards to manage the bot.`
 
 ### Guided install script
 
@@ -44,13 +44,14 @@ source .venv/bin/activate
 python -m elbot.main
 ```
 
-To install the bot as a systemd service run:
+To install or manage the service later use:
 
 ```bash
-elbot-install-service
+elbotctl service install --require-lavalink
+elbotctl service status
 ```
 
-Use `elbot-install-service --remove` to uninstall it.
+Run `elbotctl service remove` to uninstall it.
 
 ## 3. Windows
 
@@ -68,15 +69,14 @@ To run the bot manually after setup:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m elbot.main
+elbotctl run
 ```
 
 You can control the Windows service with:
 
 ```powershell
-Start-Service Elbot
-Stop-Service Elbot
-Remove-Service Elbot
+elbotctl service status
+elbotctl service restart
 ```
 
 (Use `Remove-Service` only if you want to uninstall the service.)

@@ -1,11 +1,8 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/../.."
-if [ ! -d ".venv" ]; then python3 -m venv .venv; fi
-. .venv/bin/activate
-python -m pip install -U pip wheel
-pip install -r requirements.txt
-pip install -e .
-cp -n .env.example .env 2>/dev/null || true
-echo ">> Edit .env to set DISCORD_TOKEN if you haven't."
-python -m elbot.main
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+PYTHON_BIN="${PYTHON:-python3}"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  PYTHON_BIN="python"
+fi
+PYTHONPATH="$ROOT_DIR/src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" -m elbot.cli run "$@"

@@ -36,25 +36,48 @@ See `.env.example` for all configuration variables, including `ELBOT_SERVICE` an
 ```bash
 git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
-./infra/scripts/run.sh
-# then edit .env and paste your DISCORD_TOKEN, run again
+./infra/scripts/install.sh
 ```
 
-Replace `<your-org>` with the account or organisation that hosts your copy of
-Elbot (for example your GitHub username).
+The installer creates `.venv`, installs dependencies, prompts for required secrets and offers to register the systemd service. After it completes you can either start the foreground bot with:
+
+```bash
+source .venv/bin/activate
+elbotctl run
+```
+
+Or manage the background service:
+
+```bash
+elbotctl service start
+elbotctl service status
+```
+
+Replace `<your-org>` with the account or organisation that hosts your copy of Elbot (for example your GitHub username).
 
 ## Quick start (Windows)
 
 ```powershell
 git clone https://github.com/<your-org>/Elbot.git
 cd Elbot
-# One-time setup (creates venv, installs deps, prompts for token, installs service)
-./infra/scripts/install.ps1
-# The "Elbot" Windows service will start automatically on boot.
+powershell -ExecutionPolicy Bypass -File .\infra\scripts\install.ps1
 ```
 
-Again, replace `<your-org>` with the account or organisation that hosts the
-repository.
+The PowerShell installer mirrors the Linux experience: it builds `.venv`, installs dependencies, collects secrets and registers the Windows service. Activate the virtual environment and launch the bot manually with:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+elbotctl run
+```
+
+Or control the service directly:
+
+```powershell
+elbotctl service status
+elbotctl service restart
+```
+
+Again, replace `<your-org>` with the account or organisation that hosts the repository.
 
 ## End-to-end platform guides
 
@@ -81,18 +104,19 @@ The steps below take you from an empty machine to a running bot on the three mai
 5. Start the bot in the foreground for a smoke test:
    ```bash
    source .venv/bin/activate
-   python -m elbot.main
+   elbotctl run
    ```
    Press `Ctrl+C` to stop it.
 6. Optional: install the systemd service so the bot and Lavalink start on boot and restart on failure:
    ```bash
-   elbot-install-service
+   elbotctl service install --require-lavalink
+   elbotctl service status
    ```
-   Manage it with `systemctl status|start|stop elbot.service`. Logs are available via `journalctl -u elbot.service`.
-   If you prefer a manual install, copy `infra/systemd/elbot.service` to `/etc/systemd/system/`, adjust the paths, run
-   `sudo systemctl daemon-reload` and enable it with `sudo systemctl enable --now elbot.service`. A matching
-   `infra/systemd/lavalink.service` template is included for the Java node.
-7. To update later, pull changes and rerun `./infra/scripts/run.sh update`, then restart the service.
+   Logs are available via `journalctl -u elbot.service`. If you prefer a manual install, copy `infra/systemd/elbot.service`
+   to `/etc/systemd/system/`, adjust the paths, run `sudo systemctl daemon-reload` and enable it with
+   `sudo systemctl enable --now elbot.service`. A matching `infra/systemd/lavalink.service` template is included for the
+   Java node.
+7. To update later, rerun `elbotctl update` and restart the service if it does not restart automatically.
 
 ### macOS (Intel and Apple silicon)
 
@@ -115,14 +139,14 @@ The steps below take you from an empty machine to a running bot on the three mai
 5. Start the bot to verify everything works:
    ```bash
    source .venv/bin/activate
-   python -m elbot.main
+   elbotctl run
    ```
 6. Optional: install the LaunchAgent so Elbot starts automatically when you log in:
    ```bash
-   elbot-install-service
+   elbotctl service install
    ```
    This writes `~/Library/LaunchAgents/com.elbot.bot.plist`. Load it immediately with `launchctl load ~/Library/LaunchAgents/com.elbot.bot.plist`. Use `launchctl unload` to remove it.
-7. Keep the environment current with `./infra/scripts/run.sh update` and restart the LaunchAgent (or rerun step 5) after upgrades.
+7. Keep the environment current with `elbotctl update` and restart the LaunchAgent (or rerun step 5) after upgrades.
 
 ### Windows 10/11
 
@@ -138,23 +162,22 @@ The steps below take you from an empty machine to a running bot on the three mai
    ```
 3. Run the installer script. It creates `.venv`, installs requirements, collects secrets and offers to register the Windows service:
    ```powershell
-   .\infra\scripts\install.ps1
+   powershell -ExecutionPolicy Bypass -File .\infra\scripts\install.ps1
    ```
    Rerun with `-Force` later if you need to reinstall the service.
 4. Confirm `.env` contains `DISCORD_TOKEN` and any optional keys (`OPENAI_API_KEY`, Lavalink overrides). Edit it with your favourite editor if you skipped the prompts.
 5. Test drive the bot in the current shell:
    ```powershell
    .\.venv\Scripts\Activate.ps1
-   python -m elbot.main
+   elbotctl run
    ```
    Press `Ctrl+C` to stop it.
 6. Optional: manage the Windows service so Elbot runs headlessly:
    ```powershell
-   Start-Service Elbot   # starts the service
-   Stop-Service Elbot    # stops it
-   sc.exe delete Elbot   # removes it when uninstalling
+   elbotctl service status
+   elbotctl service restart
    ```
-7. When updating, pull changes, rerun `.\infra\scripts\install.ps1` to refresh dependencies, then restart the service or repeat step 5 for foreground runs.
+7. When updating, run `elbotctl update`, then restart the service or repeat step 5 for foreground runs.
 
 ### Requirements
 
@@ -167,9 +190,9 @@ The steps below take you from an empty machine to a running bot on the three mai
 For platform-specific setup steps (Linux/macOS, Windows, Docker) see [INSTALL.md](INSTALL.md).
 
 Quick start:
-- Linux/macOS: `./infra/scripts/run.sh`
-- Windows: `./infra/scripts/install.ps1`
-- Docker: `docker compose -f infra/docker/docker-compose.yml up --build`
+- Linux/macOS: `./infra/scripts/install.sh`
+- Windows: `powershell -ExecutionPolicy Bypass -File .\infra\scripts\install.ps1`
+- Docker: `elbotctl docker up`
 
 
 ## Configuration
@@ -184,6 +207,8 @@ variables:
 Optional variables include `COMMAND_PREFIX`, `GUILD_ID`, `LAVALINK_HOST`,
 `LAVALINK_PORT`, `LAVALINK_PASSWORD`, `OPENAI_MODEL`, `ICS_URL`, `F1_CHANNEL_ID`,
 `LOCAL_TIMEZONE`, `ELBOT_DATA_DIR`, `ELBOT_SERVICE` and `PORT`.
+
+You can manage these values manually or via the CLI: `elbotctl env list` shows the current configuration, `elbotctl env set KEY value` updates a single entry, and `elbotctl env import file.env` bulk-loads values.
 
 The table below summarises the most common options. Leave entries blank to use
 the built-in defaults.
@@ -230,20 +255,22 @@ cp .env.example .env
 
 ## Running the bot
 
-Activate the virtual environment and run the entry point:
+Activate the virtual environment (if you want the console session) and use the management CLI:
 
 ```bash
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-python -m elbot.main
+source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
+elbotctl run
 ```
 
-You can also use the helper script:
+`elbotctl` also exposes convenience commands for day-to-day tasks:
 
 ```bash
-./infra/scripts/run.sh
-# Or start Lavalink automatically:
-./infra/scripts/run.sh --with-lavalink
+elbotctl service status    # show systemd/LaunchAgent/Windows service state
+elbotctl service restart   # restart the background service
+elbotctl check             # validate configuration and Lavalink availability
 ```
+
+If you prefer Docker, see the next section (`elbotctl docker up`).
 
 ## Running Lavalink
 
@@ -303,6 +330,8 @@ Build the container and run the bot and portal with Docker Compose:
 docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
+`elbotctl docker up` wraps the same command if you prefer the CLI.
+
 This starts the bot, management portal and a Lavalink instance for music playback.
 
 The Dockerfile installs `ffmpeg` automatically so music playback works out of the box.
@@ -335,8 +364,8 @@ Ensure the target host has Docker (with the Compose plugin or `docker-compose`) 
 
 ## Windows notes
 
-- Use `infra\scripts\install.ps1` for a guided setup that installs dependencies and the Windows service.
-- `elbot-install-service` can also be run manually; it installs and starts the service using pywin32.
+- Use `powershell -ExecutionPolicy Bypass -File .\infra\scripts\install.ps1` for a guided setup that installs dependencies and the Windows service.
+- Manage the service with `elbotctl service status`, `elbotctl service restart`, or remove it with `elbotctl service remove`.
 
 ## macOS notes
 
@@ -348,7 +377,7 @@ and restarts the bot if it exits.
 To pull the latest version of Elbot from GitHub:
 
 ```bash
-./infra/scripts/run.sh update
+elbotctl update
 ```
 
 To upgrade the YouTube stack:
@@ -367,7 +396,7 @@ elbot-portal
 
 Open your browser to <http://localhost:8000> by default. The listening port can
 be changed with the `PORT` environment variable. The portal lets you view logs,
-switch Git branches and run `infra/scripts/run.sh update`. It also provides a button
+switch Git branches and run `elbotctl update`. It also provides a button
 to restart the bot service.
 
 ### PORT
