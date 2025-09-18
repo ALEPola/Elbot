@@ -361,7 +361,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     install = sub.add_parser("install", help="Bootstrap the project (venv, deps, .env, optional service)")
-    install.add_argument("--non-interactive", action="store_true", help="Fail instead of prompting for missing secrets")
+    install.add_argument("--non-interactive", "--yes", action="store_true", dest="non_interactive", help="Fail instead of prompting for missing secrets (same as --yes)")
     install.add_argument("--env-file", type=Path, help="Import key=value pairs from a file before prompting")
     install.add_argument("--no-service", action="store_true", help="Skip installing the background service")
     install.add_argument("--require-lavalink", action="store_true", help="Require Lavalink service during install")
