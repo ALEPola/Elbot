@@ -29,6 +29,25 @@ cd Elbot
 
 `run.sh` performs the first-time setup: it creates a virtual environment, installs dependencies and prompts for your Discord token. Rerun the script to start the bot after editing `.env`.
 
+### Unattended bootstrap (Ubuntu/Debian)
+
+On Debian/Ubuntu you can let the provisioning script install all prerequisites,
+configure `.env`, free the default ports and execute the guided installer in
+non-interactive mode. Provide the required secrets via environment variables:
+
+```bash
+git clone https://github.com/<your-org>/Elbot.git
+cd Elbot
+ELBOT_DISCORD_TOKEN="your-token" \
+ELBOT_OPENAI_KEY="sk-..." \
+./scripts/provision.sh
+```
+
+Optional exports include `ELBOT_GUILD_ID`, `ELBOT_PORTAL_PORT`,
+`ELBOT_LAVALINK_PORT` and `ELBOT_PORTS` if you need to change defaults. The
+script requires `apt` and root (or sudo) privileges. Other platforms should use
+`./scripts/install.sh`.
+
 ### Guided install script
 
 Use the helper script to install system packages (Java, ffmpeg), create the virtual environment and write a `.env` file:
