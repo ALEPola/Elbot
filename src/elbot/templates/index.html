@@ -1,14 +1,47 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}Elbot Portal{% endblock %}
 {% block content %}
-<ul>
+<h2>Operations</h2>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flash">
+    {% for category, message in messages %}
+      <li class="{{ category }}">{{ message|safe }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+<div class="grid">
+  <form method="post" action="{{ url_for('update') }}" class="card">
+    <h3>Update Bot</h3>
+    <p>Runs <code>elbotctl update</code> to pull the latest code and dependencies.</p>
+    <button type="submit">Run Update</button>
+  </form>
+  <form method="post" action="{{ url_for('service_action', action='restart') }}" class="card">
+    <h3>Restart Service</h3>
+    <p>Requires the systemd service to be installed. You may need sudo.</p>
+    <button type="submit">Restart</button>
+  </form>
+  <form method="post" action="{{ url_for('service_action', action='status') }}" class="card">
+    <h3>Service Status</h3>
+    <button type="submit">Check Status</button>
+  </form>
+  <form method="post" action="{{ url_for('service_action', action='start') }}" class="card">
+    <h3>Start Service</h3>
+    <button type="submit">Start</button>
+  </form>
+  <form method="post" action="{{ url_for('service_action', action='stop') }}" class="card">
+    <h3>Stop Service</h3>
+    <button type="submit">Stop</button>
+  </form>
+</div>
+
+<h2>Tools</h2>
+<ul class="links">
+  <li><a href="{{ url_for('settings') }}">Environment Settings</a></li>
   <li><a href="{{ url_for('view_logs') }}">View Logs</a></li>
-  <li><a href="{{ url_for('branch') }}">Switch Branch</a></li>
+  <li><a href="{{ url_for('branch') }}">Switch Git Branch</a></li>
+  <li><a href="{{ url_for('update_status') }}">Check update status</a></li>
 </ul>
-<form method="post" action="{{ url_for('update') }}">
-  <button type="submit">Run update</button>
-</form>
-<form method="post" action="{{ url_for('restart') }}">
-  <button type="submit">Restart Service</button>
-</form>
+<p class="note">Need to run commands manually? Use <code>elbotctl ...</code>, or if the shell cannot find it, <code>.venv/bin/elbotctl ...</code> / <code>python -m elbot.cli ...</code>.</p>
 {% endblock %}

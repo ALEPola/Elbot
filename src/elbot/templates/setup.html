@@ -1,0 +1,39 @@
+﻿{% extends "base.html" %}
+{% block title %}Elbot Setup{% endblock %}
+{% block content %}
+<h2>Initial Configuration</h2>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flash">
+    {% for category, message in messages %}
+      <li class="{{ category }}">{{ message }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+<form method="post" class="card">
+  <label>Discord Bot Token
+    <input type="text" name="discord_token" value="{{ values.get('DISCORD_TOKEN', '') }}" required>
+  </label>
+  <label>OpenAI API Key (optional)
+    <input type="text" name="openai_api_key" value="{{ values.get('OPENAI_API_KEY', '') }}">
+  </label>
+  <label class="checkbox">
+    <input type="checkbox" name="auto_lavalink" {% if values.get('AUTO_LAVALINK', '1') != '0' %}checked{% endif %}>
+    Start bundled Lavalink automatically
+  </label>
+  <div class="grid">
+    <label>Lavalink Host
+      <input type="text" name="lavalink_host" value="{{ values.get('LAVALINK_HOST', 'localhost') }}">
+    </label>
+    <label>Lavalink Port
+      <input type="text" name="lavalink_port" value="{{ values.get('LAVALINK_PORT', '2333') }}">
+    </label>
+    <label>Lavalink Password
+      <input type="text" name="lavalink_password" value="{{ values.get('LAVALINK_PASSWORD', 'youshallnotpass') }}">
+    </label>
+  </div>
+  <button type="submit">Save & Install</button>
+</form>
+<p class="note">After installation you can manage the service from this portal or run <code>elbotctl service install</code> from the shell.</p>
+{% endblock %}

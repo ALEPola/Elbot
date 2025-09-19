@@ -1,0 +1,37 @@
+﻿{% extends "base.html" %}
+{% block title %}Elbot Settings{% endblock %}
+{% block content %}
+<h2>Environment Settings</h2>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flash">
+    {% for category, message in messages %}
+      <li class="{{ category }}">{{ message }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+<form method="post" class="card">
+  <label>Discord Bot Token
+    <input type="text" name="DISCORD_TOKEN" value="{{ values.get('DISCORD_TOKEN', '') }}" required>
+  </label>
+  <label>OpenAI API Key
+    <input type="text" name="OPENAI_API_KEY" value="{{ values.get('OPENAI_API_KEY', '') }}">
+  </label>
+  <label>Auto Lavalink (1 = enabled, 0 = disabled)
+    <input type="text" name="AUTO_LAVALINK" value="{{ values.get('AUTO_LAVALINK', '1') }}">
+  </label>
+  <div class="grid">
+    <label>Lavalink Host
+      <input type="text" name="LAVALINK_HOST" value="{{ values.get('LAVALINK_HOST', 'localhost') }}">
+    </label>
+    <label>Lavalink Port
+      <input type="text" name="LAVALINK_PORT" value="{{ values.get('LAVALINK_PORT', '2333') }}">
+    </label>
+    <label>Lavalink Password
+      <input type="text" name="LAVALINK_PASSWORD" value="{{ values.get('LAVALINK_PASSWORD', 'youshallnotpass') }}">
+    </label>
+  </div>
+  <button type="submit">Save Changes</button>
+</form>
+{% endblock %}

@@ -53,6 +53,8 @@ elbotctl service start
 elbotctl service status
 ```
 
+_Tip:_ if your shell cannot find `elbotctl`, run `.venv/bin/elbotctl …` or `python -m elbot.cli …`.
+
 Replace `<your-org>` with the account or organisation that hosts your copy of Elbot (for example your GitHub username).
 
 ### Fully automated provisioning (Ubuntu/Debian)
