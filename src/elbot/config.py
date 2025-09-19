@@ -40,6 +40,7 @@ class Config:
         F1_CHANNEL_ID = 0
 
     PREFIX = os.getenv("COMMAND_PREFIX", "!")
+    BOT_USERNAME = os.getenv("ELBOT_USERNAME", "Elbot")
 
     LAVALINK_HOST = os.getenv("LAVALINK_HOST", "localhost")
     LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
