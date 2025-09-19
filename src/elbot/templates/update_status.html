@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Update Status - Elbot Portal{% endblock %}
+{% block content %}
+<section class="update-status">
+  <h2>Git Update Status</h2>
+  <pre>{{ status }}</pre>
+  <p><a href="{{ url_for('index') }}">Return to dashboard</a></p>
+</section>
+{% endblock %}

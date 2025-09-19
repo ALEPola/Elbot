@@ -1,11 +1,59 @@
 {% extends "base.html" %}
 {% block title %}Switch Branch - Elbot Portal{% endblock %}
 {% block content %}
-<h2>Switch Branch</h2>
-<form method="post">
-  <select name="branch">
-    {{ options|safe }}
-  </select>
-  <button type="submit">Checkout</button>
-</form>
+<section class="branch-overview">
+  <h2>Git Branches</h2>
+  <p><strong>Current branch:</strong> {{ current }}</p>
+</section>
+
+{% if branches %}
+  <section class="branch-select">
+    <h3>Switch Branch</h3>
+    <form method="post" class="branch-form">
+      <label for="branch">Choose branch</label>
+      <select id="branch" name="branch" required>
+        {% for branch in branches %}
+          <option value="{{ branch.name }}" {% if branch.name == current %}selected{% endif %}>
+            {{ branch.name }} · {{ branch.commit }} · {{ branch.date }}
+          </option>
+        {% endfor %}
+      </select>
+      <label class="checkbox">
+        <input type="checkbox" name="confirm_switch">
+        Confirm switch if working tree has uncommitted changes
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="pull_latest">
+        Pull latest changes after switching (fast-forward only)
+      </label>
+      <button type="submit">Checkout</button>
+    </form>
+  </section>
+{% else %}
+  <p class="empty-state">Git is not available in this environment, so branch information cannot be displayed.</p>
+{% endif %}
+
+{% if remotes %}
+  <section class="remote-branches">
+    <h3>Remote Branches</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Branch</th>
+          <th>Commit</th>
+          <th>Last Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for remote in remotes %}
+          <tr>
+            <td>{{ remote.name }}</td>
+            <td>{{ remote.commit }}</td>
+            <td>{{ remote.date }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
 {% endblock %}

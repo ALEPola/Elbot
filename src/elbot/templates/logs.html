@@ -1,6 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Logs - Elbot Portal{% endblock %}
+
+{% block extra_head %}
+  {% if auto_refresh %}
+    <meta http-equiv="refresh" content="{{ auto_refresh }}">
+  {% endif %}
+{% endblock %}
+
 {% block content %}
-<h2>Logs</h2>
-<pre>{{ logs }}</pre>
+<section class="log-controls">
+  <h2>Logs</h2>
+  <form method="get" class="log-filter">
+    <label for="query">Filter</label>
+    <input id="query" name="query" placeholder="Search for text or level" value="{{ query }}">
+    <label for="refresh">Auto refresh (seconds)</label>
+    <input id="refresh" name="refresh" type="number" min="5" step="5" value="{{ auto_refresh if auto_refresh else '' }}">
+    <button type="submit">Apply</button>
+    <a class="button secondary" href="{{ url_for('view_logs') }}">Clear</a>
+    {% if download_available %}
+      <a class="button" href="{{ url_for('download_logs') }}">Download full log</a>
+    {% endif %}
+  </form>
+</section>
+<pre class="log-output">{{ logs }}</pre>
 {% endblock %}

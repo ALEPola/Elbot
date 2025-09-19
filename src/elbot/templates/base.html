@@ -5,10 +5,30 @@
     <title>{% block title %}Elbot Portal{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block extra_head %}{% endblock %}
   </head>
   <body>
     <div class="container">
-      <h1><a href="{{ url_for('index') }}">Elbot Portal</a></h1>
+      <header class="portal-header">
+        <h1><a href="{{ url_for('index') }}">Elbot Portal</a></h1>
+        <nav>
+          <ul>
+            <li><a href="{{ url_for('index') }}">Home</a></li>
+            <li><a href="{{ url_for('view_logs') }}">Logs</a></li>
+            <li><a href="{{ url_for('branch') }}">Branches</a></li>
+            <li><a href="{{ url_for('update_status') }}">Update Status</a></li>
+          </ul>
+        </nav>
+      </header>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="flash {{ category }}">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
       {% block content %}{% endblock %}
     </div>
   </body>

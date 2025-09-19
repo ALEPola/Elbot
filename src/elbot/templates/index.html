@@ -1,14 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Elbot Portal{% endblock %}
 {% block content %}
-<ul>
-  <li><a href="{{ url_for('view_logs') }}">View Logs</a></li>
-  <li><a href="{{ url_for('branch') }}">Switch Branch</a></li>
-</ul>
-<form method="post" action="{{ url_for('update') }}">
-  <button type="submit">Run update</button>
-</form>
-<form method="post" action="{{ url_for('restart') }}">
-  <button type="submit">Restart Service</button>
-</form>
+<section class="status-grid">
+  <article>
+    <h2>Git Status</h2>
+    <p><strong>Current branch:</strong> {{ git_info.branch }}</p>
+    <pre>{{ git_info.status }}</pre>
+    <p><a href="{{ url_for('update_status') }}">Check remote update status →</a></p>
+  </article>
+  <article>
+    <h2>Service Status</h2>
+    <p>{{ service_info }}</p>
+  </article>
+</section>
+
+<section class="actions">
+  <h2>Quick Actions</h2>
+  <div class="button-row">
+    <form method="post" action="{{ url_for('update') }}">
+      <button type="submit">Run update</button>
+    </form>
+    <form method="post" action="{{ url_for('restart') }}">
+      <button type="submit">Restart Service</button>
+    </form>
+  </div>
+</section>
+
+<section class="resources">
+  <h2>Tools &amp; Logs</h2>
+  <ul>
+    <li><a href="{{ url_for('view_logs') }}">View and filter logs</a></li>
+    <li><a href="{{ url_for('branch') }}">Manage Git branches</a></li>
+  </ul>
+</section>
 {% endblock %}
