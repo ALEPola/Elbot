@@ -55,6 +55,7 @@ The installer creates a `.env` file with your settings. Key variables:
 | `DISCORD_TOKEN` | ✅ | Your Discord bot token |
 | `OPENAI_API_KEY` | ⭐ | Enables AI chat and image generation |
 | `AUTO_LAVALINK` | | Auto-start music server (default: `1`) |
+| `AUTO_UPDATE_WEBHOOK` | | Discord webhook notified when scheduled updates fail |
 | `ICS_URL` | | F1 calendar feed URL |
 | `LOCAL_TIMEZONE` | | Your timezone (e.g., `America/New_York`) |
 
@@ -131,8 +132,11 @@ elbotctl update  # Manual update
 
 Or enable automatic daily updates:
 1. Open the portal: `elbot-portal`
-2. Navigate to the home page
-3. Click "Enable Timer" under Auto Update Scheduler
+2. Navigate to the home page.
+3. In the *Auto Update Scheduler* card choose **Enable Timer** (systemd) or **Install Cron Job** (cron-capable hosts).
+4. Optional: set `AUTO_UPDATE_WEBHOOK` in `.env` so failed runs send a Discord alert.
+
+The scheduled job runs `python -m elbot.core.auto_update_job`, writes to `logs/auto-update.log`, and restarts the bot after successful updates. You can still rely on the legacy background thread by launching the portal with `AUTO_UPDATE=1 elbot-portal`.
 
 ## 🏗️ Project Structure
 
