@@ -127,6 +127,7 @@ def _prompt_env(non_interactive: bool, overrides: dict[str, str] | None = None) 
         "OPENAI_API_KEY": "OpenAI API key (optional)",
         "LAVALINK_PASSWORD": "Lavalink password (leave blank to keep default)",
         "LAVALINK_HOST": "Lavalink host (optional)",
+        "ELBOT_USERNAME": "Bot username (press Enter to keep default)",
     }
 
     for key, prompt in required.items():
@@ -142,7 +143,8 @@ def _prompt_env(non_interactive: bool, overrides: dict[str, str] | None = None) 
     if not non_interactive:
         for key, prompt in optional.items():
             current = env_pairs.get(key, "")
-            msg = f"{prompt} [{current or 'skip'}]: "
+            display = current or ("Elbot" if key == "ELBOT_USERNAME" else "skip")
+            msg = f"{prompt} [{display}]: "
             value = getpass(msg) if "key" in key.lower() else input(msg)
             value = value.strip()
             if value:
