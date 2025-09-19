@@ -18,6 +18,9 @@
   <label>OpenAI API Key (optional)
     <input type="text" name="openai_api_key" value="{{ values.get('OPENAI_API_KEY', '') }}">
   </label>
+  <label>Auto-update failure webhook (optional)
+    <input type="text" name="auto_update_webhook" value="{{ values.get('AUTO_UPDATE_WEBHOOK', '') }}">
+  </label>
   <label class="checkbox">
     <input type="checkbox" name="auto_lavalink" {% if values.get('AUTO_LAVALINK', '1') != '0' %}checked{% endif %}>
     Start bundled Lavalink automatically

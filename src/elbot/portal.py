@@ -21,15 +21,18 @@ from flask import (
 )
 
 
+from .core import auto_update
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT_DIR / '.env'
 LOG_FILE = ROOT_DIR / 'logs' / 'elbot.log'
 UPDATE_LOG_FILE = ROOT_DIR / 'logs' / 'update.log'
+AUTO_UPDATE_LOG_FILE = ROOT_DIR / 'logs' / 'auto-update.log'
 SERVICE_NAME = os.environ.get('ELBOT_SERVICE', 'elbot.service')
 AUTO_UPDATE = os.environ.get('AUTO_UPDATE', '0') == '1'
 
 REQUIRED_KEYS = ['DISCORD_TOKEN']
-OPTIONAL_KEYS = ['OPENAI_API_KEY', 'LAVALINK_HOST', 'LAVALINK_PORT', 'LAVALINK_PASSWORD', 'AUTO_LAVALINK']
+OPTIONAL_KEYS = ['OPENAI_API_KEY', 'LAVALINK_HOST', 'LAVALINK_PORT', 'LAVALINK_PASSWORD', 'AUTO_LAVALINK', 'AUTO_UPDATE_WEBHOOK']
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('ELBOT_PORTAL_SECRET', 'change-me')
@@ -70,7 +73,7 @@ def _run_elbotctl(args: Iterable[str]) -> subprocess.CompletedProcess | None:
     try:
         return subprocess.run(cmd, cwd=ROOT_DIR, text=True, capture_output=True, env=env, check=True)
     except subprocess.CalledProcessError as exc:
-        flash(exc.stdout or exc.stderr or str(exc), 'error')
+        flash(exc.stderr or exc.stdout or str(exc), 'error')
         return exc
     except FileNotFoundError:
         flash('Python interpreter not found while invoking elbotctl.', 'error')
@@ -89,7 +92,12 @@ def _read_tail(path: Path, max_lines: int = 200) -> str:
 
 @app.context_processor
 def inject_flags():
-    return {'configured': _is_configured()}
+    return {
+        'configured': _is_configured(),
+        'auto_update_status': auto_update.current_status(),
+        'legacy_auto_update': AUTO_UPDATE,
+        'auto_update': AUTO_UPDATE,
+    }
 
 
 @app.route('/')
@@ -105,6 +113,7 @@ def setup():
     if request.method == 'POST':
         discord_token = request.form.get('discord_token', '').strip()
         openai_key = request.form.get('openai_api_key', '').strip()
+        auto_update_webhook = request.form.get('auto_update_webhook', '').strip()
         auto_lavalink = '1' if request.form.get('auto_lavalink') == 'on' else '0'
         lavalink_host = request.form.get('lavalink_host', '').strip() or 'localhost'
         lavalink_port = request.form.get('lavalink_port', '').strip() or '2333'
@@ -116,6 +125,7 @@ def setup():
             updates = {
                 'DISCORD_TOKEN': discord_token,
                 'OPENAI_API_KEY': openai_key,
+                'AUTO_UPDATE_WEBHOOK': auto_update_webhook,
                 'AUTO_LAVALINK': auto_lavalink,
             }
             if auto_lavalink == '0':
@@ -200,7 +210,7 @@ def update_status():
     except FileNotFoundError:
         errors.append('Python interpreter not found while invoking elbotctl.')
 
-    update_log = _read_tail(UPDATE_LOG_FILE) or _read_tail(LOG_FILE)
+    update_log = _read_tail(UPDATE_LOG_FILE) or _read_tail(AUTO_UPDATE_LOG_FILE) or _read_tail(LOG_FILE)
     if not update_log:
         errors.append('No update log entries were found.')
 
@@ -220,6 +230,40 @@ def update():
     if result and getattr(result, 'returncode', 0) == 0:
         flash(result.stdout or 'Update completed.', 'success')
     return redirect(url_for('index'))
+
+
+@app.route('/auto-update', methods=['POST'])
+def toggle_auto_update():
+    action = request.form.get('action', '').lower()
+    next_url = request.form.get('next') or url_for('index')
+    try:
+        if action == 'enable':
+            if auto_update.systemd_supported():
+                auto_update.enable_systemd_timer(ROOT_DIR, sys.executable, SERVICE_NAME)
+                flash('Systemd auto-update timer enabled.', 'success')
+            elif auto_update.cron_supported():
+                auto_update.enable_cron(ROOT_DIR, sys.executable, SERVICE_NAME)
+                flash('Cron auto-update job installed.', 'success')
+            else:
+                flash('No scheduler available (systemd or cron).', 'error')
+        elif action == 'disable':
+            if auto_update.systemd_supported():
+                auto_update.disable_systemd_timer()
+                flash('Systemd auto-update timer disabled.', 'success')
+            elif auto_update.cron_supported():
+                auto_update.disable_cron()
+                flash('Cron auto-update job removed.', 'success')
+            else:
+                flash('No scheduler available to disable.', 'error')
+        else:
+            flash('Unsupported auto-update action.', 'error')
+    except subprocess.CalledProcessError as exc:
+        flash(exc.stderr or exc.stdout or str(exc), 'error')
+    except RuntimeError as exc:
+        flash(str(exc), 'error')
+    except PermissionError:
+        flash('Permission denied while configuring auto updates.', 'error')
+    return redirect(next_url)
 
 
 @app.route('/restart', methods=['POST'])

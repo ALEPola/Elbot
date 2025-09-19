@@ -17,6 +17,35 @@
     <p>Runs <code>elbotctl update</code> to pull the latest code and dependencies.</p>
     <button type="submit">Run Update</button>
   </form>
+  <form method="post" action="{{ url_for('toggle_auto_update') }}" class="card">
+    <h3>Auto Update Scheduler</h3>
+    {% if auto_update_status.mode == 'systemd' %}
+      {% set details = auto_update_status.details %}
+      {% if details and details.enabled %}
+        <p>Systemd timer is enabled{% if details.next_run %}; next run {{ details.next_run }}{% endif %}.</p>
+        <button type="submit" name="action" value="disable">Disable Timer</button>
+      {% else %}
+        <p>Systemd detected. Enable to run daily updates at 03:00.</p>
+        <button type="submit" name="action" value="enable">Enable Timer</button>
+      {% endif %}
+      {% if details and details.last_trigger %}
+        <p class="note">Last run: {{ details.last_trigger }}</p>
+      {% endif %}
+    {% elif auto_update_status.mode == 'cron' %}
+      {% if auto_update_status.cron_enabled %}
+        <p>Cron job installed (runs daily at 03:00).</p>
+        <button type="submit" name="action" value="disable">Remove Cron Job</button>
+      {% else %}
+        <p>Cron detected. Enable to install a daily 03:00 update job.</p>
+        <button type="submit" name="action" value="enable">Install Cron Job</button>
+      {% endif %}
+    {% else %}
+      <p>No scheduler available. Configure manually or set <code>AUTO_UPDATE=1</code> before starting the portal.</p>
+    {% endif %}
+    {% if legacy_auto_update %}
+      <p class="note">Legacy in-app auto-update thread is active.</p>
+    {% endif %}
+  </form>
   <form method="post" action="{{ url_for('service_action', action='restart') }}" class="card">
     <h3>Restart Service</h3>
     <p>Requires the systemd service to be installed. You may need sudo.</p>

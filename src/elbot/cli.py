@@ -9,9 +9,10 @@ import platform
 import shutil
 import subprocess
 import sys
-from getpass import getpass
 from pathlib import Path
 from typing import Iterable, Optional
+
+from .core import docker_tasks, env_tools, prerequisites, runtime, service_manager
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 INFRA_DIR = PROJECT_ROOT / "infra"
@@ -22,6 +23,19 @@ ENV_EXAMPLE = PROJECT_ROOT / ".env.example"
 VENV_DIR = PROJECT_ROOT / ".venv"
 
 IS_WINDOWS = os.name == "nt"
+
+
+REQUIRED_ENV_VARS: dict[str, str] = {
+    "DISCORD_TOKEN": "Discord bot token",
+}
+
+OPTIONAL_ENV_VARS: dict[str, str] = {
+    "OPENAI_API_KEY": "OpenAI API key (optional)",
+    "LAVALINK_PASSWORD": "Lavalink password (leave blank to keep default)",
+    "LAVALINK_HOST": "Lavalink host (optional)",
+    "ELBOT_USERNAME": "Bot username (press Enter to keep default)",
+    "AUTO_UPDATE_WEBHOOK": "Webhook URL for auto-update failure alerts (optional)",
+}
 
 
 class CommandError(RuntimeError):
@@ -41,160 +55,70 @@ def _run(cmd: list[str], *, cwd: Optional[Path] = None, check: bool = True, env:
 def _ensure_command(name: str) -> bool:
     return shutil.which(name) is not None
 
-
-def _venv_python() -> Path:
-    if IS_WINDOWS:
-        return VENV_DIR / "Scripts" / "python.exe"
-    return VENV_DIR / "bin" / "python"
-
-
-def _venv_pip() -> Path:
-    if IS_WINDOWS:
-        return VENV_DIR / "Scripts" / "pip.exe"
-    return VENV_DIR / "bin" / "pip"
+def _run_in_venv(args: Iterable[str]) -> subprocess.CompletedProcess:
+    return runtime.run_in_venv(
+        args,
+        venv_dir=VENV_DIR,
+        is_windows=IS_WINDOWS,
+        run=_run,
+        error_cls=CommandError,
+    )
 
 
-def _create_venv(force: bool = False) -> None:
-    if VENV_DIR.exists() and not force:
-        return
-    if VENV_DIR.exists() and force:
-        shutil.rmtree(VENV_DIR)
-    _echo("Creating virtual environment (.venv)...")
-    _run([sys.executable, "-m", "venv", str(VENV_DIR)])
+def _pip_install(args: Iterable[str]) -> None:
+    runtime.pip_install(
+        args,
+        venv_dir=VENV_DIR,
+        is_windows=IS_WINDOWS,
+        run=_run,
+        error_cls=CommandError,
+    )
 
 
-def _run_in_venv(args: list[str]) -> subprocess.CompletedProcess:
-    python = _venv_python()
-    if not python.exists():
-        raise CommandError("virtual environment not found; run 'elbotctl install' first")
-    return _run([str(python), *args])
-
-
-def _pip_install(args: list[str]) -> None:
-    pip = _venv_pip()
-    if not pip.exists():
-        raise CommandError("pip not available in the virtual environment")
-    _run([str(pip), *args])
-
-
-def _read_env(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.exists():
-        return values
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line or line.strip().startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        values[key.strip()] = value.strip()
-    return values
-
-
-def _write_env(path: Path, data: dict[str, str]) -> None:
-    lines: list[str] = []
-    existing = _read_env(path)
-    existing.update(data)
-    for key in sorted(existing.keys()):
-        lines.append(f"{key}={existing[key]}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _update_env_var(key: str, value: str) -> None:
-    pairs = _read_env(ENV_FILE)
-    pairs[key] = value
-    _write_env(ENV_FILE, pairs)
-
-
-def _ensure_env_file() -> None:
-    if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
-        shutil.copy2(ENV_EXAMPLE, ENV_FILE)
-
-
-def _prompt_env(non_interactive: bool, overrides: dict[str, str] | None = None) -> None:
-    _ensure_env_file()
-    env_pairs = _read_env(ENV_FILE)
-
-    if overrides:
-        for key, value in overrides.items():
-            if value is not None:
-                env_pairs[key] = value
-        _write_env(ENV_FILE, env_pairs)
-        env_pairs = _read_env(ENV_FILE)
-
-    required = {"DISCORD_TOKEN": "Discord bot token"}
-    optional = {
-        "OPENAI_API_KEY": "OpenAI API key (optional)",
-        "LAVALINK_PASSWORD": "Lavalink password (leave blank to keep default)",
-        "LAVALINK_HOST": "Lavalink host (optional)",
-        "ELBOT_USERNAME": "Bot username (press Enter to keep default)",
-    }
-
-    for key, prompt in required.items():
-        if env_pairs.get(key):
-            continue
-        if non_interactive:
-            raise CommandError(f"Missing required environment variable: {key}")
-        value = getpass(f"{prompt}: ").strip()
-        if not value:
-            raise CommandError(f"{key} may not be empty")
-        _update_env_var(key, value)
-
-    if not non_interactive:
-        for key, prompt in optional.items():
-            current = env_pairs.get(key, "")
-            display = current or ("Elbot" if key == "ELBOT_USERNAME" else "skip")
-            msg = f"{prompt} [{display}]: "
-            value = getpass(msg) if "key" in key.lower() else input(msg)
-            value = value.strip()
-            if value:
-                _update_env_var(key, value)
-
-
-def _install_prerequisites(install_packages: bool, non_interactive: bool) -> None:
-    missing = []
-    for cmd in ("ffmpeg", "java", "git"):
-        if not _ensure_command(cmd):
-            missing.append(cmd)
-    if not missing:
-        return
-
-    _echo("Missing prerequisites detected: " + ", ".join(missing))
-    if install_packages and platform.system().lower() in {"linux", "darwin"}:
-        if shutil.which("apt-get"):
-            cmd = ["sudo", "apt-get", "install", "-y"] + missing
-            if not non_interactive:
-                consent = input(f"Install via {' '.join(cmd)}? [Y/n] ").strip().lower() or "y"
-                if consent != "y":
-                    install_packages = False
-            if install_packages:
-                _run(cmd)
-                return
-    _echo("Please install the missing tools manually and re-run the installer.")
 
 
 def command_install(args: argparse.Namespace) -> None:
     overrides: dict[str, str] = {}
     if args.env_file:
-        overrides.update(_read_env(args.env_file))
+        overrides.update(env_tools.read_env(args.env_file))
 
-    _install_prerequisites(args.install_system_packages, args.non_interactive)
-    _create_venv(force=args.recreate)
+        prerequisites.ensure_prerequisites(
+        install_packages=args.install_system_packages,
+        non_interactive=args.non_interactive,
+        platform_name=platform.system(),
+        ensure_command=_ensure_command,
+        which=shutil.which,
+        run=_run,
+        echo=_echo,
+    )
+    runtime.create_venv(
+        VENV_DIR,
+        force=args.recreate,
+        run=_run,
+        echo=_echo,
+    )
     _pip_install(["install", "-U", "pip", "wheel"])
     if (PROJECT_ROOT / "requirements.txt").exists():
         _pip_install(["install", "-r", "requirements.txt"])
     _pip_install(["install", "-e", str(PROJECT_ROOT)])
     _pip_install(["install", "textblob"])  # ensure corpora command available
     _run_in_venv(["-m", "textblob.download_corpora"])
-    _ensure_env_file()
-    _prompt_env(args.non_interactive, overrides)
+    env_tools.prompt_env(
+        ENV_FILE,
+        ENV_EXAMPLE,
+        non_interactive=args.non_interactive,
+        overrides=overrides,
+        required=REQUIRED_ENV_VARS,
+        optional=OPTIONAL_ENV_VARS,
+        error_cls=CommandError,
+    )
 
     if not args.no_service:
-        install_service_args = ["-m", "elbot.service_install"]
-        if args.require_lavalink:
-            install_service_args.append("--require-lavalink")
         try:
-            _run_in_venv(install_service_args)
+            service_manager.install_service(
+                _run_in_venv,
+                require_lavalink=args.require_lavalink,
+            )
         except subprocess.CalledProcessError as exc:
             _echo("Service installation failed (likely missing permissions).")
             if IS_WINDOWS:
@@ -206,13 +130,13 @@ def command_install(args: argparse.Namespace) -> None:
 
 
 def command_env_set(args: argparse.Namespace) -> None:
-    _ensure_env_file()
-    _update_env_var(args.key, args.value)
+    env_tools.ensure_env_file(ENV_FILE, ENV_EXAMPLE)
+    env_tools.update_env_var(ENV_FILE, args.key, args.value)
     _echo(f"Set {args.key}")
 
 
 def command_env_get(args: argparse.Namespace) -> None:
-    env = _read_env(ENV_FILE)
+    env = env_tools.read_env(ENV_FILE)
     if args.key in env:
         _echo(env[args.key])
     else:
@@ -220,62 +144,72 @@ def command_env_get(args: argparse.Namespace) -> None:
 
 
 def command_env_list(_: argparse.Namespace) -> None:
-    env = _read_env(ENV_FILE)
+    env = env_tools.read_env(ENV_FILE)
     for key in sorted(env):
         _echo(f"{key}={env[key]}")
 
 
 def command_env_import(args: argparse.Namespace) -> None:
-    values = _read_env(args.file)
+    values = env_tools.read_env(args.file)
     if not values:
         raise CommandError("No key=value pairs found in provided file")
-    _ensure_env_file()
+    env_tools.ensure_env_file(ENV_FILE, ENV_EXAMPLE)
     for key, value in values.items():
-        _update_env_var(key, value)
+        env_tools.update_env_var(ENV_FILE, key, value)
     _echo(f"Imported {len(values)} values into {ENV_FILE}")
 
 
-def _service_command(action: str) -> None:
-    if IS_WINDOWS:
-        mapping = {"start": "start", "stop": "stop", "restart": "restart", "status": "query"}
-        cmd = ["sc", mapping[action], "Elbot"]
-        _run(cmd)
-        return
-    if not _ensure_command("systemctl"):
-        raise CommandError("systemctl not available; manage the process manually.")
-    if action == "status":
-        _run(["systemctl", "status", "elbot.service"])
-    else:
-        _run(["systemctl", action, "elbot.service"])
-
 
 def command_service_install(args: argparse.Namespace) -> None:
-    install_args = ["-m", "elbot.service_install"]
-    if args.require_lavalink:
-        install_args.append("--require-lavalink")
-    if args.force:
-        install_args.append("--force")
-    _run_in_venv(install_args)
+    service_manager.install_service(
+        _run_in_venv,
+        require_lavalink=args.require_lavalink,
+        force=args.force,
+    )
 
 
 def command_service_remove(_: argparse.Namespace) -> None:
-    _run_in_venv(["-m", "elbot.service_install", "--remove"])
+    service_manager.remove_service(_run_in_venv)
 
 
 def command_service_start(_: argparse.Namespace) -> None:
-    _service_command("start")
+    service_manager.control_service(
+        "start",
+        is_windows=IS_WINDOWS,
+        run=_run,
+        ensure_command=_ensure_command,
+        error_cls=CommandError,
+    )
 
 
 def command_service_stop(_: argparse.Namespace) -> None:
-    _service_command("stop")
+    service_manager.control_service(
+        "stop",
+        is_windows=IS_WINDOWS,
+        run=_run,
+        ensure_command=_ensure_command,
+        error_cls=CommandError,
+    )
 
 
 def command_service_restart(_: argparse.Namespace) -> None:
-    _service_command("restart")
+    service_manager.control_service(
+        "restart",
+        is_windows=IS_WINDOWS,
+        run=_run,
+        ensure_command=_ensure_command,
+        error_cls=CommandError,
+    )
 
 
 def command_service_status(_: argparse.Namespace) -> None:
-    _service_command("status")
+    service_manager.control_service(
+        "status",
+        is_windows=IS_WINDOWS,
+        run=_run,
+        ensure_command=_ensure_command,
+        error_cls=CommandError,
+    )
 
 
 def command_update(args: argparse.Namespace) -> None:
@@ -288,7 +222,13 @@ def command_update(args: argparse.Namespace) -> None:
         _pip_install(["install", "-e", str(PROJECT_ROOT)])
     if not args.skip_service:
         try:
-            command_service_restart(args)
+            service_manager.control_service(
+                "restart",
+                is_windows=IS_WINDOWS,
+                run=_run,
+                ensure_command=_ensure_command,
+                error_cls=CommandError,
+            )
         except CommandError:
             _echo("Service restart skipped (service not installed or unsupported).")
 
@@ -315,7 +255,7 @@ def command_doctor(_: argparse.Namespace) -> None:
     _echo("=== Elbot Health Check ===")
     _echo("")
     _echo("Checking env...")
-    env_data = _read_env(ENV_FILE)
+    env_data = env_tools.read_env(ENV_FILE)
     if env_data.get("DISCORD_TOKEN"):
         _echo("✅ Discord token detected")
     else:
@@ -351,25 +291,14 @@ def command_logs(args: argparse.Namespace) -> None:
 
 
 def command_docker(args: argparse.Namespace) -> None:
-    compose_file = DOCKER_DIR / "docker-compose.yml"
-    if not compose_file.exists():
-        raise CommandError("docker-compose.yml not found under infra/docker")
-    base_cmd = ["docker", "compose", "-f", str(compose_file)]
-    if args.action == "up":
-        cmd = base_cmd + ["up", "-d", "--build"]
-        if getattr(args, "remove_orphans", False):
-            cmd.append("--remove-orphans")
-    elif args.action == "down":
-        cmd = base_cmd + ["down"]
-    elif args.action == "pull":
-        cmd = base_cmd + ["pull"]
-    elif args.action == "logs":
-        cmd = base_cmd + ["logs"]
-        if getattr(args, "follow", False):
-            cmd.append("-f")
-    else:
-        raise CommandError(f"Unknown docker action: {args.action}")
-    _run(cmd)
+    docker_tasks.run_compose_action(
+        args.action,
+        docker_dir=DOCKER_DIR,
+        run=_run,
+        remove_orphans=getattr(args, "remove_orphans", False),
+        follow=getattr(args, "follow", False),
+        error_cls=CommandError,
+    )
 
 
 def command_uninstall(args: argparse.Namespace) -> None:

@@ -1,5 +1,6 @@
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 import subprocess
 
 
@@ -9,7 +10,15 @@ from elbot import portal
 def make_client(monkeypatch, *, check_output=None, run=None):
     importlib.reload(portal)
     monkeypatch.setattr(portal, "LOG_FILE", Path(__file__))
+    monkeypatch.setattr(portal, "UPDATE_LOG_FILE", Path(__file__))
+    monkeypatch.setattr(portal, "AUTO_UPDATE_LOG_FILE", Path(__file__))
     monkeypatch.setattr(portal, "AUTO_UPDATE", False)
+
+    status = SimpleNamespace(mode='disabled', details=None, cron_enabled=False)
+    monkeypatch.setattr(portal.auto_update, 'current_status', lambda: status)
+    monkeypatch.setattr(portal.auto_update, 'systemd_supported', lambda: False)
+    monkeypatch.setattr(portal.auto_update, 'cron_supported', lambda: False)
+
     if check_output is None:
         monkeypatch.setattr(
             subprocess,
@@ -102,3 +111,43 @@ def test_restart_missing_systemctl(monkeypatch):
     client = make_client(monkeypatch, run=missing_run)
     resp = client.post("/restart")
     assert resp.status_code == 302
+
+
+def test_auto_update_enable_systemd(monkeypatch):
+    client = make_client(monkeypatch)
+    called = {}
+    status = SimpleNamespace(mode='systemd', details=SimpleNamespace(enabled=False, next_run=None, last_trigger=None, error=None), cron_enabled=False)
+    monkeypatch.setattr(portal.auto_update, 'systemd_supported', lambda: True)
+    monkeypatch.setattr(portal.auto_update, 'enable_systemd_timer', lambda *args: called.setdefault('enable', args))
+    monkeypatch.setattr(portal.auto_update, 'current_status', lambda: status)
+
+    resp = client.post('/auto-update', data={'action': 'enable'})
+    assert resp.status_code == 302
+    assert 'enable' in called
+
+
+def test_auto_update_disable_systemd(monkeypatch):
+    client = make_client(monkeypatch)
+    called = {}
+    status = SimpleNamespace(mode='systemd', details=SimpleNamespace(enabled=True, next_run=None, last_trigger=None, error=None), cron_enabled=False)
+    monkeypatch.setattr(portal.auto_update, 'systemd_supported', lambda: True)
+    monkeypatch.setattr(portal.auto_update, 'disable_systemd_timer', lambda: called.setdefault('disable', True))
+    monkeypatch.setattr(portal.auto_update, 'current_status', lambda: status)
+
+    resp = client.post('/auto-update', data={'action': 'disable'})
+    assert resp.status_code == 302
+    assert called.get('disable') is True
+
+
+def test_auto_update_enable_cron(monkeypatch):
+    client = make_client(monkeypatch)
+    called = {}
+    status = SimpleNamespace(mode='cron', details=None, cron_enabled=False)
+    monkeypatch.setattr(portal.auto_update, 'systemd_supported', lambda: False)
+    monkeypatch.setattr(portal.auto_update, 'cron_supported', lambda: True)
+    monkeypatch.setattr(portal.auto_update, 'enable_cron', lambda *args: called.setdefault('enable', args))
+    monkeypatch.setattr(portal.auto_update, 'current_status', lambda: status)
+
+    resp = client.post('/auto-update', data={'action': 'enable'})
+    assert resp.status_code == 302
+    assert 'enable' in called

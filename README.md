@@ -242,6 +242,7 @@ the built-in defaults.
 | `OPENAI_API_KEY` | ✅ (for chat/image features) | Enables the OpenAI-powered commands such as `/chat` and `/dalle`. |
 | `COMMAND_PREFIX` | ❌ | Prefix for legacy text commands when slash commands are unavailable. |
 | `AUTO_LAVALINK` | ❌ | Start the bundled Lavalink server automatically (`1` by default). |
+| `AUTO_UPDATE_WEBHOOK` | ❌ | Discord webhook URL notified when scheduled updates fail. |
 | `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_PASSWORD` | ❌ | Connection details for an external Lavalink server. |
 | `FFMPEG_PATH` | ❌ | Path to an ffmpeg executable if it is not already on `PATH`. |
 | `YTDLP_COOKIES_FILE` | ❌ | Optional path to a Netscape cookie file passed to yt-dlp for age-restricted videos. |
@@ -439,6 +440,14 @@ systemd unit has a different name.
 When `AUTO_UPDATE` is set to `1` the portal spawns a background thread that
 runs `elbotctl update` once per day and restarts the bot service after each
 update. This allows unattended updates and restarts.
+
+In addition, the portal dashboard now exposes an *Auto Update Scheduler* card.
+On systemd hosts it installs the generated `elbot-update.service`/`.timer` units
+under `infra/systemd`; on other Unix hosts it falls back to a cron entry that runs
+`python -m elbot.core.auto_update_job` at 03:00 every day. The job wraps
+`elbotctl update` and restarts the service, writing to `logs/auto-update.log`.
+Set `AUTO_UPDATE_WEBHOOK` to a Discord webhook URL if you want to be alerted when
+a scheduled run fails.
 
 To enable the feature temporarily:
 

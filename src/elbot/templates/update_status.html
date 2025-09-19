@@ -3,6 +3,14 @@
 {% block content %}
 <h2>Update Status</h2>
 <p class="note">Automatic updates are {% if auto_update %}<strong>enabled</strong>{% else %}<strong>disabled</strong>{% endif %}.</p>
+{% if auto_update_status.mode == 'systemd' %}
+  {% set details = auto_update_status.details %}
+  <p class="note">Systemd timer {% if details and details.enabled %}is enabled{% else %}is available{% endif %}{% if details and details.next_run %}; next run {{ details.next_run }}{% endif %}.</p>
+{% elif auto_update_status.mode == 'cron' %}
+  <p class="note">Cron-based scheduling is {% if auto_update_status.cron_enabled %}enabled{% else %}available but not installed{% endif %}.</p>
+{% else %}
+  <p class="note">No supported scheduler detected on this host.</p>
+{% endif %}
 {% if errors %}
   <ul class="flash">
   {% for error in errors %}
