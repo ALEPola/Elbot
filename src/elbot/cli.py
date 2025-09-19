@@ -311,6 +311,32 @@ def command_check(_: argparse.Namespace) -> None:
     _echo("Configuration looks good.")
 
 
+def command_doctor(_: argparse.Namespace) -> None:
+    _echo("=== Elbot Health Check ===")
+    _echo("")
+    _echo("Checking env...")
+    env_data = _read_env(ENV_FILE)
+    if env_data.get("DISCORD_TOKEN"):
+        _echo("✅ Discord token detected")
+    else:
+        _echo("❌ Discord token missing - check .env file")
+
+    _echo("")
+    _echo("Checking dependencies")
+    for cmd in ["python", "java", "ffmpeg"]:
+        if _ensure_command(cmd):
+            _echo(f"✅ {cmd} found")
+        else:
+            _echo(f"❌ {cmd} missing - check your PATH")
+
+    _echo("")
+    _echo("Checking setup")
+    if (PROJECT_ROOT / "DISCORD_SETUP.md").exists():
+        _echo("✅ Setup docs found")
+    else:
+        _echo("❌ If you see ❌, check DISCORD_SETUP.md for help")
+
+
 def command_logs(args: argparse.Namespace) -> None:
     lines = args.lines or 100
     if IS_WINDOWS:
@@ -414,6 +440,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     runner = sub.add_parser("run", help="Run the bot in the foreground")
     runner.set_defaults(func=command_run)
+
+    doctor = sub.add_parser("doctor", help="Check if everything is working")
+    doctor.set_defaults(func=command_doctor)
 
     checker = sub.add_parser("check", help="Validate configuration and Lavalink connectivity")
     checker.set_defaults(func=command_check)
