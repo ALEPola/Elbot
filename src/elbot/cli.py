@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
-from .core import docker_tasks, env_tools, prerequisites, runtime, service_manager
+from .core import docker_tasks, env_tools, network, prerequisites, runtime, service_manager
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 INFRA_DIR = PROJECT_ROOT / "infra"
@@ -38,6 +38,13 @@ OPTIONAL_ENV_VARS: dict[str, str] = {
 }
 
 
+PORT_CONFLICT_HINTS: dict[int, str] = {
+    2333: "LAVALINK_PORT",
+    8000: "PORT",
+}
+PORT_CONFLICT_PORTS = tuple(PORT_CONFLICT_HINTS.keys())
+
+
 class CommandError(RuntimeError):
     pass
 
@@ -54,6 +61,26 @@ def _run(cmd: list[str], *, cwd: Optional[Path] = None, check: bool = True, env:
 
 def _ensure_command(name: str) -> bool:
     return shutil.which(name) is not None
+
+
+def _warn_port_conflicts() -> None:
+    conflicts = network.detect_port_conflicts(PORT_CONFLICT_PORTS)
+    if not conflicts:
+        return
+
+    ports = ", ".join(str(port) for port in conflicts)
+    _echo(f"Warning: the following ports appear to be in use: {ports}.")
+
+    hints = [PORT_CONFLICT_HINTS[port] for port in conflicts if port in PORT_CONFLICT_HINTS]
+    if hints:
+        if len(hints) == 1:
+            _echo(f"Stop other services or adjust {hints[0]} in .env before continuing.")
+        else:
+            joined = " and ".join(hints)
+            _echo(f"Stop other services or adjust {joined} in .env before continuing.")
+    else:
+        _echo("Stop other services or update your configuration to avoid the conflict.")
+
 
 def _run_in_venv(args: Iterable[str]) -> subprocess.CompletedProcess:
     return runtime.run_in_venv(
@@ -82,7 +109,8 @@ def command_install(args: argparse.Namespace) -> None:
     if args.env_file:
         overrides.update(env_tools.read_env(args.env_file))
 
-        prerequisites.ensure_prerequisites(
+    _warn_port_conflicts()
+    prerequisites.ensure_prerequisites(
         install_packages=args.install_system_packages,
         non_interactive=args.non_interactive,
         platform_name=platform.system(),
