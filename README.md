@@ -414,7 +414,7 @@ systemd unit has a different name.
 ### AUTO_UPDATE
 
 When `AUTO_UPDATE` is set to `1` the portal spawns a background thread that
-runs `./infra/scripts/run.sh update` once per day and restarts the bot service after each
+runs `elbotctl update` once per day and restarts the bot service after each
 update. This allows unattended updates and restarts.
 
 To enable the feature temporarily:

@@ -191,8 +191,16 @@ def command_install(args: argparse.Namespace) -> None:
         install_service_args = ["-m", "elbot.service_install"]
         if args.require_lavalink:
             install_service_args.append("--require-lavalink")
-        _run_in_venv(install_service_args)
-    _echo("Installation complete. Use 'elbotctl start' to run the bot or 'elbotctl run' for foreground mode.")
+        try:
+            _run_in_venv(install_service_args)
+        except subprocess.CalledProcessError as exc:
+            _echo("Service installation failed (likely missing permissions).")
+            if IS_WINDOWS:
+                _echo("Run `elbotctl service install` from an elevated PowerShell prompt to register the service.")
+            else:
+                _echo("Retry with sudo: `sudo elbotctl service install --require-lavalink` or rerun the installer with --no-service.")
+            raise
+    _echo("Installation complete. Use 'elbotctl service start' or 'elbotctl run' to launch the bot.")
 
 
 def command_env_set(args: argparse.Namespace) -> None:
