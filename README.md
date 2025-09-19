@@ -55,6 +55,27 @@ elbotctl service status
 
 Replace `<your-org>` with the account or organisation that hosts your copy of Elbot (for example your GitHub username).
 
+### Fully automated provisioning (Ubuntu/Debian)
+
+If you prefer a single command that installs operating system packages,
+pre-populates `.env`, frees the default ports (8080 for the portal and 2333 for
+Lavalink) and runs the unattended installer, use the bundled provisioning
+script. Supply your secrets via environment variables so the run remains
+non-interactive:
+
+```bash
+git clone https://github.com/<your-org>/Elbot.git
+cd Elbot
+ELBOT_DISCORD_TOKEN="your-token" \
+ELBOT_OPENAI_KEY="sk-..." \
+./scripts/provision.sh
+```
+
+Optional variables include `ELBOT_GUILD_ID`, `ELBOT_PORTAL_PORT`,
+`ELBOT_LAVALINK_PORT` and `ELBOT_PORTS` (space separated list) if you need to
+adjust defaults. The script currently targets Debian/Ubuntu hosts with `apt`
+available; other platforms can continue using `./scripts/install.sh`.
+
 ## Quick start (Windows)
 
 ```powershell
