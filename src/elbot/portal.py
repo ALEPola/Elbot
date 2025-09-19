@@ -49,9 +49,7 @@ def _write_env(path: Path, values: Dict[str, str]) -> None:
     data = _read_env(path)
     data.update(values)
     lines = [f"{k}={v}" for k, v in sorted(data.items())]
-    path.write_text('
-'.join(lines) + '
-', encoding='utf-8')
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
 def _env_values() -> Dict[str, str]:
@@ -169,6 +167,25 @@ def service_action(action: str):
     result = _run_elbotctl(['service', action])
     if result and getattr(result, 'returncode', 0) == 0:
         flash(result.stdout or f'Service {action} executed.', 'success')
+    return redirect(url_for('index'))
+
+
+@app.route('/service/validate-lavalink', methods=['POST'])
+def validate_lavalink():
+    """Validate Lavalink connectivity via ``elbotctl check``."""
+
+    result = _run_elbotctl(['check'])
+    if not result:
+        return redirect(url_for('index'))
+
+    output = (result.stdout or '').strip()
+    if getattr(result, 'returncode', 1) == 0:
+        if output:
+            flash(f'Lavalink validation succeeded:<pre>{output}</pre>', 'success')
+        else:
+            flash('Lavalink validation succeeded.', 'success')
+    else:
+        flash('Lavalink validation failed. See details above.', 'error')
     return redirect(url_for('index'))
 
 
