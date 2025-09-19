@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Update Status{% endblock %}
+{% block content %}
+<h2>Update Status</h2>
+<p class="note">Automatic updates are {% if auto_update %}<strong>enabled</strong>{% else %}<strong>disabled</strong>{% endif %}.</p>
+{% if errors %}
+  <ul class="flash">
+  {% for error in errors %}
+    <li class="error">{{ error }}</li>
+  {% endfor %}
+  </ul>
+{% endif %}
+{% if git_status %}
+  <section class="card">
+    <h3>Git Repository</h3>
+    <pre>{{ git_status }}</pre>
+  </section>
+{% endif %}
+{% if elbotctl_output %}
+  <section class="card">
+    <h3>elbotctl Check</h3>
+    <pre>{{ elbotctl_output }}</pre>
+  </section>
+{% endif %}
+{% if update_log %}
+  <section class="card">
+    <h3>Recent Update Log</h3>
+    <pre>{{ update_log }}</pre>
+  </section>
+{% endif %}
+{% if not git_status and not update_log and not elbotctl_output %}
+  <p>No update information is currently available. Try running an update or check that logging is configured.</p>
+{% endif %}
+{% endblock %}

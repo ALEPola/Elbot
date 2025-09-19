@@ -46,7 +46,7 @@
   <li><a href="{{ url_for('settings') }}">Environment Settings</a></li>
   <li><a href="{{ url_for('view_logs') }}">View Logs</a></li>
   <li><a href="{{ url_for('branch') }}">Switch Git Branch</a></li>
-  <li><a href="{{ url_for('update_status') }}">Check update status</a></li>
+  <li><a href="{{ url_for("update_status") }}">Check update status</a></li>
 </ul>
 <p class="note">Need to run commands manually? Use <code>elbotctl ...</code>, or if the shell cannot find it, <code>.venv/bin/elbotctl ...</code> / <code>python -m elbot.cli ...</code>.</p>
 {% endblock %}
