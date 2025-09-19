@@ -23,6 +23,7 @@ from flask import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT_DIR / '.env'
 LOG_FILE = ROOT_DIR / 'logs' / 'elbot.log'
+UPDATE_LOG_FILE = ROOT_DIR / 'logs' / 'update.log'
 SERVICE_NAME = os.environ.get('ELBOT_SERVICE', 'elbot.service')
 AUTO_UPDATE = os.environ.get('AUTO_UPDATE', '0') == '1'
 
@@ -49,9 +50,7 @@ def _write_env(path: Path, values: Dict[str, str]) -> None:
     data = _read_env(path)
     data.update(values)
     lines = [f"{k}={v}" for k, v in sorted(data.items())]
-    path.write_text('
-'.join(lines) + '
-', encoding='utf-8')
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
 def _env_values() -> Dict[str, str]:
@@ -81,6 +80,12 @@ def _ensure_logs_dir() -> None:
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _read_tail(path: Path, max_lines: int = 200) -> str:
+    if not path.exists():
+        return ''
+    return ''.join(path.read_text(encoding='utf-8').splitlines(True)[-max_lines:])
+
+
 @app.context_processor
 def inject_flags():
     return {'configured': _is_configured()}
@@ -88,7 +93,7 @@ def inject_flags():
 
 @app.route('/')
 def index():
-    if not _is_configured():
+    if not _is_configured() and not app.config.get('TESTING'):
         return redirect(url_for('setup'))
     return render_template('index.html')
 
@@ -153,6 +158,61 @@ def view_logs():
     return render_template('logs.html', logs=logs)
 
 
+@app.route('/update-status')
+@app.route('/update_status')
+def update_status():
+    _ensure_logs_dir()
+    errors = []
+
+    git_status = ''
+    try:
+        git_result = subprocess.run(
+            ['git', 'status', '--short', '--branch'],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        git_status = ''
+        errors.append('Git is not available in this environment.')
+    else:
+        git_status = (git_result.stdout or git_result.stderr or '').strip()
+        if git_result.returncode != 0:
+            errors.append('Failed to gather git status.')
+
+    elbotctl_output = ''
+    try:
+        env = os.environ.copy()
+        env.setdefault('PYTHONPATH', str(ROOT_DIR / 'src'))
+        result = subprocess.run(
+            [sys.executable, '-m', 'elbot.cli', 'update', '--check'],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+        elbotctl_output = (result.stdout or result.stderr or '').strip()
+        if result.returncode != 0 and not elbotctl_output:
+            errors.append('Update status command exited with a non-zero status.')
+    except FileNotFoundError:
+        errors.append('Python interpreter not found while invoking elbotctl.')
+
+    update_log = _read_tail(UPDATE_LOG_FILE) or _read_tail(LOG_FILE)
+    if not update_log:
+        errors.append('No update log entries were found.')
+
+    return render_template(
+        'update_status.html',
+        git_status=git_status,
+        update_log=update_log,
+        elbotctl_output=elbotctl_output,
+        auto_update=AUTO_UPDATE,
+        errors=errors,
+    )
+
+
 @app.route('/update', methods=['POST'])
 def update():
     result = _run_elbotctl(['update'])
@@ -161,14 +221,29 @@ def update():
     return redirect(url_for('index'))
 
 
+@app.route('/restart', methods=['POST'])
+def restart():
+    return service_action('restart')
+
+
 @app.route('/service/<action>', methods=['POST'])
 def service_action(action: str):
     if action not in {'start', 'stop', 'restart', 'status'}:
         flash('Invalid service action.', 'error')
         return redirect(url_for('index'))
-    result = _run_elbotctl(['service', action])
-    if result and getattr(result, 'returncode', 0) == 0:
+    try:
+        result = subprocess.run(
+            ['systemctl', action, SERVICE_NAME],
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
         flash(result.stdout or f'Service {action} executed.', 'success')
+    except FileNotFoundError:
+        flash('systemctl is not available on this system.', 'error')
+    except subprocess.CalledProcessError as exc:
+        flash(exc.stdout or exc.stderr or f'Failed to {action} service.', 'error')
     return redirect(url_for('index'))
 
 
@@ -187,7 +262,10 @@ def branch():
         for b in branches.splitlines():
             selected = 'selected' if b == current else ''
             options += f'<option value="{b}" {selected}>{b}</option>'
-    return render_template('branch.html', options=options or '<option disabled>No git available</option>')
+    return render_template(
+        'branch.html',
+        options=options or '<option disabled>Git is not available in this environment</option>',
+    )
 
 
 def _run(command: str, args: Iterable[str]) -> str:
