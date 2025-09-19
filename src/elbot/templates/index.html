@@ -26,6 +26,11 @@
     <h3>Service Status</h3>
     <button type="submit">Check Status</button>
   </form>
+  <form method="post" action="{{ url_for('validate_lavalink') }}" class="card">
+    <h3>Validate Lavalink</h3>
+    <p>Runs <code>elbotctl check</code> to confirm Lavalink connectivity.</p>
+    <button type="submit">Run Validation</button>
+  </form>
   <form method="post" action="{{ url_for('service_action', action='start') }}" class="card">
     <h3>Start Service</h3>
     <button type="submit">Start</button>
