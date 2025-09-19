@@ -135,6 +135,10 @@ def main() -> None:
     intents = nextcord.Intents.default()
     intents.message_content = True
     intents.voice_states = True
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     bot = commands.Bot(
         command_prefix=Config.PREFIX,
         intents=intents,

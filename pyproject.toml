@@ -39,6 +39,7 @@ test = [
 elbot = "elbot.main:main"
 elbot-portal = "elbot.portal:main"
 elbot-install-service = "elbot.service_install:main"
+elbotctl = "elbot.cli:main"
 
 [tool.setuptools.package-dir]
 "" = "src"
