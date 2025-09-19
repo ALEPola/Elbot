@@ -135,7 +135,11 @@ def main() -> None:
     intents = nextcord.Intents.default()
     intents.message_content = True
     intents.voice_states = True
-    bot = commands.Bot(command_prefix=Config.PREFIX, intents=intents)
+    bot = commands.Bot(
+        command_prefix=Config.PREFIX,
+        intents=intents,
+        description=f"{Config.BOT_USERNAME} Discord bot",
+    )
 
     @bot.event
     async def on_command_error(ctx: commands.Context, error: Exception) -> None:

@@ -10,8 +10,19 @@ import nextcord
 from nextcord.ext import commands
 
 
-def load_all_cogs(bot: commands.Bot, package: str = "elbot.cogs") -> None:
+def load_all_cogs(
+    bot: commands.Bot,
+    package: str = "elbot.cogs",
+    *,
+    cogs_dir: str | None = None,
+) -> None:
     """Dynamically load every ``.py`` file in the given cog package."""
+
+    if cogs_dir:
+        if "." in cogs_dir:
+            package = cogs_dir
+        else:
+            package = f"elbot.{cogs_dir}".rstrip(".")
 
     try:
         package_files = resources.files(package)
