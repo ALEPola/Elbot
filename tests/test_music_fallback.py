@@ -54,6 +54,7 @@ async def test_fallback_player_prefers_lavalink(monkeypatch):
     )
     assert not entry.is_fallback
     assert backend.calls[0][0] == "test"
+    assert player.metrics.snapshot()["last_fallback_source"] is None
 
 
 @pytest.mark.asyncio
@@ -103,5 +104,6 @@ async def test_fallback_player_uses_yt_dlp(monkeypatch):
     assert entry.is_fallback
     snapshot = metrics.snapshot()
     assert snapshot["fallback_used"] == 1
+    assert snapshot["last_fallback_source"] == "https://stream"
     assert backend.calls[-1][0] == "https://stream"
 

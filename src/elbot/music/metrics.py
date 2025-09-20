@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from collections import Counter
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 __all__ = ["PlaybackMetrics"]
 
@@ -36,6 +36,7 @@ class PlaybackMetrics:
         self.fallback_used = 0
         self._avg = _Average()
         self.extractor_failures = Counter()
+        self.last_fallback_source: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Mutation helpers
@@ -60,6 +61,10 @@ class PlaybackMetrics:
         with self._lock:
             self.extractor_failures[category] += 1
 
+    def record_fallback_source(self, source: str) -> None:
+        with self._lock:
+            self.last_fallback_source = source
+
     # ------------------------------------------------------------------
     # Inspection
     # ------------------------------------------------------------------
@@ -71,5 +76,6 @@ class PlaybackMetrics:
                 "fallback_used": self.fallback_used,
                 "avg_startup_ms": round(self._avg.mean, 2),
                 "extractor_failures_by_type": dict(self.extractor_failures),
+                "last_fallback_source": self.last_fallback_source,
             }
 

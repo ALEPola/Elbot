@@ -201,6 +201,15 @@ class FallbackPlayer:
             is_fallback=True,
             fallback_source=selected_source,
         )
+        self.metrics.record_fallback_source(selected_source)
+        self.logger.info(
+            "Resolved fallback stream",
+            extra={
+                "query": query,
+                "selected_source": selected_source,
+                "requested_by": requested_by,
+            },
+        )
         return entry
 
     async def _extract_with_yt_dlp(
