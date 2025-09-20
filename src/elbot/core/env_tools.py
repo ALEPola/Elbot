@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from getpass import getpass
 from pathlib import Path
@@ -58,8 +59,20 @@ def prompt_env(
     ensure_env_file(env_path, example_path)
     env_pairs = read_env(env_path)
 
-    if overrides:
-        for key, value in overrides.items():
+    override_pairs: EnvMap = dict(overrides or {})
+
+    keys_to_check: set[str] = set()
+    if required:
+        keys_to_check.update(required.keys())
+    if optional:
+        keys_to_check.update(optional.keys())
+
+    for key in keys_to_check:
+        if key not in override_pairs and key in os.environ:
+            override_pairs[key] = os.environ[key]
+
+    if override_pairs:
+        for key, value in override_pairs.items():
             if value is not None:
                 env_pairs[key] = value
         write_env(env_path, env_pairs)

@@ -29,6 +29,15 @@ REQUIRED_ENV_VARS: dict[str, str] = {
     "DISCORD_TOKEN": "Discord bot token",
 }
 
+ENV_OVERRIDE_SOURCES: dict[str, str] = {
+    "ELBOT_DISCORD_TOKEN": "DISCORD_TOKEN",
+    "ELBOT_OPENAI_KEY": "OPENAI_API_KEY",
+    "ELBOT_LAVALINK_PASSWORD": "LAVALINK_PASSWORD",
+    "ELBOT_LAVALINK_HOST": "LAVALINK_HOST",
+    "ELBOT_USERNAME": "ELBOT_USERNAME",
+    "ELBOT_AUTO_UPDATE_WEBHOOK": "AUTO_UPDATE_WEBHOOK",
+}
+
 OPTIONAL_ENV_VARS: dict[str, str] = {
     "OPENAI_API_KEY": "OpenAI API key (optional)",
     "LAVALINK_PASSWORD": "Lavalink password (leave blank to keep default)",
@@ -108,6 +117,13 @@ def command_install(args: argparse.Namespace) -> None:
     overrides: dict[str, str] = {}
     if args.env_file:
         overrides.update(env_tools.read_env(args.env_file))
+
+    env_overrides = {
+        target: os.environ[source]
+        for source, target in ENV_OVERRIDE_SOURCES.items()
+        if os.environ.get(source)
+    }
+    overrides.update(env_overrides)
 
     _warn_port_conflicts()
     prerequisites.ensure_prerequisites(
