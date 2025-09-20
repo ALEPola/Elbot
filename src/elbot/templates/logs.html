@@ -13,6 +13,17 @@
 <p class="note">Add an OpenAI API key in Settings to enable AI-powered log summaries.</p>
 {% endif %}
 
+<h3>YouTube Diagnostics</h3>
+{% if auto_lavalink_enabled %}
+<div class="diagnostics-panel" data-diagnostics-endpoint="{{ url_for('api_ytcheck') }}">
+  <button type="button" data-diagnostics-trigger>Run Diagnostics</button>
+  <p class="note" data-diagnostics-status></p>
+  <pre class="hidden" data-diagnostics-output></pre>
+</div>
+{% else %}
+<p class="note">AUTO_LAVALINK is disabled, so diagnostics cannot be collected from the portal.</p>
+{% endif %}
+
 <pre>{{ logs }}</pre>
 
 {% if ai_enabled %}

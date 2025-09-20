@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
 import sys
 import threading
 import time
+from dataclasses import asdict
 from pathlib import Path
-from typing import Iterable, Dict
+from typing import Any, Dict, Iterable, Tuple
 
 from flask import (
     Flask,
@@ -26,6 +28,9 @@ from openai import OpenAI
 
 from .core import auto_update
 from .config import Config
+from .music.cookies import CookieManager
+from .music.diagnostics import DiagnosticsService
+from .music.metrics import PlaybackMetrics
 
 ROOT_DIR = Config.BASE_DIR
 ENV_FILE = ROOT_DIR / '.env'
@@ -42,6 +47,9 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('ELBOT_PORTAL_SECRET', 'change-me')
 
 logger = logging.getLogger('elbot.portal')
+
+_DIAGNOSTICS_COOKIES = CookieManager()
+_DIAGNOSTICS_METRICS = PlaybackMetrics()
 
 
 def _read_env(path: Path) -> Dict[str, str]:
@@ -65,6 +73,65 @@ def _write_env(path: Path, values: Dict[str, str]) -> None:
 
 def _env_values() -> Dict[str, str]:
     return _read_env(ENV_FILE)
+
+
+def _env_snapshot() -> Dict[str, str]:
+    data = _env_values()
+    for key, value in os.environ.items():
+        data[key] = value
+    return data
+
+
+def _auto_lavalink_enabled() -> bool:
+    value = _env_snapshot().get('AUTO_LAVALINK', '')
+    normalized = str(value).strip().lower()
+    return normalized in {'1', 'true', 'yes'}
+
+
+def _diagnostics_service(env: Dict[str, str]) -> Tuple[DiagnosticsService, Dict[str, Any]]:
+    host = env.get('LAVALINK_HOST') or 'localhost'
+    port_str = env.get('LAVALINK_PORT') or '2333'
+    password = env.get('LAVALINK_PASSWORD') or 'youshallnotpass'
+    secure_flag = str(env.get('LAVALINK_SSL', 'false')).strip().lower()
+    secure_enabled = secure_flag in {'1', 'true', 'yes'}
+    try:
+        port = int(port_str)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Invalid LAVALINK_PORT value; expected integer.') from exc
+
+    service = DiagnosticsService(
+        host=host,
+        port=port,
+        password=password,
+        secure=secure_enabled,
+        cookies=_DIAGNOSTICS_COOKIES,
+        metrics=_DIAGNOSTICS_METRICS,
+    )
+    return service, {
+        'host': host,
+        'port': port,
+        'secure': secure_enabled,
+    }
+
+
+def _collect_diagnostics() -> Tuple[Dict[str, Any] | None, str | None, int]:
+    env = _env_snapshot()
+    try:
+        service, meta = _diagnostics_service(env)
+    except ValueError as exc:
+        return None, str(exc), 400
+
+    try:
+        report = asyncio.run(service.collect())
+    except asyncio.TimeoutError:
+        return None, 'Timed out while contacting the Lavalink server.', 504
+    except Exception as exc:  # pragma: no cover - diagnostic failures surfaced to UI
+        logger.warning('Diagnostics collection failed: %s', exc, exc_info=True)
+        return None, f'Failed to collect diagnostics: {exc}', 502
+
+    payload = asdict(report)
+    payload.update({'lavalink_host': meta['host'], 'lavalink_port': meta['port'], 'lavalink_secure': meta['secure']})
+    return payload, None, 200
 
 
 def _is_configured() -> bool:
@@ -107,6 +174,7 @@ def inject_flags():
         'auto_update_status': auto_update.current_status(),
         'legacy_auto_update': AUTO_UPDATE,
         'auto_update': AUTO_UPDATE,
+        'auto_lavalink_enabled': _auto_lavalink_enabled(),
     }
 
 
@@ -177,6 +245,27 @@ def view_logs():
     if LOG_FILE.exists():
         logs = ''.join(LOG_FILE.read_text(encoding='utf-8').splitlines(True)[-200:])
     return render_template('logs.html', logs=logs, ai_enabled=bool(_openai_api_key()))
+
+
+@app.route('/api/ytcheck')
+def api_ytcheck():
+    if not _auto_lavalink_enabled():
+        return (
+            jsonify(
+                {
+                    'status': 'error',
+                    'error': 'AUTO_LAVALINK is disabled; diagnostics are unavailable.',
+                }
+            ),
+            400,
+        )
+
+    payload, error, status = _collect_diagnostics()
+    if payload is not None:
+        return jsonify({'status': 'ok', 'data': payload}), 200
+
+    message = error or 'Failed to collect diagnostics.'
+    return jsonify({'status': 'error', 'error': message}), status
 
 
 def _summarize_logs_with_ai(log_text: str, *, api_key: str) -> str:

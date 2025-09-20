@@ -196,3 +196,4 @@ youtube_cookies.txt
 sfx/
 infra/docker/lavalink/*
 !infra/docker/lavalink/application.yml
+chat_history/
