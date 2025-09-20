@@ -39,14 +39,27 @@ class TrackHandle:
 
     @classmethod
     def from_mafic(cls, track: mafic.Track) -> "TrackHandle":
-        info = getattr(track, "info", {}) or {}
+        info = getattr(track, "info", None)
+        info_dict = info or {}
+
+        title = getattr(track, "title", None) or info_dict.get("title") or "Unknown title"
+        author = getattr(track, "author", None) or info_dict.get("author") or "Unknown creator"
+        duration = (
+            getattr(track, "length", None)
+            or info_dict.get("length")
+            or info_dict.get("duration")
+            or 0
+        )
+        uri = getattr(track, "uri", None) or info_dict.get("uri")
+        source = getattr(track, "source", None) or info_dict.get("sourceName") or "unknown"
+
         return cls(
             track=track,
-            title=str(info.get("title") or "Unknown title"),
-            author=str(info.get("author") or "Unknown creator"),
-            duration=int(info.get("length") or info.get("duration") or 0),
-            uri=info.get("uri"),
-            source=str(info.get("sourceName") or "unknown"),
+            title=str(title),
+            author=str(author),
+            duration=int(duration),
+            uri=uri,
+            source=str(source),
         )
 
 
