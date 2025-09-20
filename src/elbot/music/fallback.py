@@ -11,6 +11,27 @@ from typing import Optional
 import yt_dlp
 
 from .audio_backend import LavalinkAudioBackend, TrackHandle, TrackLoadFailure
+
+_KNOWN_YTDLP_PREFIXES = (
+    "ytsearch:",
+    "ytsearch1:",
+    "ytsearch5:",
+    "ytdsearch:",
+    "ytsearch10:",
+    "spsearch:",
+    "scsearch:",
+)
+
+
+def _normalise_query(query: str) -> str:
+    stripped = query.strip()
+    lower = stripped.lower()
+    if lower.startswith(("http://", "https://")):
+        return stripped
+    if any(lower.startswith(prefix) for prefix in _KNOWN_YTDLP_PREFIXES):
+        return stripped
+    return f"ytsearch:{stripped}"
+
 from .cookies import CookieManager
 from .metrics import PlaybackMetrics
 from .queue import QueuedTrack
@@ -139,9 +160,11 @@ class FallbackPlayer:
         options = self.cookies.yt_dlp_options()
         options.update({"skip_download": True})
 
+        query_for_dl = _normalise_query(query)
+
         def _do_extract() -> dict:
             with yt_dlp.YoutubeDL(options) as ydl:
-                return ydl.extract_info(query, download=False)
+                return ydl.extract_info(query_for_dl, download=False)
 
         try:
             info = await asyncio.to_thread(_do_extract)
