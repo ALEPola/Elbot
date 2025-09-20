@@ -22,7 +22,7 @@ class ModerationCog(commands.Cog):
         member: nextcord.Member,
         reason: str = "No reason provided",
     ) -> None:
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         await member.kick(reason=reason)
         await safe_reply(
             interaction,
@@ -38,7 +38,7 @@ class ModerationCog(commands.Cog):
         member: nextcord.Member,
         reason: str = "No reason provided",
     ) -> None:
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         await member.ban(reason=reason)
         await safe_reply(
             interaction,
@@ -49,7 +49,7 @@ class ModerationCog(commands.Cog):
     @nextcord.slash_command(name="clear_messages", description="Delete recent messages")
     @commands.has_permissions(manage_messages=True)
     async def clear_messages(self, interaction: nextcord.Interaction, count: int = 5) -> None:
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         await interaction.channel.purge(limit=count)
         await safe_reply(
             interaction,
@@ -67,7 +67,7 @@ class ModerationCog(commands.Cog):
     ):
         """Remove up to ``count`` recent messages authored by this bot."""
 
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
 
         def is_bot(msg: nextcord.Message) -> bool:
             return msg.author == self.bot.user

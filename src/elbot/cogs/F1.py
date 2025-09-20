@@ -248,7 +248,7 @@ class F1Cog(commands.Cog):
 
     @nextcord.slash_command(name="f1_schedule", description="Show upcoming F1 sessions")
     async def f1_schedule(self, interaction: nextcord.Interaction, count: int = 5):
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             await safe_reply(interaction, "Not available in this server.", ephemeral=True)
             return
@@ -267,7 +267,7 @@ class F1Cog(commands.Cog):
         name="f1_countdown", description="Countdown to next F1 session"
     )
     async def f1_countdown(self, interaction: nextcord.Interaction):
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             await safe_reply(interaction, "Not available in this server.", ephemeral=True)
             return
@@ -288,7 +288,7 @@ class F1Cog(commands.Cog):
 
     @nextcord.slash_command(name="f1_results", description="Latest race results")
     async def f1_results(self, interaction: nextcord.Interaction):
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             await safe_reply(interaction, "Not available in this server.", ephemeral=True)
             return
@@ -305,7 +305,7 @@ class F1Cog(commands.Cog):
         name="f1_subscribe", description="DM reminders 1 hour before each session"
     )
     async def f1_subscribe(self, interaction: nextcord.Interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         self.subscribers.add(interaction.user.id)
         save_subscribers(self.subscribers)
         await safe_reply(
@@ -316,7 +316,7 @@ class F1Cog(commands.Cog):
 
     @nextcord.slash_command(name="f1_unsubscribe", description="Stop session reminders")
     async def f1_unsubscribe(self, interaction: nextcord.Interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         self.subscribers.discard(interaction.user.id)
         save_subscribers(self.subscribers)
         await safe_reply(

@@ -182,7 +182,7 @@ def main() -> None:
 
     @bot.slash_command(name="musicdebug", description="Show Lavalink status")
     async def musicdebug(inter: nextcord.Interaction) -> None:
-        await inter.response.defer(thinking=True, ephemeral=True)
+        await inter.response.defer(with_message=True, ephemeral=True)
         nodes = mafic.NodePool.label_to_node
         if not nodes:
             status = "No Lavalink nodes are connected."
