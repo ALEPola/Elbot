@@ -96,11 +96,33 @@ ul.links {
   color: #666;
   margin-top: 14px;
 }
+.note.error {
+  color: #c0392b;
+}
+
+.ai-summary {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-summary button {
+  align-self: flex-start;
+}
+
+.ai-summary pre {
+  margin: 0;
+}
 pre {
   background: #eee;
   padding: 15px;
   overflow: auto;
   border-radius: 8px;
+}
+
+.hidden {
+  display: none !important;
 }
 @media (max-width: 600px) {
   .container {

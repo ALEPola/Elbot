@@ -14,14 +14,18 @@ from typing import Iterable, Dict
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
     url_for,
 )
 
+from openai import OpenAI
+
 
 from .core import auto_update
+from .config import Config
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT_DIR / '.env'
@@ -36,6 +40,8 @@ OPTIONAL_KEYS = ['OPENAI_API_KEY', 'LAVALINK_HOST', 'LAVALINK_PORT', 'LAVALINK_P
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('ELBOT_PORTAL_SECRET', 'change-me')
+
+logger = logging.getLogger('elbot.portal')
 
 
 def _read_env(path: Path) -> Dict[str, str]:
@@ -64,6 +70,10 @@ def _env_values() -> Dict[str, str]:
 def _is_configured() -> bool:
     env = _env_values()
     return all(env.get(key) for key in REQUIRED_KEYS)
+
+
+def _openai_api_key() -> str:
+    return os.environ.get('OPENAI_API_KEY') or _env_values().get('OPENAI_API_KEY', '')
 
 
 def _run_elbotctl(args: Iterable[str]) -> subprocess.CompletedProcess | None:
@@ -166,7 +176,51 @@ def view_logs():
     logs = ''
     if LOG_FILE.exists():
         logs = ''.join(LOG_FILE.read_text(encoding='utf-8').splitlines(True)[-200:])
-    return render_template('logs.html', logs=logs)
+    return render_template('logs.html', logs=logs, ai_enabled=bool(_openai_api_key()))
+
+
+def _summarize_logs_with_ai(log_text: str, *, api_key: str) -> str:
+    """Summarize log text using the configured OpenAI model."""
+
+    trimmed = log_text[-8000:]
+    client = OpenAI(api_key=api_key)
+    completion = client.chat.completions.create(
+        model=Config.OPENAI_MODEL,
+        messages=[
+            {
+                'role': 'system',
+                'content': (
+                    'You are a helpful assistant that summarizes application logs. '
+                    'Highlight key errors, warnings, and suggested follow-up actions in a concise bullet list.'
+                ),
+            },
+            {'role': 'user', 'content': trimmed},
+        ],
+        max_tokens=250,
+    )
+    return (completion.choices[0].message.content or '').strip()
+
+
+@app.route('/logs/summary', methods=['POST'])
+def logs_summary():
+    api_key = _openai_api_key()
+    if not api_key:
+        return jsonify({'error': 'OpenAI API key is not configured.'}), 400
+
+    log_text = _read_tail(LOG_FILE)
+    if not log_text.strip():
+        return jsonify({'error': 'No logs available to summarize.'}), 400
+
+    try:
+        summary = _summarize_logs_with_ai(log_text, api_key=api_key)
+    except Exception as exc:  # pragma: no cover - surfaced via JSON error
+        logger.error('Failed to summarize logs with OpenAI: %s', exc, exc_info=True)
+        return jsonify({'error': 'Failed to summarize logs with OpenAI.'}), 502
+
+    if not summary:
+        return jsonify({'error': 'OpenAI returned an empty summary.'}), 502
+
+    return jsonify({'summary': summary})
 
 
 @app.route('/update-status')

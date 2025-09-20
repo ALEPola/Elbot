@@ -2,5 +2,55 @@
 {% block title %}Logs - Elbot Portal{% endblock %}
 {% block content %}
 <h2>Logs</h2>
+
+{% if ai_enabled %}
+<div class="ai-summary">
+  <button id="summarize-logs" type="button">Summarize logs with AI</button>
+  <p id="ai-summary-status" class="note"></p>
+  <pre id="ai-summary-output" class="hidden"></pre>
+</div>
+{% else %}
+<p class="note">Add an OpenAI API key in Settings to enable AI-powered log summaries.</p>
+{% endif %}
+
 <pre>{{ logs }}</pre>
+
+{% if ai_enabled %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const button = document.getElementById('summarize-logs');
+  if (!button) {
+    return;
+  }
+  const statusEl = document.getElementById('ai-summary-status');
+  const outputEl = document.getElementById('ai-summary-output');
+  const endpoint = {{ url_for('logs_summary')|tojson }};
+
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    statusEl.textContent = 'Summarizing logs…';
+    statusEl.classList.remove('error');
+    outputEl.textContent = '';
+    outputEl.classList.add('hidden');
+
+    try {
+      const response = await fetch(endpoint, { method: 'POST' });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to summarize logs.');
+      }
+
+      outputEl.textContent = payload.summary;
+      outputEl.classList.remove('hidden');
+      statusEl.textContent = 'Summary generated using OpenAI.';
+    } catch (error) {
+      statusEl.textContent = error.message || 'Failed to summarize logs.';
+      statusEl.classList.add('error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+});
+</script>
+{% endif %}
 {% endblock %}

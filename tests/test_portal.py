@@ -46,6 +46,28 @@ def test_logs(monkeypatch):
     assert resp.status_code == 200
 
 
+def test_logs_summary_requires_api_key(monkeypatch):
+    client = make_client(monkeypatch)
+    resp = client.post('/logs/summary')
+    assert resp.status_code == 400
+    assert resp.get_json()['error'] == 'OpenAI API key is not configured.'
+
+
+def test_logs_summary_success(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    client = make_client(monkeypatch)
+
+    def fake_summary(text, *, api_key):
+        assert api_key == 'test-key'
+        assert 'make_client' in text
+        return 'All clear'
+
+    monkeypatch.setattr(portal, '_summarize_logs_with_ai', fake_summary)
+    resp = client.post('/logs/summary')
+    assert resp.status_code == 200
+    assert resp.get_json()['summary'] == 'All clear'
+
+
 def test_branch_get(monkeypatch):
     client = make_client(monkeypatch)
     resp = client.get("/branch")
