@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import atexit
+import json
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import socket
 import subprocess
@@ -23,11 +25,21 @@ BASE = APP_DIR
 JAR = BASE / "Lavalink.jar"
 CONF = BASE / "application.yml"
 LOG = BASE / "lavalink.log"
+LAVALINK_URL_FILE = BASE / "lavalink.url"
 BASE.mkdir(parents=True, exist_ok=True)
 
-# See: https://github.com/lavalink-devs/Lavalink
-LAVALINK_URL = (
-    "https://github.com/lavalink-devs/Lavalink/releases/latest/download/Lavalink.jar"
+# Lavalink 4.0.6 is the latest build that Mafic 2.x has been exercised with.
+# We pin to that version by default and allow overrides via environment vars so
+# operators can explicitly opt into newer releases once Mafic adds support.
+DEFAULT_LAVALINK_VERSION = "4.0.6"
+DEFAULT_LAVALINK_URL = (
+    "https://github.com/lavalink-devs/Lavalink/releases/download/"
+    f"{DEFAULT_LAVALINK_VERSION}/Lavalink.jar"
+)
+LAVALINK_URL = os.getenv("LAVALINK_DOWNLOAD_URL", DEFAULT_LAVALINK_URL)
+# Warn when Lavalink reports a newer version than Mafic officially supports.
+MAFIC_MAX_SUPPORTED_LAVALINK_VERSION = os.getenv(
+    "MAFIC_MAX_SUPPORTED_LAVALINK_VERSION", DEFAULT_LAVALINK_VERSION
 )
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
@@ -148,9 +160,25 @@ def _get_java_bin() -> str:
 
 def _ensure_jar() -> None:
     BASE.mkdir(parents=True, exist_ok=True)
-    if not JAR.exists():
+    cached_url = ""
+    if LAVALINK_URL_FILE.exists():
+        try:
+            cached_url = LAVALINK_URL_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            cached_url = ""
+
+    if not JAR.exists() or cached_url != LAVALINK_URL:
+        if JAR.exists():
+            try:
+                JAR.unlink()
+            except OSError:
+                pass
         print("[auto-lavalink] Downloading Lavalink.jar ...")
         urllib.request.urlretrieve(LAVALINK_URL, JAR)
+        try:
+            LAVALINK_URL_FILE.write_text(LAVALINK_URL, encoding="utf-8")
+        except OSError:
+            pass
 
 
 def _write_conf(port: int, password: str) -> None:
@@ -197,6 +225,67 @@ def _healthy(port: int, password: str, timeout: int = 60) -> bool:
         except Exception:
             time.sleep(1)
     return False
+
+
+def _fetch_lavalink_version(port: int, password: str) -> str | None:
+    import http.client
+
+    conn: http.client.HTTPConnection | None = None
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.putrequest("GET", "/version")
+        conn.putheader("Authorization", password)
+        conn.endheaders()
+        resp = conn.getresponse()
+        if resp.status != 200:
+            return None
+        raw = resp.read()
+        if not raw:
+            return None
+        data = json.loads(raw.decode("utf-8"))
+        version = data.get("version")
+        return str(version) if version else None
+    except Exception:
+        return None
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+
+def _parse_version_tuple(text: str) -> tuple[int, ...]:
+    numbers = []
+    for part in text.split("."):
+        match = re.match(r"(\d+)", part)
+        if not match:
+            break
+        numbers.append(int(match.group(1)))
+    return tuple(numbers)
+
+
+def _version_is_newer(version: str, reference: str) -> bool:
+    ver_tuple = _parse_version_tuple(version)
+    ref_tuple = _parse_version_tuple(reference)
+    if not ver_tuple or not ref_tuple:
+        return False
+    length = max(len(ver_tuple), len(ref_tuple))
+    ver_tuple += (0,) * (length - len(ver_tuple))
+    ref_tuple += (0,) * (length - len(ref_tuple))
+    return ver_tuple > ref_tuple
+
+
+def _warn_if_version_exceeds(version: str) -> None:
+    if not MAFIC_MAX_SUPPORTED_LAVALINK_VERSION:
+        return
+    if _version_is_newer(version, MAFIC_MAX_SUPPORTED_LAVALINK_VERSION):
+        print(
+            "[auto-lavalink] WARNING: Lavalink reports version"
+            f" {version} which exceeds the configured Mafic-supported"
+            f" maximum ({MAFIC_MAX_SUPPORTED_LAVALINK_VERSION})."
+            " Consider updating Mafic before relying on this release."
+        )
 
 
 def start() -> tuple[int, str]:
@@ -261,6 +350,10 @@ def start() -> tuple[int, str]:
         except Exception:
             tail = "<no log available>"
         raise RuntimeError("Lavalink failed healthcheck (/version). Recent log:\n" + tail)
+
+    reported_version = _fetch_lavalink_version(port, password)
+    if reported_version:
+        _warn_if_version_exceeds(reported_version)
 
     os.environ["LAVALINK_HOST"] = "127.0.0.1"
     os.environ["LAVALINK_PORT"] = str(port)
