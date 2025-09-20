@@ -81,3 +81,26 @@ def test_prompt_env_missing_required_non_interactive(tmp_path: Path) -> None:
             optional={},
             error_cls=_DummyError,
         )
+
+
+def test_prompt_env_non_interactive_uses_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_path = tmp_path / ".env"
+    example = tmp_path / ".env.example"
+    example.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("DISCORD_TOKEN", "from-env")
+
+    env_tools.prompt_env(
+        env_path,
+        example,
+        non_interactive=True,
+        overrides=None,
+        required={"DISCORD_TOKEN": "Discord bot token"},
+        optional={},
+        error_cls=_DummyError,
+    )
+
+    env = env_tools.read_env(env_path)
+    assert env["DISCORD_TOKEN"] == "from-env"

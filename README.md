@@ -61,6 +61,20 @@ The installer creates a `.env` file with your settings. Key variables:
 
 See [`.env.example`](.env.example) for all options.
 
+For unattended installs export the prefixed variables before running
+`elbotctl install --non-interactive` (or the provisioning scripts). The
+installer automatically maps them to the `.env` keys:
+
+- `ELBOT_DISCORD_TOKEN` → `DISCORD_TOKEN`
+- `ELBOT_OPENAI_KEY` → `OPENAI_API_KEY`
+- `ELBOT_LAVALINK_PASSWORD` → `LAVALINK_PASSWORD`
+- `ELBOT_LAVALINK_HOST` → `LAVALINK_HOST`
+- `ELBOT_USERNAME` → `ELBOT_USERNAME`
+- `ELBOT_AUTO_UPDATE_WEBHOOK` → `AUTO_UPDATE_WEBHOOK`
+
+Direct exports such as `DISCORD_TOKEN=...` also work when running the
+installer in non-interactive mode.
+
 ## 🎮 Bot Commands
 
 ### Music 🎵

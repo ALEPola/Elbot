@@ -43,10 +43,17 @@ ELBOT_OPENAI_KEY="sk-..." \
 ./scripts/provision.sh
 ```
 
-Optional exports include `ELBOT_GUILD_ID`, `ELBOT_PORTAL_PORT`,
-`ELBOT_LAVALINK_PORT` and `ELBOT_PORTS` if you need to change defaults. The
-script requires `apt` and root (or sudo) privileges. Other platforms should use
-`./scripts/install.sh`.
+Optional exports include the following if you want to bypass prompts or change
+defaults while remaining non-interactive:
+
+- `ELBOT_LAVALINK_PASSWORD`
+- `ELBOT_LAVALINK_HOST`
+- `ELBOT_USERNAME`
+- `ELBOT_AUTO_UPDATE_WEBHOOK`
+- `ELBOT_GUILD_ID`, `ELBOT_PORTAL_PORT`, `ELBOT_LAVALINK_PORT`, `ELBOT_PORTS`
+
+The script requires `apt` and root (or sudo) privileges. Other platforms should
+use `./scripts/install.sh`.
 
 ### Guided install script
 
