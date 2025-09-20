@@ -187,9 +187,11 @@ Elbot uses a resilient dual-mode system:
 - **Primary**: Lavalink v4 with [`youtube-source`](https://github.com/lavalink-devs/youtube-source) plugin
 - **Fallback**: Direct yt-dlp extraction when Lavalink fails
 
-To use age-restricted content:
-1. Export YouTube cookies from your browser
-2. Set `YT_COOKIES_FILE=/path/to/cookies.txt` in `.env`
+To unlock age-restricted content **and** keep large queues from triggering YouTube's `429 Too Many Requests` throttling:
+1. Export your YouTube cookies from a logged-in browser profile (see the [yt-dlp cookies guide](https://github.com/yt-dlp/yt-dlp/wiki/How-to-use-your-own-YouTube-Cookies)).
+2. Set `YT_COOKIES_FILE=/path/to/cookies.txt` in `.env` (or mount the file in Docker deployments).
+
+Refresh the cookie export periodically—especially for 24/7 music sessions—so Lavalink and yt-dlp can reuse the authenticated session for smooth playback.
 
 ## 🧪 Testing
 
