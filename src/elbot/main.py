@@ -75,7 +75,7 @@ async def _fetch_lavalink_plugins(response_json: Any) -> str:
     return "unknown"
 
 
-async def _lavalink_health_check() -> None:
+async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
     host = Config.LAVALINK_HOST
     port = Config.LAVALINK_PORT
     password = Config.LAVALINK_PASSWORD
@@ -101,7 +101,32 @@ async def _lavalink_health_check() -> None:
                         data = None
                     yt_version = await _fetch_lavalink_plugins(data)
                 else:
-                    failure_reason = f"status={response.status}"
+                    failure_reason = f"/version status={response.status}"
+            if handshake:
+                params = {"identifier": "ytsearch:elbot health"}
+                async with session.get(
+                    f"{base_url}/loadtracks",
+                    headers={"Authorization": password},
+                    params=params,
+                ) as track_response:
+                    if track_response.status != 200:
+                        handshake = False
+                        failure_reason = f"/loadtracks status={track_response.status}"
+                    else:
+                        try:
+                            load_data = await track_response.json(content_type=None)
+                        except Exception as exc:
+                            handshake = False
+                            failure_reason = f"/loadtracks parse error: {exc}"
+                        else:
+                            tracks: list[Any] = []
+                            if isinstance(load_data, dict):
+                                possible_tracks = load_data.get("tracks") or load_data.get("data")
+                                if isinstance(possible_tracks, list):
+                                    tracks = possible_tracks
+                            if not tracks:
+                                handshake = False
+                                failure_reason = "/loadtracks returned no tracks"
     except Exception as exc:  # pragma: no cover - network failures
         failure_reason = str(exc)
 
@@ -116,6 +141,8 @@ async def _lavalink_health_check() -> None:
         yt_version,
         status,
     )
+
+    return handshake, failure_reason
 
 
 def main() -> None:

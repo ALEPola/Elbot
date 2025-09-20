@@ -267,15 +267,22 @@ def command_run(_: argparse.Namespace) -> None:
 
 def command_check(_: argparse.Namespace) -> None:
     from .config import Config, log_cookie_status  # type: ignore import lazily
+
     Config.validate()
     log_cookie_status()
+
     try:
         from .main import _lavalink_health_check  # type: ignore
         import asyncio
 
-        asyncio.run(_lavalink_health_check())
+        healthy, failure_reason = asyncio.run(_lavalink_health_check())
     except Exception as exc:  # pragma: no cover - optional diagnostics
-        _echo(f"Lavalink health check failed: {exc}")
+        raise CommandError(f"Lavalink health check failed: {exc}") from exc
+
+    if not healthy:
+        detail = f": {failure_reason}" if failure_reason else ""
+        raise CommandError(f"Lavalink health check failed{detail}")
+
     _echo("Configuration looks good.")
 
 
