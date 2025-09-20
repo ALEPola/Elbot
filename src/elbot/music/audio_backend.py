@@ -161,22 +161,44 @@ class LavalinkAudioBackend:
         if self._node is None:
             raise LavalinkUnavailable("Lavalink node is not ready")
 
-        identifier = query
-        if prefer_search and not query.startswith("http"):
-            identifier = f"ytsearch:{query}"
+        search_type = os.getenv("LAVALINK_SEARCH_TYPE", "ytsearch").strip() or "ytsearch"
+
+        legacy_mode = hasattr(self._node, "get_tracks")
+        detail = "load_type=unknown"
+        tracks: Iterable[mafic.Track]
+        fetch_result: mafic.Playlist | list[mafic.Track] | None = None
 
         try:
-            load_result = await self._node.get_tracks(identifier)
+            if legacy_mode:
+                identifier = query
+                if prefer_search and not query.startswith("http"):
+                    identifier = f"{search_type}:{query}"
+                load_result = await self._node.get_tracks(identifier)
+                tracks = getattr(load_result, "tracks", [])
+                load_type = getattr(load_result, "load_type", "unknown")
+                message = getattr(load_result, "exception", None)
+                if message:
+                    message = getattr(message, "message", str(message))
+                detail = f"load_type={load_type}"
+                if message:
+                    detail = f"{detail} message={message!s}"
+            else:
+                fetch_result = await self._node.fetch_tracks(query, search_type=search_type)
         except Exception as exc:  # pragma: no cover - network errors
             raise TrackLoadFailure("Failed to communicate with Lavalink", cause=exc) from exc
 
-        tracks: Iterable[mafic.Track] = getattr(load_result, "tracks", [])
+        if not legacy_mode:
+            if isinstance(fetch_result, mafic.Playlist):
+                tracks = fetch_result.tracks
+                detail = f"load_type=PLAYLIST name={fetch_result.name!s}"
+            elif fetch_result is None:
+                tracks = []
+                detail = "load_type=NO_MATCHES"
+            else:
+                tracks = fetch_result
+                detail = "load_type=TRACKS"
+
         if not tracks:
-            load_type = getattr(load_result, "load_type", "unknown")
-            message = getattr(load_result, "exception", None)
-            if message:
-                message = getattr(message, "message", str(message))
-            detail = f"load_type={load_type} message={message!s}" if message else f"load_type={load_type}"
             raise TrackLoadFailure(f"No tracks returned ({detail})")
 
         return [TrackHandle.from_mafic(track) for track in tracks]
