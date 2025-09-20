@@ -45,6 +45,7 @@ class GuildState:
     now_playing: Optional[QueuedTrack] = None
     player: Optional[mafic.Player] = None
     last_channel_id: Optional[int] = None
+    now_playing_message: Optional[nextcord.Message] = None
 
 
 class Music(commands.Cog):
@@ -95,6 +96,7 @@ class Music(commands.Cog):
                 await state.player.disconnect(force=True)
             except Exception:  # pragma: no cover - defensive cleanup
                 pass
+        await self._clear_now_playing_message(state)
         self._states.pop(guild_id, None)
 
     async def _ensure_voice(self, interaction: nextcord.Interaction) -> tuple[Optional[mafic.Player], Optional[str]]:
@@ -233,13 +235,30 @@ class Music(commands.Cog):
             except Exception:  # pragma: no cover - network failure
                 return
         if isinstance(channel, nextcord.abc.Messageable):
+            await self._clear_now_playing_message(state)
             embed = self.embed_factory.now_playing(track, position=0, eta_ms=0)
-            await channel.send(embed=embed)
+            message = await channel.send(embed=embed)
+            state.now_playing_message = message
+
+    async def _clear_now_playing_message(self, state: GuildState) -> None:
+        message = state.now_playing_message
+        if not message:
+            return
+        state.now_playing_message = None
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+    async def _cleanup_idle(self, state: GuildState) -> None:
+        if state.now_playing is None and len(state.queue) == 0:
+            await self._clear_now_playing_message(state)
 
     async def _ensure_playing(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         if state.now_playing is None:
             await self._begin_playback(guild_id)
+        await self._cleanup_idle(state)
 
     async def _stop(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
@@ -250,6 +269,7 @@ class Music(commands.Cog):
                 await state.player.stop()
             except Exception:
                 pass
+        await self._clear_now_playing_message(state)
 
     # ------------------------------------------------------------------
     # Slash commands
