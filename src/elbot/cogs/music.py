@@ -235,22 +235,10 @@ class Music(commands.Cog):
             except Exception:  # pragma: no cover - network failure
                 return
         if isinstance(channel, nextcord.abc.Messageable):
+            await self._clear_now_playing_message(state)
             embed = self.embed_factory.now_playing(track, position=0, eta_ms=0)
-            message = state.now_playing_message
-            if message and getattr(message, 'channel', None) and message.channel.id != channel.id:
-                await self._clear_now_playing_message(state)
-                message = None
-            if message:
-                try:
-                    await message.edit(embed=embed)
-                    return
-                except Exception:
-                    await self._clear_now_playing_message(state)
-                    message = None
-            try:
-                state.now_playing_message = await channel.send(embed=embed)
-            except Exception:
-                pass
+            message = await channel.send(embed=embed)
+            state.now_playing_message = message
 
     async def _clear_now_playing_message(self, state: GuildState) -> None:
         message = state.now_playing_message
@@ -288,7 +276,7 @@ class Music(commands.Cog):
     # ------------------------------------------------------------------
     @nextcord.slash_command(name="play", description="Play a YouTube track")
     async def play(self, interaction: nextcord.Interaction, query: str) -> None:
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(ephemeral=True)
         player, error = await self._ensure_voice(interaction)
         if error:
             await safe_reply(

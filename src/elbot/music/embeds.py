@@ -32,13 +32,9 @@ class EmbedFactory:
 
     def now_playing(self, track: QueuedTrack, *, position: int = 0, eta_ms: int = 0) -> nextcord.Embed:
         info = track.handle
-        title = info.title or track.query or "Unknown title"
-        if title.lower().startswith("unknown") and track.query:
-            title = track.query
-        author = info.author or track.fallback_source or "Unknown"
         embed = nextcord.Embed(title="Now Playing", color=self.color)
-        embed.description = f"[{title}]({info.uri or track.query})"
-        embed.add_field(name="Channel", value=author, inline=True)
+        embed.description = f"[{info.title}]({info.uri or track.query})"
+        embed.add_field(name="Channel", value=info.author or "Unknown", inline=True)
         embed.add_field(name="Duration", value=_format_duration(info.duration), inline=True)
         embed.add_field(name="Requested by", value=track.requester_display, inline=True)
         embed.add_field(name="Queue position", value=str(position), inline=True)
@@ -48,13 +44,9 @@ class EmbedFactory:
 
     def queued(self, track: QueuedTrack, *, position: int, eta_ms: int) -> nextcord.Embed:
         info = track.handle
-        title = info.title or track.query or "Unknown title"
-        if title.lower().startswith("unknown") and track.query:
-            title = track.query
-        author = info.author or track.fallback_source or "Unknown"
         embed = nextcord.Embed(title="Track queued", color=self.color)
-        embed.description = f"[{title}]({info.uri or track.query})"
-        embed.add_field(name="Channel", value=author, inline=True)
+        embed.description = f"[{info.title}]({info.uri or track.query})"
+        embed.add_field(name="Channel", value=info.author or "Unknown", inline=True)
         embed.add_field(name="Duration", value=_format_duration(info.duration), inline=True)
         embed.add_field(name="Queue position", value=str(position), inline=True)
         embed.add_field(name="Estimated time", value=_format_eta(eta_ms), inline=True)
@@ -72,13 +64,9 @@ class EmbedFactory:
     ) -> nextcord.Embed:
         embed = nextcord.Embed(title="Queue", color=self.color)
         if now_playing:
-            np_handle = now_playing.handle
-            np_title = np_handle.title or now_playing.query or "Unknown title"
-            if np_title.lower().startswith("unknown") and now_playing.query:
-                np_title = now_playing.query
             embed.add_field(
                 name="Now Playing",
-                value=f"[{np_title}]({np_handle.uri or now_playing.query})",
+                value=f"[{now_playing.handle.title}]({now_playing.handle.uri or now_playing.query})",
                 inline=False,
             )
         if not tracks:
@@ -87,15 +75,11 @@ class EmbedFactory:
             lines: List[str] = []
             for index, track in enumerate(tracks, start=1 + page * per_page):
                 info = track.handle
-                title = info.title or track.query or "Unknown title"
-                if title.lower().startswith("unknown") and track.query:
-                    title = track.query
                 duration = _format_duration(info.duration)
-                lines.append(f"`{index}.` [{title}]({info.uri or track.query}) - {duration}")
+                lines.append(f"`{index}.` [{info.title}]({info.uri or track.query}) — {duration}")
             embed.description = "\n".join(lines)
         embed.set_footer(text=f"Page {page + 1}/{max(1, (total + per_page - 1) // per_page)}")
         return embed
-
 
     def failure(self, message: str) -> nextcord.Embed:
         return nextcord.Embed(title="Playback failed", description=message, color=0xFF5555)
