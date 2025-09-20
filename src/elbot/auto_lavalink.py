@@ -153,8 +153,8 @@ def _ensure_jar() -> None:
         urllib.request.urlretrieve(LAVALINK_URL, JAR)
 
 
-def _write_conf(port: int, password: str) -> None:
-
+def _write_conf(port: int, password: str, bind_address: str | None = None) -> None:
+    address_line = f"    address: \"{bind_address}\"\n" if bind_address else ""
 
     CONF.write_text(
         f"""
@@ -163,7 +163,8 @@ lavalink:
     - dependency: "dev.lavalink.youtube:youtube-plugin:{YOUTUBE_PLUGIN_VERSION}"
       snapshot: false
   server:
-    password: "{password}"
+    port: {port}
+{address_line}    password: "{password}"
     sources:
       youtube: false
       soundcloud: true
@@ -213,7 +214,11 @@ def start() -> tuple[int, str]:
     port = wanted if wanted > 0 else _find_free_port()
     password = os.getenv("LAVALINK_PASSWORD", DEFAULT_PW)
 
-    _write_conf(port, password)
+    bind_address_env = os.getenv("LAVALINK_BIND_ADDRESS")
+    host_env = os.getenv("LAVALINK_HOST")
+    listen_address = bind_address_env or host_env or "127.0.0.1"
+
+    _write_conf(port, password, listen_address)
 
     env = os.environ.copy()
     BASE.mkdir(parents=True, exist_ok=True)
@@ -262,11 +267,15 @@ def start() -> tuple[int, str]:
             tail = "<no log available>"
         raise RuntimeError("Lavalink failed healthcheck (/version). Recent log:\n" + tail)
 
-    os.environ["LAVALINK_HOST"] = "127.0.0.1"
+    connect_host = host_env or listen_address
+    if connect_host in {"0.0.0.0", "::"}:
+        connect_host = "127.0.0.1"
+
+    os.environ["LAVALINK_HOST"] = connect_host
     os.environ["LAVALINK_PORT"] = str(port)
     os.environ["LAVALINK_PASSWORD"] = password
 
-    print(f"[auto-lavalink] Ready on 127.0.0.1:{port}")
+    print(f"[auto-lavalink] Ready on {connect_host}:{port}")
     atexit.register(stop)
     try:
         signal.signal(signal.SIGTERM, lambda *_: stop())
