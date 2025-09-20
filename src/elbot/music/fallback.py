@@ -127,20 +127,35 @@ class FallbackPlayer:
     ) -> QueuedTrack:
         self.metrics.incr_fallback()
         info = await self._extract_with_yt_dlp(query, base_error=base_error)
-        stream_url = info.get("url") or info.get("webpage_url")
-        if not stream_url:
+        sources_to_try = []
+        primary_stream = info.get("url")
+        webpage = info.get("webpage_url")
+        if primary_stream:
+            sources_to_try.append(primary_stream)
+        if webpage and webpage not in sources_to_try:
+            sources_to_try.append(webpage)
+
+        if not sources_to_try:
             self.metrics.incr_failed()
             raise TrackLoadFailure("yt-dlp did not yield a usable stream", cause=base_error)
 
-        try:
-            handle = await self.backend.resolve_tracks(stream_url, prefer_search=False)
-        except TrackLoadFailure as exc:
-            self.metrics.incr_failed()
-            raise TrackLoadFailure("Fallback stream failed to load", cause=exc)
+        last_error: Optional[TrackLoadFailure] = None
+        handle = []
+        for candidate in sources_to_try:
+            try:
+                handle = await self.backend.resolve_tracks(candidate, prefer_search=False)
+            except TrackLoadFailure as exc:
+                last_error = exc
+                continue
+            if handle:
+                break
 
         if not handle:
             self.metrics.incr_failed()
-            raise TrackLoadFailure("Fallback stream returned no tracks", cause=base_error)
+            raise TrackLoadFailure(
+                "Fallback stream failed to load",
+                cause=last_error or base_error,
+            )
 
         track_handle = handle[0]
         entry = self._build_entry(
@@ -212,4 +227,5 @@ class FallbackPlayer:
             fallback_source=fallback_source,
         )
         return entry
+
 
