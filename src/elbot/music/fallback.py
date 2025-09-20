@@ -140,17 +140,28 @@ class FallbackPlayer:
             raise TrackLoadFailure("yt-dlp did not yield a usable stream", cause=base_error)
 
         last_error: Optional[TrackLoadFailure] = None
-        handle = []
+        selected_source: Optional[str] = None
+        handle: list[TrackHandle] | list = []
         for candidate in sources_to_try:
             try:
                 handle = await self.backend.resolve_tracks(candidate, prefer_search=False)
             except TrackLoadFailure as exc:
                 last_error = exc
+                self.logger.warning(
+                    "Fallback candidate failed",
+                    extra={"candidate": candidate, "error": str(exc)},
+                )
                 continue
-            if handle:
-                break
+            if not handle:
+                self.logger.warning(
+                    "Fallback candidate produced no tracks",
+                    extra={"candidate": candidate},
+                )
+                continue
+            selected_source = candidate
+            break
 
-        if not handle:
+        if not handle or selected_source is None:
             self.metrics.incr_failed()
             raise TrackLoadFailure(
                 "Fallback stream failed to load",
@@ -165,7 +176,7 @@ class FallbackPlayer:
             requester_display=requester_display,
             channel_id=channel_id,
             is_fallback=True,
-            fallback_source=stream_url,
+            fallback_source=selected_source,
         )
         return entry
 

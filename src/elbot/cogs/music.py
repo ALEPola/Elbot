@@ -207,7 +207,7 @@ class Music(commands.Cog):
     # ------------------------------------------------------------------
     @nextcord.slash_command(name="play", description="Play a YouTube track")
     async def play(self, interaction: nextcord.Interaction, query: str) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         player, error = await self._ensure_voice(interaction)
         if error:
             await safe_reply(
@@ -229,6 +229,9 @@ class Music(commands.Cog):
                 )
             except TrackLoadFailure as exc:
                 self.metrics.incr_failed()
+                self.logger.error('Track load failure', exc_info=exc)
+                if getattr(exc, 'cause', None):
+                    self.logger.error('Underlying cause: %s', exc.cause)
                 await safe_reply(
                     interaction,
                     embed=self.embed_factory.failure(str(exc)),
@@ -249,7 +252,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="skip", description="Skip the current track")
     async def skip(self, interaction: nextcord.Interaction) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -273,7 +276,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="stop", description="Stop playback and clear the queue")
     async def stop(self, interaction: nextcord.Interaction) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -287,7 +290,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="queue", description="Show the current queue")
     async def show_queue(self, interaction: nextcord.Interaction) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -320,7 +323,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="remove", description="Remove a queued track")
     async def remove(self, interaction: nextcord.Interaction, target: str) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -363,7 +366,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="move", description="Move a track to a different position")
     async def move(self, interaction: nextcord.Interaction, source: int, destination: int) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -381,7 +384,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="shuffle", description="Shuffle the queue")
     async def shuffle(self, interaction: nextcord.Interaction) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -396,7 +399,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="replay", description="Replay the last played track")
     async def replay(self, interaction: nextcord.Interaction) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
             await safe_reply(
@@ -422,7 +425,7 @@ class Music(commands.Cog):
 
     @nextcord.slash_command(name="ytcheck", description="Show YouTube stack diagnostics")
     async def ytcheck(self, interaction: nextcord.Interaction) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         try:
             report = await self.diagnostics.collect()
         except Exception as exc:  # pragma: no cover - diagnostics failure
