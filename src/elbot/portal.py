@@ -27,7 +27,7 @@ from openai import OpenAI
 from .core import auto_update
 from .config import Config
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Config.BASE_DIR
 ENV_FILE = ROOT_DIR / '.env'
 LOG_FILE = ROOT_DIR / 'logs' / 'elbot.log'
 UPDATE_LOG_FILE = ROOT_DIR / 'logs' / 'update.log'

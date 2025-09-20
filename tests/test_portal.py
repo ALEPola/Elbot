@@ -1,14 +1,23 @@
 import importlib
+import subprocess
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-import subprocess
 
 
+from elbot import config as elbot_config
 from elbot import portal
 
 
-def make_client(monkeypatch, *, check_output=None, run=None):
+def make_client(monkeypatch, *, check_output=None, run=None, root_dir=None, env_file=None):
     importlib.reload(portal)
+    if root_dir is None:
+        root_dir = Path(tempfile.mkdtemp(prefix="portal-root-"))
+    if env_file is None:
+        env_file = root_dir / ".env"
+
+    monkeypatch.setattr(portal, "ROOT_DIR", root_dir)
+    monkeypatch.setattr(portal, "ENV_FILE", env_file)
     monkeypatch.setattr(portal, "LOG_FILE", Path(__file__))
     monkeypatch.setattr(portal, "UPDATE_LOG_FILE", Path(__file__))
     monkeypatch.setattr(portal, "AUTO_UPDATE_LOG_FILE", Path(__file__))
@@ -31,6 +40,18 @@ def make_client(monkeypatch, *, check_output=None, run=None):
         monkeypatch.setattr(subprocess, "run", run)
     portal.app.config["TESTING"] = True
     return portal.app.test_client()
+
+
+def test_is_configured_uses_project_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(elbot_config.Config, "BASE_DIR", tmp_path)
+    importlib.reload(portal)
+
+    env_path = tmp_path / ".env"
+    env_path.write_text("DISCORD_TOKEN=abc\n", encoding="utf-8")
+
+    assert portal.ROOT_DIR == tmp_path
+    assert portal.ENV_FILE == env_path
+    assert portal._is_configured() is True
 
 
 def test_index(monkeypatch):
