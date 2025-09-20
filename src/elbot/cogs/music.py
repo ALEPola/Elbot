@@ -148,6 +148,48 @@ class Music(commands.Cog):
             eta += entry.handle.duration
         return eta
 
+    def _track_log_context(
+        self,
+        guild_id: int,
+        entry: Optional[QueuedTrack],
+        track: Optional[mafic.Track] = None,
+    ) -> dict[str, object]:
+        context: dict[str, object] = {"guild_id": guild_id}
+        handle = entry.handle if entry else None
+
+        if entry is not None:
+            context["is_fallback"] = entry.is_fallback
+            if entry.fallback_source:
+                context["fallback_source"] = entry.fallback_source
+            context["track_query"] = entry.query
+
+        if handle is not None:
+            context.update(
+                {
+                    "track_title": handle.title,
+                    "track_author": handle.author,
+                    "track_source": handle.source,
+                    "track_duration": handle.duration,
+                    "track_uri": handle.uri,
+                }
+            )
+            try:
+                context.setdefault("track_identifier", getattr(handle.track, "identifier", None))
+                context.setdefault("track_id", getattr(handle.track, "id", None))
+            except AttributeError:
+                pass
+
+        if track is not None:
+            context.setdefault("track_title", getattr(track, "title", None))
+            context.setdefault("track_author", getattr(track, "author", None))
+            context.setdefault("track_source", getattr(track, "source", None))
+            context.setdefault("track_duration", getattr(track, "length", None))
+            context.setdefault("track_uri", getattr(track, "uri", None))
+            context.setdefault("track_identifier", getattr(track, "identifier", None))
+            context.setdefault("track_id", getattr(track, "id", None))
+
+        return context
+
     async def _begin_playback(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         player = state.player
@@ -161,12 +203,13 @@ class Music(commands.Cog):
         state.now_playing = next_track
         try:
             await player.play(next_track.handle.track)
-            self.logger.info("Playback started", extra={
-                "guild_id": guild_id,
-                "track_title": next_track.handle.title,
-                "track_source": next_track.handle.source,
-                "track_duration": next_track.handle.duration,
-            })
+            context = self._track_log_context(guild_id, next_track)
+            self.logger.info(
+                "Playback started: %s (%s)",
+                next_track.handle.title,
+                next_track.handle.source,
+                extra=context,
+            )
             self.metrics.incr_started()
             await self._announce_now_playing(guild_id)
         except Exception as exc:  # pragma: no cover - network errors
@@ -463,17 +506,26 @@ class Music(commands.Cog):
         state = self._states.get(guild_id)
         if not state:
             return
+        current_entry = state.now_playing
+        track_obj = getattr(event, 'track', None) or getattr(event.player, 'current', None)
+        context = self._track_log_context(guild_id, current_entry, track_obj)
+        reason = event.reason or 'UNKNOWN'
+        context['end_reason'] = reason
+        title = context.get('track_title') or 'unknown track'
         state.now_playing = None
-        if event.reason and event.reason != 'FINISHED':
-            self.logger.warning("Track ended early", extra={
-                "guild_id": guild_id,
-                "reason": event.reason,
-            })
+        if reason != 'FINISHED':
+            self.logger.warning(
+                'Track ended early (%s): %s',
+                reason,
+                title,
+                extra=context,
+            )
         else:
-            self.logger.info("Track finished", extra={
-                "guild_id": guild_id,
-                "reason": event.reason,
-            })
+            self.logger.info(
+                'Track finished: %s',
+                title,
+                extra=context,
+            )
         await self._ensure_playing(guild_id)
 
     @commands.Cog.listener()
@@ -482,11 +534,19 @@ class Music(commands.Cog):
         state = self._states.get(guild_id)
         if not state:
             return
+        current_entry = state.now_playing
+        track_obj = getattr(event, 'track', None) or getattr(event.player, 'current', None)
+        context = self._track_log_context(guild_id, current_entry, track_obj)
+        exception = event.exception
+        message = getattr(exception, 'message', None) or str(exception)
+        severity = getattr(exception, 'severity', None) or 'unknown'
+        cause = getattr(exception, 'cause', None)
+        context['exception_message'] = message
+        context['exception_severity'] = getattr(exception, 'severity', None)
+        if cause is not None:
+            context['exception_cause'] = str(cause)
         self.metrics.incr_failed()
-        self.logger.error("Track raised exception", extra={
-            "guild_id": guild_id,
-            "exception": str(event.exception),
-        })
+        self.logger.error('Track exception [%s]: %s', severity, message, extra=context)
         state.now_playing = None
         await self._ensure_playing(guild_id)
 
@@ -496,13 +556,17 @@ class Music(commands.Cog):
         state = self._states.get(guild_id)
         if not state:
             return
+        current_entry = state.now_playing
+        track_obj = getattr(event, 'track', None) or getattr(event.player, 'current', None)
+        context = self._track_log_context(guild_id, current_entry, track_obj)
+        threshold = getattr(event, 'threshold', None)
+        context['threshold_ms'] = threshold
+        title = context.get('track_title') or 'unknown track'
         self.metrics.incr_failed()
-        self.logger.warning("Track stuck", extra={
-            "guild_id": guild_id,
-            "threshold": event.threshold,
-        })
+        self.logger.warning('Track stuck at %s ms: %s', threshold, title, extra=context)
         state.now_playing = None
         await self._ensure_playing(guild_id)
+
 
 
 def setup(bot: commands.Bot) -> None:
