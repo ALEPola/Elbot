@@ -161,6 +161,12 @@ class Music(commands.Cog):
         state.now_playing = next_track
         try:
             await player.play(next_track.handle.track)
+            self.logger.info("Playback started", extra={
+                "guild_id": guild_id,
+                "track_title": next_track.handle.title,
+                "track_source": next_track.handle.source,
+                "track_duration": next_track.handle.duration,
+            })
             self.metrics.incr_started()
             await self._announce_now_playing(guild_id)
         except Exception as exc:  # pragma: no cover - network errors
@@ -458,6 +464,16 @@ class Music(commands.Cog):
         if not state:
             return
         state.now_playing = None
+        if event.reason and event.reason != 'FINISHED':
+            self.logger.warning("Track ended early", extra={
+                "guild_id": guild_id,
+                "reason": event.reason,
+            })
+        else:
+            self.logger.info("Track finished", extra={
+                "guild_id": guild_id,
+                "reason": event.reason,
+            })
         await self._ensure_playing(guild_id)
 
     @commands.Cog.listener()
@@ -467,6 +483,10 @@ class Music(commands.Cog):
         if not state:
             return
         self.metrics.incr_failed()
+        self.logger.error("Track raised exception", extra={
+            "guild_id": guild_id,
+            "exception": str(event.exception),
+        })
         state.now_playing = None
         await self._ensure_playing(guild_id)
 
@@ -477,6 +497,10 @@ class Music(commands.Cog):
         if not state:
             return
         self.metrics.incr_failed()
+        self.logger.warning("Track stuck", extra={
+            "guild_id": guild_id,
+            "threshold": event.threshold,
+        })
         state.now_playing = None
         await self._ensure_playing(guild_id)
 
