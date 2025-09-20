@@ -97,6 +97,29 @@ class FallbackPlayer:
             self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return fallback_entry
 
+    async def build_fallback_entry(
+        self,
+        query: str,
+        *,
+        requested_by: int,
+        requester_display: str,
+        channel_id: int,
+        base_error: TrackLoadFailure,
+    ) -> QueuedTrack:
+        """Directly build a fallback entry without retrying Lavalink."""
+
+        self.logger.info(
+            "Attempting direct fallback resolution",
+            extra={"query": query, "requested_by": requested_by},
+        )
+        return await self._resolve_fallback(
+            query,
+            requested_by=requested_by,
+            requester_display=requester_display,
+            channel_id=channel_id,
+            base_error=base_error,
+        )
+
     async def _resolve_lavalink(self, query: str, *, prefer_search: bool) -> TrackHandle:
         """Attempt to resolve using Lavalink with retries."""
 

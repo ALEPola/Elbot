@@ -567,6 +567,32 @@ class Music(commands.Cog):
             context['exception_cause'] = str(cause)
         self.metrics.incr_failed()
         self.logger.error('Track exception [%s]: %s', severity, message, extra=context)
+
+        if current_entry and not current_entry.is_fallback:
+            base_error = TrackLoadFailure(message, cause=exception if isinstance(exception, Exception) else None)
+            try:
+                fallback_entry = await self.fallback.build_fallback_entry(
+                    current_entry.query,
+                    requested_by=current_entry.requested_by,
+                    requester_display=current_entry.requester_display,
+                    channel_id=current_entry.channel_id,
+                    base_error=base_error,
+                )
+            except TrackLoadFailure as fallback_exc:
+                context['fallback_error'] = str(fallback_exc)
+                self.logger.error('Fallback resolution failed', extra=context)
+                state.now_playing = None
+                await self._ensure_playing(guild_id)
+                return
+            else:
+                context_fallback = self._track_log_context(guild_id, fallback_entry)
+                context_fallback['fallback_trigger'] = 'track_exception'
+                self.logger.info('Switching to fallback stream', extra=context_fallback)
+                state.now_playing = None
+                state.queue.add_next(fallback_entry)
+                await self._ensure_playing(guild_id)
+                return
+
         state.now_playing = None
         await self._ensure_playing(guild_id)
 
@@ -584,6 +610,32 @@ class Music(commands.Cog):
         title = context.get('track_title') or 'unknown track'
         self.metrics.incr_failed()
         self.logger.warning('Track stuck at %s ms: %s', threshold, title, extra=context)
+
+        if current_entry and not current_entry.is_fallback:
+            base_error = TrackLoadFailure(f'Track stuck after {threshold} ms', cause=None)
+            try:
+                fallback_entry = await self.fallback.build_fallback_entry(
+                    current_entry.query,
+                    requested_by=current_entry.requested_by,
+                    requester_display=current_entry.requester_display,
+                    channel_id=current_entry.channel_id,
+                    base_error=base_error,
+                )
+            except TrackLoadFailure as fallback_exc:
+                context['fallback_error'] = str(fallback_exc)
+                self.logger.error('Fallback resolution failed after track stuck', extra=context)
+                state.now_playing = None
+                await self._ensure_playing(guild_id)
+                return
+            else:
+                context_fallback = self._track_log_context(guild_id, fallback_entry)
+                context_fallback['fallback_trigger'] = 'track_stuck'
+                self.logger.info('Switching to fallback stream', extra=context_fallback)
+                state.now_playing = None
+                state.queue.add_next(fallback_entry)
+                await self._ensure_playing(guild_id)
+                return
+
         state.now_playing = None
         await self._ensure_playing(guild_id)
 
