@@ -355,7 +355,10 @@ def start() -> tuple[int, str]:
     if reported_version:
         _warn_if_version_exceeds(reported_version)
 
-    os.environ["LAVALINK_HOST"] = "127.0.0.1"
+    connect_host = os.getenv("LAVALINK_HOST", "0.0.0.0")
+    if connect_host == "0.0.0.0":
+        connect_host = "127.0.0.1"
+    os.environ["LAVALINK_HOST"] = connect_host
     os.environ["LAVALINK_PORT"] = str(port)
     os.environ["LAVALINK_PASSWORD"] = password
 
