@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+import inspect
 from typing import Iterable, List, Optional
 
 os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
@@ -108,14 +109,18 @@ class LavalinkAudioBackend:
                 "Connecting to Lavalink", extra={"host": host, "port": port, "secure": secure}
             )
 
-            node = await self._pool.create_node(
+            create_params = inspect.signature(self._pool.create_node).parameters
+            node_kwargs = dict(
                 host=host,
                 port=port,
                 label=self.identifier,
                 password=password,
                 secure=secure,
-                session_id=session_id,
             )
+            if "session_id" in create_params:
+                node_kwargs["session_id"] = session_id
+
+            node = await self._pool.create_node(**node_kwargs)
             self._node = node
             self._ready.set()
 
@@ -181,4 +186,3 @@ class LavalinkAudioBackend:
             raise LavalinkUnavailable("Lavalink node is not ready")
         track = await self._node.decode_track(encoded)
         return TrackHandle.from_mafic(track)
-
