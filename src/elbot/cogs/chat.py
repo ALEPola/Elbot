@@ -75,7 +75,7 @@ class ChatCog(commands.Cog):
         """
         Respond to a user's message, with a per-user rate limit.
         """
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         user_id = interaction.user.id
         now = time.monotonic()
         last = self.user_last_interaction.get(user_id, 0)
@@ -130,7 +130,7 @@ class ChatCog(commands.Cog):
 
     @nextcord.slash_command(name="chat_reset", description="Clear chat history")
     async def chat_reset(self, interaction: nextcord.Interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         self.histories.pop(interaction.user.id, None)
         history_file = self.history_dir / f"{interaction.user.id}.json"
         try:
@@ -144,7 +144,7 @@ class ChatCog(commands.Cog):
     @nextcord.slash_command(name="chat_summary", description="Summarize recent chat")
     async def chat_summary(self, interaction: nextcord.Interaction):
         """Summarize the persisted conversation with the user."""
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(with_message=True, ephemeral=True)
         user_id = interaction.user.id
         history = self._load_history(user_id)
         if not history:

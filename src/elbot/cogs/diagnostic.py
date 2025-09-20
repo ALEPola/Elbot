@@ -27,7 +27,7 @@ class DiagnosticCog(commands.Cog):
         """
         Report how long the bot has been running.
         """
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         now = time.time()
         uptime_seconds = now - self.start_time
         hours, remainder = divmod(int(uptime_seconds), 3600)
@@ -40,7 +40,7 @@ class DiagnosticCog(commands.Cog):
         """
         Return the current bot latency in milliseconds.
         """
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         latency_ms = round(self.bot.latency * 1000)
         await safe_reply(interaction, f"🏓 Latency: {latency_ms}ms")
 
@@ -49,7 +49,7 @@ class DiagnosticCog(commands.Cog):
         """
         Show which cogs are currently loaded.
         """
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         loaded = list(self.bot.cogs.keys())
         if not loaded:
             await safe_reply(interaction, "No cogs are currently loaded.")
@@ -64,7 +64,7 @@ class DiagnosticCog(commands.Cog):
         """
         Report OS, CPU, and total RAM.
         """
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
         system = platform.system()
         release = platform.release()
         cpu = platform.processor()

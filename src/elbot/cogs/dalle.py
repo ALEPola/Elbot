@@ -30,7 +30,7 @@ class ImageCog(commands.Cog):
         # you can check `if interaction.guild.id != Config.GUILD_ID` at runtime and reject it.
     )
     async def generate_image(self, interaction: nextcord.Interaction, prompt: str):
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(with_message=True)
 
         # Optional: if you really want to restrict to one guild:
         if (
