@@ -10,6 +10,7 @@ Regardless of platform you need:
 - Java 17+ JRE (required for Lavalink)
 - `ffmpeg` available on your PATH (or set `FFMPEG_PATH` in `.env`)
 - A Discord bot token and optional OpenAI API key if you intend to use chat and image commands
+- (Recommended) A fresh YouTube cookies export if you plan to run large queues or 24/7 playback—configure `YT_COOKIES_FILE` to avoid `429` throttling. Follow the [yt-dlp cookies guide](https://github.com/yt-dlp/yt-dlp/wiki/How-to-use-your-own-YouTube-Cookies) to create the file.
 
 Platform-specific notes:
 
@@ -145,11 +146,12 @@ By default the portal listens on http://localhost:8000. Set the `PORT` environme
 
 ## 8. Troubleshooting
 
-- **Voice playback fails** � confirm `ffmpeg` is installed and accessible. Set `FFMPEG_PATH` if it lives outside `PATH`.
-- **Lavalink not available** � ensure Java 17 is installed or let `AUTO_LAVALINK=1` download and run the bundled server.
-- **Slash commands missing** � invite the bot with the `applications.commands` scope and wait a few minutes for global registration.
-- **Permission errors on Linux/macOS** � run the scripts with `sudo` only when prompted to install system packages. The bot itself should run as your regular user.
-- **Port 2333 already in use** � check for listeners with `sudo lsof -i :2333` or `sudo ss -tulpn | grep 2333`. Stop stray Lavalink instances with `sudo pkill -f 'java.*Lavalink.jar'` (or `sudo kill $(pgrep -f 'java.*Lavalink.jar')`).
+- **Voice playback fails** – confirm `ffmpeg` is installed and accessible. Set `FFMPEG_PATH` if it lives outside `PATH`.
+- **Lavalink not available** – ensure Java 17 is installed or let `AUTO_LAVALINK=1` download and run the bundled server.
+- **Slash commands missing** – invite the bot with the `applications.commands` scope and wait a few minutes for global registration.
+- **Permission errors on Linux/macOS** – run the scripts with `sudo` only when prompted to install system packages. The bot itself should run as your regular user.
+- **Port 2333 already in use** – check for listeners with `sudo lsof -i :2333` or `sudo ss -tulpn | grep 2333`. Stop stray Lavalink instances with `sudo pkill -f 'java.*Lavalink.jar'` (or `sudo kill $(pgrep -f 'java.*Lavalink.jar')`).
+- **Frequent YouTube 429 errors on long sessions** – export fresh cookies from a logged-in browser profile and set `YT_COOKIES_FILE` so Lavalink and yt-dlp reuse an authenticated session instead of anonymous scraping.
 
 If you run into platform-specific issues, open an issue with details about your OS, Python version and any error logs.
 
