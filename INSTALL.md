@@ -122,11 +122,13 @@ Provide configuration via environment variables or bind-mount a `.env` file.
 
 ## 5. Configuration
 
-1. Copy `.env.example` to `.env` if the installer did not create one.
-2. Fill the required values:
-   - `DISCORD_TOKEN`
-   - `OPENAI_API_KEY` (optional but required for `/chat` and `/dalle`)
-3. Adjust optional settings such as `COMMAND_PREFIX`, `AUTO_LAVALINK`, `ICS_URL`, `LOCAL_TIMEZONE`, and Lavalink credentials if you host your own node.
+- Run the guided wizard (`./infra/scripts/install.sh` or `elbotctl install`) so it copies `.env.example` to `.env` in the project root and records your answers.
+- The packaged `elbot.service` unit reads secrets from `.env` via `EnvironmentFile`, so never hard-code tokens inside the unit file itself.
+- If you edit `.env` on Windows, run `dos2unix .env` (or an equivalent) before reinstalling the service so the file keeps Unix `\n` newlines.
+- Ensure the required values are present:
+  - `DISCORD_TOKEN`
+  - `OPENAI_API_KEY` (optional but required for `/chat` and `/dalle`)
+- Adjust optional settings such as `COMMAND_PREFIX`, `AUTO_LAVALINK`, `ICS_URL`, `LOCAL_TIMEZONE`, and Lavalink credentials if you host your own node.
 
 Whenever you change `.env`, restart the bot.
 

@@ -34,8 +34,8 @@ def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> N
     service_file = SYSTEMD_SERVICE_FILE
     python = sys.executable
     user = os.getenv("SUDO_USER") or os.getenv("USER", "root")
-    token = os.getenv("DISCORD_TOKEN", "YOUR_REAL_TOKEN")
     ffmpeg = os.getenv("FFMPEG_PATH") or shutil.which("ffmpeg") or "ffmpeg"
+    env_file = root_dir / ".env"
     unit = """[Unit]
 Description=Elbot Discord Bot
 After=network-online.target
@@ -54,8 +54,8 @@ Wants=network-online.target"""
 [Service]
 User={user}
 WorkingDirectory={root_dir}
+EnvironmentFile={env_file}
 Environment=AUTO_LAVALINK=1
-Environment=DISCORD_TOKEN={token}
 Environment=FFMPEG_PATH={ffmpeg}
 # Environment=LAVALINK_PASSWORD=changeme
 # Environment=LAVALINK_PORT=2333
@@ -159,7 +159,7 @@ def uninstall_launchd_service() -> None:
 def main() -> None:
     remove = "--remove" in sys.argv
     require_lavalink = "--require-lavalink" in sys.argv
-    root_dir = Path(__file__).resolve().parents[1]
+    root_dir = Path(__file__).resolve().parents[2]
     system = platform.system().lower()
     if os.name == "nt":
         if remove:
