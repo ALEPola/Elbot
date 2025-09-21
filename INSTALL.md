@@ -74,9 +74,11 @@ python -m elbot.main
 To install or manage the service later use:
 
 ```bash
-elbotctl service install --require-lavalink
+elbotctl service install --require-lavalink  # Falls back gracefully if Lavalink isn't registered yet
 elbotctl service status
 ```
+
+When a Lavalink unit file is present the installer still wires Elbot to require it so ordering guarantees remain intact.
 
 Run `elbotctl service remove` to uninstall it.
 
