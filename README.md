@@ -125,10 +125,12 @@ elbotctl run
 
 ### Background Service
 ```bash
-elbotctl service install --require-lavalink
+elbotctl service install --require-lavalink  # Coordinates with Lavalink when available
 elbotctl service start
 elbotctl service status
 ```
+
+The installer keeps the strict dependency when a `lavalink.service` unit file is registered so startup ordering still works.
 
 ### Docker Compose
 ```bash

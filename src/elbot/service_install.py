@@ -6,8 +6,32 @@ import os
 import platform
 
 
+SYSTEMD_SERVICE_FILE = Path("/etc/systemd/system/elbot.service")
+LAVALINK_UNIT = "lavalink.service"
+
+
+def _systemd_unit_exists(unit_name: str) -> bool:
+    """Return True when a given unit file is registered with systemd."""
+
+    try:
+        result = subprocess.run(
+            ["systemctl", "list-unit-files", unit_name],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError:
+        return False
+
+    if result.returncode != 0:
+        return False
+
+    return unit_name in (result.stdout or "")
+
+
 def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> None:
-    service_file = Path("/etc/systemd/system/elbot.service")
+    service_file = SYSTEMD_SERVICE_FILE
     python = sys.executable
     user = os.getenv("SUDO_USER") or os.getenv("USER", "root")
     token = os.getenv("DISCORD_TOKEN", "YOUR_REAL_TOKEN")
@@ -17,7 +41,14 @@ Description=Elbot Discord Bot
 After=network-online.target
 Wants=network-online.target"""
     if require_lavalink:
-        unit += "\nRequires=lavalink.service\nAfter=lavalink.service"
+        if _systemd_unit_exists(LAVALINK_UNIT):
+            unit += f"\nRequires={LAVALINK_UNIT}\nAfter={LAVALINK_UNIT}"
+        else:
+            print(
+                "Warning: Lavalink systemd unit not found; continuing without Requires= dependency.",
+                file=sys.stderr,
+            )
+            unit += f"\nWants={LAVALINK_UNIT}\nAfter={LAVALINK_UNIT}"
     unit += f"""
 
 [Service]
@@ -36,8 +67,7 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 """
-    with open(service_file, "w") as f:
-        f.write(unit)
+    service_file.write_text(unit, encoding="utf-8")
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "enable", "elbot.service"], check=True)
     subprocess.run(["systemctl", "start", "elbot.service"], check=True)
@@ -102,7 +132,7 @@ def install_launchd_service(root_dir: Path, require_lavalink: bool = False) -> N
 
 def uninstall_systemd_service() -> None:
     subprocess.run(["systemctl", "disable", "elbot.service"], check=False)
-    service_file = Path("/etc/systemd/system/elbot.service")
+    service_file = SYSTEMD_SERVICE_FILE
     if service_file.exists():
         service_file.unlink()
     subprocess.run(["systemctl", "daemon-reload"], check=True)
