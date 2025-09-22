@@ -6,9 +6,8 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 
-import mafic
 import nextcord
 from nextcord.ext import commands
 
@@ -43,7 +42,7 @@ class GuildState:
     queue: MusicQueue = field(default_factory=MusicQueue)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     now_playing: Optional[QueuedTrack] = None
-    player: Optional[mafic.Player] = None
+    player: Optional[object] = None
     last_channel_id: Optional[int] = None
     now_playing_message: Optional[nextcord.Message] = None
 
@@ -55,10 +54,13 @@ class Music(commands.Cog):
         _ensure_logging()
         self.bot = bot
         self.logger = logging.getLogger("elbot.music")
-        self.backend = LavalinkAudioBackend(bot)
+        # Defer creating the Lavalink backend until it's actually needed so
+        # importing the cog doesn't require the 'mafic' package to be
+        # installed during tests.
+        self._backend = None
         self.metrics = PlaybackMetrics()
         self.cookies = CookieManager()
-        self.fallback = FallbackPlayer(self.backend, cookies=self.cookies, metrics=self.metrics)
+        self.fallback = None
         self.embed_factory = EmbedFactory()
         host, port, password, secure = _lavalink_config()
         self.diagnostics = DiagnosticsService(
@@ -70,6 +72,14 @@ class Music(commands.Cog):
             metrics=self.metrics,
         )
         self._states: Dict[int, GuildState] = {}
+
+    @property
+    def backend(self) -> LavalinkAudioBackend:
+        if self._backend is None:
+            self._backend = LavalinkAudioBackend(self.bot)
+            # initialize fallback that relies on backend
+            self.fallback = FallbackPlayer(self._backend, cookies=self.cookies, metrics=self.metrics)
+        return self._backend
 
     # ------------------------------------------------------------------
     # Cog lifecycle
