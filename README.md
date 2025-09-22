@@ -38,6 +38,12 @@ The installer will:
 3. ✅ Configure your bot with interactive prompts
 4. ✅ Optionally install as a system service
 
+### Environment file
+
+Run the guided wizard (`elbotctl install` or the platform script) to copy `.env.example` to `.env` in the project root and fill in your answers.
+The packaged systemd service reads secrets from that `.env` via `EnvironmentFile`, so never hard-code tokens directly into a unit file.
+If you edit `.env` on Windows, normalize it with `dos2unix .env` before reinstalling the service so the Unix `\n` line endings are preserved.
+
 ## 📋 Prerequisites
 
 - **Python** 3.10 or newer (3.12 recommended)
@@ -131,6 +137,7 @@ elbotctl service status
 ```
 
 The installer keeps the strict dependency when a `lavalink.service` unit file is registered so startup ordering still works.
+The generated service loads environment variables from `.env`, so rerun the wizard or update the file (and use `dos2unix` if edited on Windows) instead of editing the unit file when tokens change.
 
 ### Docker Compose
 ```bash
