@@ -154,6 +154,18 @@ def main() -> None:
 
             port, pw = start_lavalink()
             logger.info("auto-lavalink started host=127.0.0.1 port=%s", port)
+            # Ensure the active Config reflects the dynamically chosen Lavalink
+            # settings so the health check and other components use the
+            # correct runtime values rather than the originally-imported
+            # class attributes.
+            try:
+                Config.LAVALINK_HOST = os.getenv("LAVALINK_HOST", "127.0.0.1")
+                Config.LAVALINK_PORT = int(os.getenv("LAVALINK_PORT", str(port)))
+                Config.LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", pw)
+            except Exception:
+                # Defensive: if anything goes wrong, keep going — health
+                # check will still attempt to use env vars via Config.validate
+                pass
         except Exception as exc:  # pragma: no cover - startup helper fallback
             logger.error("auto-lavalink failed: %s", exc)
 
