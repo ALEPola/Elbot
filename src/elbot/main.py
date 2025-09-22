@@ -92,43 +92,58 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
 
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(
-                f"{base_url}/version", headers={"Authorization": password}
-            ) as response:
-                if response.status == 200:
-                    handshake = True
-                    try:
-                        data = await response.json(content_type=None)
-                    except Exception:  # pragma: no cover - Lavalink version quirks
-                        data = None
-                    yt_version = await _fetch_lavalink_plugins(data)
-                else:
-                    failure_reason = f"/version status={response.status}"
+            # Some Lavalink deployments expose endpoints under /v4/ while others
+            # use the root path. Try both variants for compatibility.
+            version_paths = ["version", "v4/version"]
+            version_data = None
+            for vp in version_paths:
+                try:
+                    async with session.get(f"{base_url}/{vp}", headers={"Authorization": password}) as response:
+                        if response.status == 200:
+                            handshake = True
+                            try:
+                                version_data = await response.json(content_type=None)
+                            except Exception:
+                                version_data = None
+                            yt_version = await _fetch_lavalink_plugins(version_data)
+                            break
+                        else:
+                            failure_reason = f"/{vp} status={response.status}"
+                except Exception:
+                    # try next path
+                    continue
+
             if handshake:
                 params = {"identifier": "ytsearch:elbot health"}
-                async with session.get(
-                    f"{base_url}/loadtracks",
-                    headers={"Authorization": password},
-                    params=params,
-                ) as track_response:
-                    if track_response.status != 200:
-                        handshake = False
-                        failure_reason = f"/loadtracks status={track_response.status}"
-                    else:
-                        try:
-                            load_data = await track_response.json(content_type=None)
-                        except Exception as exc:
-                            handshake = False
-                            failure_reason = f"/loadtracks parse error: {exc}"
-                        else:
+                load_paths = ["v4/loadtracks", "loadtracks"]
+                load_ok = False
+                for lp in load_paths:
+                    try:
+                        async with session.get(f"{base_url}/{lp}", headers={"Authorization": password}, params=params) as track_response:
+                            if track_response.status != 200:
+                                failure_reason = f"/{lp} status={track_response.status}"
+                                continue
+                            try:
+                                load_data = await track_response.json(content_type=None)
+                            except Exception as exc:
+                                failure_reason = f"/{lp} parse error: {exc}"
+                                continue
                             tracks: list[Any] = []
                             if isinstance(load_data, dict):
                                 possible_tracks = load_data.get("tracks") or load_data.get("data")
                                 if isinstance(possible_tracks, list):
                                     tracks = possible_tracks
                             if not tracks:
-                                handshake = False
-                                failure_reason = "/loadtracks returned no tracks"
+                                failure_reason = f"/{lp} returned no tracks"
+                                continue
+                            load_ok = True
+                            break
+                    except Exception as exc:
+                        failure_reason = str(exc)
+                        continue
+
+                if not load_ok:
+                    handshake = False
     except Exception as exc:  # pragma: no cover - network failures
         failure_reason = str(exc)
 
