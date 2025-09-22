@@ -9,6 +9,10 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, TYPE_CHECKING
 
 import nextcord
+try:
+    import mafic
+except Exception:
+    mafic = None
 from nextcord.ext import commands
 
 from elbot.music import EmbedFactory, FallbackPlayer, LavalinkAudioBackend, MusicQueue, QueuedTrack
