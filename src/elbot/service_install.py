@@ -34,7 +34,6 @@ def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> N
     service_file = SYSTEMD_SERVICE_FILE
     python = sys.executable
     user = os.getenv("SUDO_USER") or os.getenv("USER", "root")
-    ffmpeg = os.getenv("FFMPEG_PATH") or shutil.which("ffmpeg") or "ffmpeg"
     env_file = root_dir / ".env"
     unit = """[Unit]
 Description=Elbot Discord Bot
@@ -55,8 +54,6 @@ Wants=network-online.target"""
 User={user}
 WorkingDirectory={root_dir}
 EnvironmentFile={env_file}
-Environment=AUTO_LAVALINK=1
-Environment=FFMPEG_PATH={ffmpeg}
 # Environment=LAVALINK_PASSWORD=changeme
 # Environment=LAVALINK_PORT=2333
 ExecStart={python} -m elbot.main
