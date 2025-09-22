@@ -61,6 +61,15 @@ def _find_free_port(start: int = 2333, tries: int = 40) -> int:
     raise RuntimeError("No free TCP port available in 2333-2372")
 
 
+def _is_port_in_use(port: int, host: str = "127.0.0.1", timeout: float = 0.5) -> bool:
+    """Return True if something is listening on the given host:port."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
 def _detect_os_arch() -> tuple[str, str]:
     sysname = platform.system().lower()
     machine = platform.machine().lower()
@@ -299,7 +308,17 @@ def start() -> tuple[int, str]:
     _ensure_jar()
 
     wanted = int(os.getenv("LAVALINK_PORT", "0"))
-    port = wanted if wanted > 0 else _find_free_port()
+    if wanted > 0:
+        # If the user explicitly configured a port, prefer it — unless it's
+        # already in use on localhost. In that case pick a free port to avoid
+        # failing startup (helps when other services occupy common ports).
+        if _is_port_in_use(wanted):
+            print(f"[auto-lavalink] WARNING: requested LAVALINK_PORT={wanted} is already in use; selecting a free port instead.")
+            port = _find_free_port()
+        else:
+            port = wanted
+    else:
+        port = _find_free_port()
     password = os.getenv("LAVALINK_PASSWORD", DEFAULT_PW)
 
     _write_conf(port, password)
