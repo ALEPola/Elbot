@@ -341,6 +341,7 @@ def start() -> tuple[int, str]:
             "-Xms128m",
             "-Xmx512m",
             f"-Dspring.config.location={spring_loc}",
+            f"-Dserver.port={port}",
             "-Dspring.cloud.config.enabled=false",
             "-Dspring.cloud.config.import-check.enabled=false",
             "-jar",
