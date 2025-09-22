@@ -64,3 +64,15 @@ def test_install_systemd_service_downgrades_when_lavalink_missing(
 
     captured = capsys.readouterr()
     assert "Lavalink systemd unit not found" in captured.err
+
+
+def test_install_systemd_service_does_not_override_env_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, record_runs: _RunRecorder
+) -> None:
+    monkeypatch.setattr(service_install, "SYSTEMD_SERVICE_FILE", tmp_path / "elbot.service")
+
+    service_install.install_systemd_service(tmp_path)
+
+    content = (tmp_path / "elbot.service").read_text(encoding="utf-8")
+    assert "Environment=AUTO_LAVALINK" not in content
+    assert "Environment=FFMPEG_PATH" not in content
