@@ -12,7 +12,14 @@ from typing import Iterable, List
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(BASE_DIR / ".env")
+# Only auto-load the .env file when not running under pytest to let tests
+# control environment via monkeypatch. Detect pytest either via the
+# PYTEST_CURRENT_TEST env var or by inspecting sys.argv for 'pytest'.
+_running_under_pytest = bool(os.getenv("PYTEST_CURRENT_TEST")) or any(
+    "pytest" in (arg or "") for arg in sys.argv
+)
+if not _running_under_pytest:
+    load_dotenv(BASE_DIR / ".env")
 
 logger = logging.getLogger("elbot.config")
 _gid_str = os.getenv("GUILD_ID")

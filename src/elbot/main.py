@@ -13,7 +13,9 @@ from typing import Any, Optional
 import aiohttp
 import nextcord
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
-import mafic
+# mafic is optional at import time; import lazily where needed to avoid
+# breaking test collection when the package isn't installed.
+mafic = None
 from nextcord.ext import commands
 
 from .config import Config, log_cookie_status
@@ -210,6 +212,15 @@ def main() -> None:
     @bot.slash_command(name="musicdebug", description="Show Lavalink status")
     async def musicdebug(inter: nextcord.Interaction) -> None:
         await inter.response.defer(with_message=True, ephemeral=True)
+        global mafic
+        try:
+            import mafic as _mafic
+
+            mafic = _mafic
+        except Exception:
+            await safe_reply(inter, "mafic library not available", ephemeral=True)
+            return
+
         nodes = mafic.NodePool.label_to_node
         if not nodes:
             status = "No Lavalink nodes are connected."

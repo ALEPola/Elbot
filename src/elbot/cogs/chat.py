@@ -18,8 +18,8 @@ from elbot.utils import safe_reply
 
 logger = logging.getLogger("elbot.chat")
 
-# Initialize OpenAI client from Config
-openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
+# Module-level OpenAI client (tests monkeypatch this). Cog will prefer this
+openai_client = None
 OPENAI_MODEL = Config.OPENAI_MODEL
 RATE_LIMIT = 5  # seconds between requests per user
 # Maximum characters allowed in a response
@@ -39,6 +39,7 @@ class ChatCog(commands.Cog):
         self.histories = defaultdict(deque)
         self.history_dir = Path(Config.BASE_DIR) / "chat_history"
         self.history_dir.mkdir(exist_ok=True)
+        # Use module-level `openai_client` which tests may monkeypatch.
 
     def _persist_history(self, user_id: int, role: str, content: str) -> None:
         file = self.history_dir / f"{user_id}.json"
@@ -105,20 +106,24 @@ class ChatCog(commands.Cog):
         messages = [{"role": role, "content": msg} for _, role, msg in history]
         messages.append({"role": "user", "content": text})
 
-        try:
-            # Offload the blocking OpenAI chat completion call
-            completion = await asyncio.to_thread(
-                lambda: openai_client.chat.completions.create(
-                    model=OPENAI_MODEL,
-                    messages=messages,
+        if not openai_client:
+            logger.warning("OpenAI client not configured; cannot generate reply")
+            content = "⚠️ Chat functionality is not available right now."
+        else:
+            try:
+                # Offload the blocking OpenAI chat completion call
+                completion = await asyncio.to_thread(
+                    lambda: openai_client.chat.completions.create(
+                        model=OPENAI_MODEL,
+                        messages=messages,
+                    )
                 )
-            )
-            content = completion.choices[0].message.content
-            if len(content) > MAX_RESPONSE_LENGTH:
-                content = content[: MAX_RESPONSE_LENGTH - 3] + "..."
-        except Exception:
-            logger.error("OpenAI error while generating response.", exc_info=True)
-            content = "⚠️ Sorry, something went wrong with the chat bot."
+                content = completion.choices[0].message.content
+                if len(content) > MAX_RESPONSE_LENGTH:
+                    content = content[: MAX_RESPONSE_LENGTH - 3] + "..."
+            except Exception:
+                logger.error("OpenAI error while generating response.", exc_info=True)
+                content = "⚠️ Sorry, something went wrong with the chat bot."
 
         await safe_reply(interaction, content)
         history.append((now, "user", text))
@@ -153,20 +158,24 @@ class ChatCog(commands.Cog):
             )
             return
         conversation = "\n".join(f"{h['role']}: {h['content']}" for h in history[-20:])
-        try:
-            summary = await asyncio.to_thread(
-                lambda: openai_client.chat.completions.create(
-                    model=OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": "Summarize the following conversation."},
-                        {"role": "user", "content": conversation},
-                    ],
+        if not openai_client:
+            logger.warning("OpenAI client not configured; cannot summarize conversation")
+            content = "⚠️ Chat functionality is not available right now."
+        else:
+            try:
+                summary = await asyncio.to_thread(
+                    lambda: openai_client.chat.completions.create(
+                        model=OPENAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": "Summarize the following conversation."},
+                            {"role": "user", "content": conversation},
+                        ],
+                    )
                 )
-            )
-            content = summary.choices[0].message.content
-        except Exception:
-            logger.error("OpenAI error while summarizing.", exc_info=True)
-            content = "⚠️ Failed to generate summary."
+                content = summary.choices[0].message.content
+            except Exception:
+                logger.error("OpenAI error while summarizing.", exc_info=True)
+                content = "⚠️ Failed to generate summary."
         await safe_reply(interaction, content, ephemeral=True)
 
 

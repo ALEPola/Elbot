@@ -12,7 +12,9 @@ from typing import Iterable, List, Optional
 os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 
-import mafic
+# mafic is an optional dependency. Import lazily when actually used so tests
+# that don't need music functionality can run without it.
+mafic = None
 
 __all__ = [
     "TrackHandle",
@@ -30,7 +32,8 @@ def _default_logger() -> logging.Logger:
 class TrackHandle:
     """Light-weight wrapper around a Lavalink track."""
 
-    track: mafic.Track
+    # type: ignore[name-defined]
+    track: "mafic.Track"
     title: str
     author: str
     duration: int
@@ -42,8 +45,12 @@ class TrackHandle:
         info = getattr(track, "info", None)
         info_dict = info or {}
 
-        title = getattr(track, "title", None) or info_dict.get("title") or "Unknown title"
-        author = getattr(track, "author", None) or info_dict.get("author") or "Unknown creator"
+        title = (
+            getattr(track, "title", None) or info_dict.get("title") or "Unknown title"
+        )
+        author = (
+            getattr(track, "author", None) or info_dict.get("author") or "Unknown creator"
+        )
         duration = (
             getattr(track, "length", None)
             or info_dict.get("length")
@@ -51,7 +58,9 @@ class TrackHandle:
             or 0
         )
         uri = getattr(track, "uri", None) or info_dict.get("uri")
-        source = getattr(track, "source", None) or info_dict.get("sourceName") or "unknown"
+        source = (
+            getattr(track, "source", None) or info_dict.get("sourceName") or "unknown"
+        )
 
         return cls(
             track=track,
@@ -98,6 +107,15 @@ class LavalinkAudioBackend:
         self.logger = logger or _default_logger()
         self.identifier = identifier
         self._ready = asyncio.Event()
+        # import mafic lazily
+        global mafic
+        try:
+            import mafic as _mafic
+
+            mafic = _mafic
+        except Exception:
+            raise RuntimeError("mafic library is required for Lavalink audio backend")
+
         self._pool = mafic.NodePool(bot)
         self._node: Optional[mafic.Node] = None
         self._lock = asyncio.Lock()
