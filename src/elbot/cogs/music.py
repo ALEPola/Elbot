@@ -301,7 +301,11 @@ class Music(commands.Cog):
     # Slash commands
     # ------------------------------------------------------------------
     @nextcord.slash_command(name="play", description="Play a YouTube track")
-    async def play(self, interaction: nextcord.Interaction, query: str) -> None:
+    async def play(
+        self,
+        interaction: nextcord.Interaction,
+        query: str = nextcord.SlashOption(description="Type music name, link, playlist, radio and media link.", autocomplete=True),
+    ) -> None:
         # Defer publicly so the queued message we send is visible to everyone
         await interaction.response.defer(ephemeral=False)
         player, error = await self._ensure_voice(interaction)
@@ -349,6 +353,43 @@ class Music(commands.Cog):
             except Exception:
                 queued_track.queued_message_id = None
             await self._ensure_playing(interaction.guild.id)
+
+    @play.on_autocomplete("query")
+    async def play_autocomplete(self, interaction: nextcord.Interaction, value: str) -> list:
+        """Provide track suggestions for the `query` option.
+
+        Uses the Lavalink resolver to fetch search results and returns a
+        compact list of choices containing title and duration. Failures
+        are swallowed so autocomplete remains responsive.
+        """
+        try:
+            if not value:
+                return []
+            # Try to resolve via the Lavalink backend. If the node is not
+            # ready or resolution fails, return an empty list instead of
+            # raising so the autocomplete UI stays responsive.
+            try:
+                # Ensure backend is available (this will initialize lazily)
+                await self.backend.wait_ready()
+                tracks = await self.backend.resolve_tracks(value, prefer_search=True)
+            except Exception:
+                return []
+
+            choices = []
+            for t in tracks[:7]:
+                dur = int(getattr(t, "duration", 0) or 0)
+                mm = dur // 60
+                ss = dur % 60
+                label = f"{t.title} - {mm:02d}:{ss:02d}" if getattr(t, "title", None) else f"{value}"
+                val = t.uri or t.title or value
+                try:
+                    choices.append(nextcord.SlashOptionChoice(name=label[:100], value=str(val)))
+                except Exception:
+                    # If the choice object fails for any reason, skip it.
+                    continue
+            return choices
+        except Exception:
+            return []
 
     @nextcord.slash_command(name="skip", description="Skip the current track")
     async def skip(self, interaction: nextcord.Interaction) -> None:
