@@ -26,6 +26,7 @@ class QueuedTrack:
     requester_display: str
     is_fallback: bool = False
     fallback_source: Optional[str] = None
+    queued_message_id: Optional[int] = None
 
     def clone(self) -> "QueuedTrack":
         return replace(self, id=uuid.uuid4().hex)

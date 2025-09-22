@@ -249,6 +249,18 @@ class Music(commands.Cog):
             except Exception:  # pragma: no cover - network failure
                 return
         if isinstance(channel, nextcord.abc.Messageable):
+            # If a queued message exists and we can fetch it, edit it into now-playing
+            qm_id = getattr(track, "queued_message_id", None)
+            if qm_id:
+                try:
+                    queued_msg = await channel.fetch_message(qm_id)
+                    embed = self.embed_factory.now_playing(track, position=0, eta_ms=0)
+                    await queued_msg.edit(embed=embed)
+                    state.now_playing_message = queued_msg
+                    return
+                except Exception:
+                    # fetching/editing failed; fall back to sending a new message
+                    pass
             await self._clear_now_playing_message(state)
             embed = self.embed_factory.now_playing(track, position=0, eta_ms=0)
             message = await channel.send(embed=embed)
@@ -290,7 +302,8 @@ class Music(commands.Cog):
     # ------------------------------------------------------------------
     @nextcord.slash_command(name="play", description="Play a YouTube track")
     async def play(self, interaction: nextcord.Interaction, query: str) -> None:
-        await interaction.response.defer(ephemeral=True)
+        # Defer publicly so the queued message we send is visible to everyone
+        await interaction.response.defer(ephemeral=False)
         player, error = await self._ensure_voice(interaction)
         if error:
             await safe_reply(
@@ -323,7 +336,7 @@ class Music(commands.Cog):
                 return
             state.queue.add(queued_track)
             queue_position = len(state.queue)
-            await safe_reply(
+            msg = await safe_reply(
                 interaction,
                 embed=self.embed_factory.queued(
                     queued_track,
@@ -331,6 +344,10 @@ class Music(commands.Cog):
                     eta_ms=eta_ms,
                 ),
             )
+            try:
+                queued_track.queued_message_id = msg.id
+            except Exception:
+                queued_track.queued_message_id = None
             await self._ensure_playing(interaction.guild.id)
 
     @nextcord.slash_command(name="skip", description="Skip the current track")
