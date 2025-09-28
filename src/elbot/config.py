@@ -52,7 +52,7 @@ class Config:
     LAVALINK_HOST = os.getenv("LAVALINK_HOST", "localhost")
     LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
 
-    _port_raw = os.getenv("LAVALINK_PORT", "2333")
+    _port_raw = os.getenv("LAVALINK_PORT", "0")
     try:
         LAVALINK_PORT = int(_port_raw)
     except ValueError:

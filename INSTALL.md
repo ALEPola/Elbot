@@ -135,6 +135,8 @@ Whenever you change `.env`, restart the bot.
 ## 6. Keep the YouTube stack current
 
 - The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin (pinned to `1.16.1` by default). Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release, and keep `lavalink.server.sources.youtube` set to `false` in `application.yml` to avoid loading the deprecated source manager.
+- Leave `LAVALINK_PORT` unset or set it to `0` to let auto-lavalink choose the first available local port. Provide a concrete value only if you
+  need to expose Lavalink on a fixed port (for remote nodes or firewall rules).
 - `yt-dlp` is used as a fallback resolver. Keep it at `2025.9.4` or newer (`pip install --upgrade yt-dlp`) whenever YouTube changes break playback; the installer enforces this minimum.
 - If you run a remote Lavalink node, mirror the same plugin configuration in its `application.yml`.
 
@@ -154,7 +156,7 @@ By default the portal listens on http://localhost:8000. Set the `PORT` environme
 - **Lavalink not available** – ensure Java 17 is installed or let `AUTO_LAVALINK=1` download and run the bundled server.
 - **Slash commands missing** – invite the bot with the `applications.commands` scope and wait a few minutes for global registration.
 - **Permission errors on Linux/macOS** – run the scripts with `sudo` only when prompted to install system packages. The bot itself should run as your regular user.
-- **Port 2333 already in use** – check for listeners with `sudo lsof -i :2333` or `sudo ss -tulpn | grep 2333`. Stop stray Lavalink instances with `sudo pkill -f 'java.*Lavalink.jar'` (or `sudo kill $(pgrep -f 'java.*Lavalink.jar')`).
+- **Lavalink port already in use** – use the port reported in the logs (2333 by default) with `sudo lsof -i :<port>` or `sudo ss -tulpn | grep <port>`. Stop stray Lavalink instances with `sudo pkill -f 'java.*Lavalink.jar'` (or `sudo kill $(pgrep -f 'java.*Lavalink.jar')`).
 - **Frequent YouTube 429 errors on long sessions** – export fresh cookies from a logged-in browser profile and set `YT_COOKIES_FILE` so Lavalink and yt-dlp reuse an authenticated session instead of anonymous scraping.
 
 If you run into platform-specific issues, open an issue with details about your OS, Python version and any error logs.

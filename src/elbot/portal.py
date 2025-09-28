@@ -90,7 +90,7 @@ def _auto_lavalink_enabled() -> bool:
 
 def _diagnostics_service(env: Dict[str, str]) -> Tuple[DiagnosticsService, Dict[str, Any]]:
     host = env.get('LAVALINK_HOST') or 'localhost'
-    port_str = env.get('LAVALINK_PORT') or '2333'
+    port_str = env.get('LAVALINK_PORT') or '0'
     password = env.get('LAVALINK_PASSWORD') or 'youshallnotpass'
     secure_flag = str(env.get('LAVALINK_SSL', 'false')).strip().lower()
     secure_enabled = secure_flag in {'1', 'true', 'yes'}
@@ -194,7 +194,7 @@ def setup():
         auto_update_webhook = request.form.get('auto_update_webhook', '').strip()
         auto_lavalink = '1' if request.form.get('auto_lavalink') == 'on' else '0'
         lavalink_host = request.form.get('lavalink_host', '').strip() or 'localhost'
-        lavalink_port = request.form.get('lavalink_port', '').strip() or '2333'
+        lavalink_port = request.form.get('lavalink_port', '').strip() or '0'
         lavalink_password = request.form.get('lavalink_password', '').strip() or 'youshallnotpass'
 
         if not discord_token:
@@ -213,7 +213,7 @@ def setup():
                     'LAVALINK_PASSWORD': lavalink_password,
                 })
             _write_env(ENV_FILE, updates)
-            flash('Configuration saved. Installing dependencies…', 'info')
+            flash('Configuration saved. Installing dependencies...', 'info')
             result = _run_elbotctl(['install', '--non-interactive', '--no-service'])
             if result and getattr(result, 'returncode', 0) == 0:
                 flash(result.stdout or 'Installation complete.', 'success')

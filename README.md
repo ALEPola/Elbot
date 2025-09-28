@@ -214,6 +214,8 @@ Elbot uses a resilient dual-mode system:
 
 > Keep `yt-dlp` at **2025.9.4** or newer (`pip install --upgrade yt-dlp` inside the venv) so the fallback extractor understands the same signature changes.
 
+> Auto-Lavalink now auto-selects an open port; leave `LAVALINK_PORT` unset or set it to `0` unless you require a fixed value.
+
 To unlock age-restricted content **and** keep large queues from triggering YouTube's `429 Too Many Requests` throttling:
 1. Export your YouTube cookies from a logged-in browser profile (see the [yt-dlp cookies guide](https://github.com/yt-dlp/yt-dlp/wiki/How-to-use-your-own-YouTube-Cookies)).
 2. Set `YT_COOKIES_FILE=/path/to/cookies.txt` in `.env` (or mount the file in Docker deployments).
@@ -242,7 +244,7 @@ elbotctl check  # Validates Lavalink connectivity
 
 ### Port conflicts?
 ```bash
-# Check what's using port 2333 (Lavalink)
+# Replace 2333 with the port reported in the logs (Lavalink)
 sudo lsof -i :2333
 
 # Check port 8000 (Portal)
