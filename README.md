@@ -210,6 +210,10 @@ Elbot uses a resilient dual-mode system:
 - **Primary**: Lavalink v4 with [`youtube-source`](https://github.com/lavalink-devs/youtube-source) plugin
 - **Fallback**: Direct yt-dlp extraction when Lavalink fails
 
+> **Heads-up (Sep 2025):** Auto-Lavalink now defaults to `youtube-source` 1.16.1 because older builds cannot decode YouTube's new SABR signatures. If you pin `LAVALINK_YOUTUBE_PLUGIN_VERSION`, keep it at or above this release to avoid playback failures.
+
+> Keep `yt-dlp` at **2025.9.4** or newer (`pip install --upgrade yt-dlp` inside the venv) so the fallback extractor understands the same signature changes.
+
 To unlock age-restricted content **and** keep large queues from triggering YouTube's `429 Too Many Requests` throttling:
 1. Export your YouTube cookies from a logged-in browser profile (see the [yt-dlp cookies guide](https://github.com/yt-dlp/yt-dlp/wiki/How-to-use-your-own-YouTube-Cookies)).
 2. Set `YT_COOKIES_FILE=/path/to/cookies.txt` in `.env` (or mount the file in Docker deployments).

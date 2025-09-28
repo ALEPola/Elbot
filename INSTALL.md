@@ -134,8 +134,8 @@ Whenever you change `.env`, restart the bot.
 
 ## 6. Keep the YouTube stack current
 
-- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin (pinned to `1.13.5`). Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release, and keep `lavalink.server.sources.youtube` set to `false` in `application.yml` to avoid loading the deprecated source manager.
-- `yt-dlp` is used as a fallback resolver. Keep it updated with `pip install -U yt-dlp` whenever YouTube changes break playback.
+- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin (pinned to `1.16.1` by default). Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release, and keep `lavalink.server.sources.youtube` set to `false` in `application.yml` to avoid loading the deprecated source manager.
+- `yt-dlp` is used as a fallback resolver. Keep it at `2025.9.4` or newer (`pip install --upgrade yt-dlp`) whenever YouTube changes break playback; the installer enforces this minimum.
 - If you run a remote Lavalink node, mirror the same plugin configuration in its `application.yml`.
 
 ## 7. Running the management portal

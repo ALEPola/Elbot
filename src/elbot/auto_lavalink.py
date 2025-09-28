@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import sys
 from pathlib import Path
 import platform
 import re
@@ -43,7 +44,34 @@ MAFIC_MAX_SUPPORTED_LAVALINK_VERSION = os.getenv(
 )
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
-YOUTUBE_PLUGIN_VERSION = os.getenv("LAVALINK_YOUTUBE_PLUGIN_VERSION", "1.13.5")
+MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.16.1"
+YOUTUBE_PLUGIN_VERSION = os.getenv("LAVALINK_YOUTUBE_PLUGIN_VERSION", MINIMUM_YOUTUBE_PLUGIN_VERSION)
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for raw in re.split(r"[._-]", value):
+        if not raw:
+            continue
+        if raw.isdigit():
+            parts.append(int(raw))
+        else:
+            return ()
+    return tuple(parts)
+
+
+def _version_less_than(candidate: str, minimum: str) -> bool:
+    cand = _version_tuple(candidate)
+    required = _version_tuple(minimum)
+    if not cand or not required:
+        return False
+    length = max(len(cand), len(required))
+    cand += (0,) * (length - len(cand))
+    required += (0,) * (length - len(required))
+    return cand < required
+
+if _version_less_than(YOUTUBE_PLUGIN_VERSION, MINIMUM_YOUTUBE_PLUGIN_VERSION):
+    print(f"[auto-lavalink] WARNING: youtube-source plugin version {YOUTUBE_PLUGIN_VERSION!r} is below the minimum supported {MINIMUM_YOUTUBE_PLUGIN_VERSION}.", file=sys.stderr)
 
 _proc: subprocess.Popen[str] | None = None
 _port: int | None = None
