@@ -150,19 +150,6 @@ class Music(commands.Cog):
                 pass
             voice = None
             state.player = None
-        elif voice:
-            connected_check = getattr(voice, "is_connected", None)
-            try:
-                is_connected = connected_check() if callable(connected_check) else getattr(voice, "connected", True)
-            except Exception:
-                is_connected = True
-            if not is_connected:
-                try:
-                    await voice.disconnect(force=True)
-                except Exception:
-                    pass
-                voice = None
-                state.player = None
 
         target_channel = user.voice.channel
         if voice and voice.channel != target_channel:

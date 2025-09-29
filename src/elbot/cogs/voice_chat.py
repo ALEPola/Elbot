@@ -63,12 +63,6 @@ class VoiceChatCog(commands.Cog):
         logger.debug("Connecting to voice channel %s", channel)
 
         voice_client = interaction.guild.voice_client if interaction.guild else None
-        if voice_client and not voice_client.is_connected():
-            try:
-                await voice_client.disconnect(force=True)
-            except Exception:  # pragma: no cover - best effort cleanup
-                pass
-            voice_client = None
         vc = voice_client
         joined_here = False
         try:

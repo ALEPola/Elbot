@@ -21,10 +21,6 @@ def apply_patch() -> None:
             try:
                 if self.ws and hasattr(self.ws, "poll_event"):
                     await self.ws.poll_event()
-                else:
-                    # Yield to the event loop when there is no active websocket.
-                    # Otherwise this loop busy-waits and starves the heartbeat task.
-                    await asyncio.sleep(0.1)
             except (ConnectionClosed, asyncio.TimeoutError) as exc:
                 if isinstance(exc, ConnectionClosed):
                     # The following close codes are undocumented so I will document them here.
