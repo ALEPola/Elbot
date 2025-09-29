@@ -36,3 +36,45 @@ def test_default_app_dir_uses_generic_author(monkeypatch, tmp_path):
     assert module.APP_DIR == tmp_path
     assert module.BASE == tmp_path
     assert captured == {"appname": "Elbot", "appauthor": "ElbotTeam"}
+
+
+def test_port_range_env_overrides(monkeypatch):
+    monkeypatch.setenv("AUTO_LAVALINK_PORT_START", "45000")
+    monkeypatch.setenv("AUTO_LAVALINK_PORT_TRIES", "3")
+
+    module = _reload_auto_lavalink()
+
+    attempts: list[int] = []
+
+    class DummySocket:
+        def __init__(self, *_args, **_kwargs):
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.close()
+            return False
+
+        def setsockopt(self, *_args, **_kwargs):
+            return None
+
+        def bind(self, addr):
+            attempts.append(addr[1])
+            if addr[1] != module.AUTO_LAVALINK_PORT_START:
+                raise OSError("port in use")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(module.socket, "socket", DummySocket)
+
+    port = module._find_free_port()
+
+    assert port == module.AUTO_LAVALINK_PORT_START
+    assert attempts == [module.AUTO_LAVALINK_PORT_START]
+
+    monkeypatch.delenv("AUTO_LAVALINK_PORT_START", raising=False)
+    monkeypatch.delenv("AUTO_LAVALINK_PORT_TRIES", raising=False)
+    _reload_auto_lavalink()
