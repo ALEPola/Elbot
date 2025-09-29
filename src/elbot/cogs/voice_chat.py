@@ -73,7 +73,7 @@ class VoiceChatCog(commands.Cog):
                 joined_here = True
         except nextcord.ClientException:
             await interaction.followup.send(
-                "⚠️ I’m already connected to a voice channel; please disconnect me first.",
+                "⚠️ I’m already connected to a voice channel; disconnect me first.",
                 delete_after=10,
             )
             return
