@@ -66,62 +66,15 @@ class FallbackPlayer:
         requester_display: str,
         channel_id: int,
     ) -> QueuedTrack:
-        """Resolve a queued track with adaptive strategy based on system performance."""
+        """Resolve a queued track, trying Lavalink first for better performance."""
 
         start = time.perf_counter()
         prefer_search = not query.startswith("http")
-        
-        # Use environment variable to control strategy
-        # MUSIC_STRATEGY can be: "lavalink_first" (default), "fallback_first", or "parallel"
-        import os
-        strategy = os.getenv("MUSIC_STRATEGY", "lavalink_first").lower()
-        
-        if strategy == "parallel":
-            # Try both in parallel and use whichever succeeds first
-            return await self._parallel_resolve(
-                query,
-                requested_by=requested_by,
-                requester_display=requester_display,
-                channel_id=channel_id,
-                prefer_search=prefer_search,
-                start_time=start,
-            )
-        elif strategy == "fallback_first":
-            # Original behavior - try fallback first
-            return await self._fallback_first_resolve(
-                query,
-                requested_by=requested_by,
-                requester_display=requester_display,
-                channel_id=channel_id,
-                prefer_search=prefer_search,
-                start_time=start,
-            )
-        else:
-            # Default: Try Lavalink first (faster on most systems)
-            return await self._lavalink_first_resolve(
-                query,
-                requested_by=requested_by,
-                requester_display=requester_display,
-                channel_id=channel_id,
-                prefer_search=prefer_search,
-                start_time=start,
-            )
-    
-    async def _lavalink_first_resolve(
-        self,
-        query: str,
-        *,
-        requested_by: int,
-        requester_display: str,
-        channel_id: int,
-        prefer_search: bool,
-        start_time: float,
-    ) -> QueuedTrack:
-        """Try Lavalink first, fall back to yt-dlp if it fails."""
-        
+
+        # Try Lavalink first (much faster, especially on slow systems)
         try:
             handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
-            self.metrics.observe_startup((time.perf_counter() - start_time) * 1000)
+            self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return self._build_entry(
                 handle,
                 query=query,
@@ -132,10 +85,12 @@ class FallbackPlayer:
                 fallback_source=None,
             )
         except TrackLoadFailure as lavalink_exc:
+            # Lavalink failed, try fallback
             self.logger.warning(
-                "Lavalink resolution failed, attempting fallback",
+                "Lavalink resolution failed, attempting yt-dlp fallback",
                 extra={"query": query, "error": str(lavalink_exc)},
             )
+            
             try:
                 fallback_entry = await self._resolve_fallback(
                     query,
@@ -144,115 +99,16 @@ class FallbackPlayer:
                     channel_id=channel_id,
                     base_error=lavalink_exc,
                 )
-                self.metrics.observe_startup((time.perf_counter() - start_time) * 1000)
+                self.metrics.observe_startup((time.perf_counter() - start) * 1000)
                 return fallback_entry
             except TrackLoadFailure as fallback_exc:
                 self.metrics.incr_failed()
-                raise fallback_exc from lavalink_exc
-    
-    async def _fallback_first_resolve(
-        self,
-        query: str,
-        *,
-        requested_by: int,
-        requester_display: str,
-        channel_id: int,
-        prefer_search: bool,
-        start_time: float,
-    ) -> QueuedTrack:
-        """Original behavior - try fallback first."""
-        
-        base_error = TrackLoadFailure("Fallback-first resolution (Lavalink deferred)")
-        try:
-            fallback_entry = await self._resolve_fallback(
-                query,
-                requested_by=requested_by,
-                requester_display=requester_display,
-                channel_id=channel_id,
-                base_error=base_error,
-            )
-            self.metrics.observe_startup((time.perf_counter() - start_time) * 1000)
-            return fallback_entry
-        except TrackLoadFailure as fallback_exc:
-            self.logger.warning(
-                "Fallback resolution failed, attempting Lavalink",
-                extra={"query": query, "error": str(fallback_exc)},
-            )
-            try:
-                handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
-            except TrackLoadFailure as lavalink_exc:
-                self.metrics.incr_failed()
-                raise lavalink_exc from fallback_exc
-            self.metrics.observe_startup((time.perf_counter() - start_time) * 1000)
-            return self._build_entry(
-                handle,
-                query=query,
-                requested_by=requested_by,
-                requester_display=requester_display,
-                channel_id=channel_id,
-                is_fallback=False,
-                fallback_source=None,
-            )
-    
-    async def _parallel_resolve(
-        self,
-        query: str,
-        *,
-        requested_by: int,
-        requester_display: str,
-        channel_id: int,
-        prefer_search: bool,
-        start_time: float,
-    ) -> QueuedTrack:
-        """Try both methods in parallel and use whichever succeeds first."""
-        
-        import asyncio
-        
-        async def try_lavalink():
-            try:
-                handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
-                return self._build_entry(
-                    handle,
-                    query=query,
-                    requested_by=requested_by,
-                    requester_display=requester_display,
-                    channel_id=channel_id,
-                    is_fallback=False,
-                    fallback_source=None,
-                )
-            except Exception as e:
-                return e
-        
-        async def try_fallback():
-            try:
-                return await self._resolve_fallback(
-                    query,
-                    requested_by=requested_by,
-                    requester_display=requester_display,
-                    channel_id=channel_id,
-                    base_error=TrackLoadFailure("Parallel resolution"),
-                )
-            except Exception as e:
-                return e
-        
-        # Run both in parallel
-        results = await asyncio.gather(
-            try_lavalink(),
-            try_fallback(),
-            return_exceptions=False,
-        )
-        
-        # Check results and return the first success
-        for result in results:
-            if not isinstance(result, Exception):
-                self.metrics.observe_startup((time.perf_counter() - start_time) * 1000)
-                return result
-        
-        # Both failed - raise the Lavalink error as primary
-        self.metrics.incr_failed()
-        if isinstance(results[0], Exception):
-            raise results[0]
-        raise TrackLoadFailure("Both resolution methods failed")
+                # Both failed, raise the fallback exception with context
+                raise TrackLoadFailure(
+                    f"Both Lavalink and yt-dlp failed: {fallback_exc}",
+                    cause=lavalink_exc
+                ) from fallback_exc
+
 
     async def build_fallback_entry(
         self,
