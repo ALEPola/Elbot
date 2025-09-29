@@ -115,7 +115,12 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
 
             if handshake:
                 params = {"identifier": "ytsearch:elbot health"}
-                load_paths = ["v4/loadtracks", "loadtracks"]
+                # Prefer the classic /loadtracks route first so we don't make an
+                # additional request when a server responds with an empty
+                # payload. Older Lavalink builds (and the test doubles) only
+                # expect a single call and treat unexpected follow-up requests
+                # as an error.
+                load_paths = ["loadtracks", "v4/loadtracks"]
                 load_ok = False
                 for lp in load_paths:
                     try:
@@ -135,7 +140,11 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
                                     tracks = possible_tracks
                             if not tracks:
                                 failure_reason = f"/{lp} returned no tracks"
-                                continue
+                                # Keep the failure reason from the route we
+                                # actually queried and avoid hitting fallback
+                                # endpoints that some deployments (and the
+                                # tests) don't stub out.
+                                break
                             load_ok = True
                             break
                     except Exception as exc:
@@ -144,6 +153,10 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
 
                 if not load_ok:
                     handshake = False
+                    # If we broke out of the loop because no tracks were
+                    # returned, ``load_ok`` remains False. Make sure we do not
+                    # clobber the more helpful message captured above.
+                    failure_reason = failure_reason or "loadtracks failed"
     except Exception as exc:  # pragma: no cover - network failures
         failure_reason = str(exc)
 
