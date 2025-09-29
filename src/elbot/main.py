@@ -233,6 +233,15 @@ def main() -> None:
         if bot.user is None:  # pragma: no cover - defensive
             return
         logger.info("bot ready user=%s id=%s", bot.user, bot.user.id)
+        if not getattr(bot, "_app_commands_synced", False):
+            try:
+                await bot.sync_all_application_commands()
+            except Exception:  # pragma: no cover - sync failures
+                logger.exception("failed to sync application commands")
+            else:
+                bot._app_commands_synced = True
+                logger.info("application commands synced")
+
 
     load_all_cogs(bot)
 
