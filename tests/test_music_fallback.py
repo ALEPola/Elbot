@@ -86,6 +86,8 @@ async def test_fallback_player_uses_yt_dlp(monkeypatch):
 
         def extract_info(self, query, download=False):
             assert "skip_download" in self.opts
+            yt_args = self.opts.get("extractor_args", {}).get("youtube", {})
+            assert "android" in yt_args.get("player_client", [])
             return {"url": "https://stream", "title": "fallback"}
 
     monkeypatch.setattr("yt_dlp.YoutubeDL", DummyYDL)
