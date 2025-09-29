@@ -4,7 +4,6 @@ import atexit
 import json
 import os
 import sys
-from pathlib import Path
 import platform
 import re
 import signal
@@ -14,6 +13,7 @@ import time
 import urllib.request
 import zipfile
 import tarfile
+from pathlib import Path
 
 from platformdirs import user_data_dir
 
@@ -47,6 +47,9 @@ DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
 MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.16.1"
 YOUTUBE_PLUGIN_VERSION = os.getenv("LAVALINK_YOUTUBE_PLUGIN_VERSION", MINIMUM_YOUTUBE_PLUGIN_VERSION)
 
+AUTO_LAVALINK_PORT_START = int(os.getenv("AUTO_LAVALINK_PORT_START", "2333"))
+AUTO_LAVALINK_PORT_TRIES = max(1, int(os.getenv("AUTO_LAVALINK_PORT_TRIES", "40")))
+
 
 def _version_tuple(value: str) -> tuple[int, ...]:
     parts: list[int] = []
@@ -77,7 +80,11 @@ _proc: subprocess.Popen[str] | None = None
 _port: int | None = None
 
 
-def _find_free_port(start: int = 2333, tries: int = 40) -> int:
+def _find_free_port(start: int | None = None, tries: int | None = None) -> int:
+    start = AUTO_LAVALINK_PORT_START if start is None else start
+    tries = AUTO_LAVALINK_PORT_TRIES if tries is None else max(1, tries)
+    end = start + max(tries - 1, 0)
+
     for p in range(start, start + tries):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -86,7 +93,7 @@ def _find_free_port(start: int = 2333, tries: int = 40) -> int:
                 return p
             except OSError:
                 continue
-    raise RuntimeError("No free TCP port available in 2333-2372")
+    raise RuntimeError(f"No free TCP port available in {start}-{end}")
 
 
 def _is_port_in_use(port: int, host: str = "127.0.0.1", timeout: float = 0.5) -> bool:
