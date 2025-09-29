@@ -85,12 +85,6 @@ class Config:
         YT_COOKIES_FILE = os.getenv("YTDLP_COOKIES_PATH")
 
     AUTO_LAVALINK = os.getenv("AUTO_LAVALINK", "0") == "1"
-    VOICE_CHAT_ENABLED = os.getenv("VOICE_CHAT_ENABLED", "").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
 
     if _gid_str:
         try:

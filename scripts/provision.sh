@@ -124,7 +124,6 @@ require_env_var "OPENAI_API_KEY" "${ELBOT_OPENAI_KEY:-}" "ELBOT_OPENAI_KEY"
 update_env_var "GUILD_ID" "${ELBOT_GUILD_ID:-}"
 update_env_var "PORTAL_PORT" "${ELBOT_PORTAL_PORT:-}"
 update_env_var "LAVALINK_SERVER_PORT" "${ELBOT_LAVALINK_PORT:-}"
-update_env_var "VOICE_CHAT_ENABLED" "${ELBOT_VOICE_CHAT_ENABLED:-}"
 
 # Manage ports before the installer enables services.
 ELBOT_PORTS="${ELBOT_PORTS:-8080 2333}"

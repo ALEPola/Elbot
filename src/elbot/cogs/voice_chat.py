@@ -8,8 +8,6 @@ import nextcord
 from nextcord.ext import commands
 from openai import OpenAI
 
-from elbot.config import Config
-
 logger = logging.getLogger("elbot.voice")
 
 openai_client = OpenAI()
@@ -133,10 +131,6 @@ class VoiceChatCog(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     """Load the voice chat cog into the bot."""
-
-    if not Config.VOICE_CHAT_ENABLED:
-        logger.info("Skipping VoiceChatCog setup; VOICE_CHAT_ENABLED is disabled")
-        return
 
     bot.add_cog(VoiceChatCog(bot))
     logger.info("✅ Loaded VoiceChatCog")
