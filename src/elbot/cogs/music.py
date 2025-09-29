@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, TYPE_CHECKING
 
 import nextcord
+
 try:
     import mafic
 except Exception:
@@ -15,12 +16,18 @@ except Exception:
 from nextcord.ext import commands
 
 from elbot.config import get_lavalink_connection_info
-from elbot.music import EmbedFactory, FallbackPlayer, LavalinkAudioBackend, MusicQueue, QueuedTrack
-from elbot.music.audio_backend import TrackLoadFailure
-from elbot.music.cookies import CookieManager
-from elbot.music.diagnostics import DiagnosticsService
-from elbot.music.logging_config import configure_json_logging
-from elbot.music.metrics import PlaybackMetrics
+from elbot.music import (
+    CookieManager,
+    DiagnosticsService,
+    EmbedFactory,
+    FallbackPlayer,
+    LavalinkAudioBackend,
+    MusicQueue,
+    PlaybackMetrics,
+    QueuedTrack,
+    TrackLoadFailure,
+    configure_json_logging,
+)
 from elbot.utils import safe_reply
 
 _LOGGING_INITIALISED = False
@@ -78,7 +85,9 @@ class Music(commands.Cog):
         if self._backend is None:
             self._backend = LavalinkAudioBackend(self.bot)
             # initialize fallback that relies on backend
-            self.fallback = FallbackPlayer(self._backend, cookies=self.cookies, metrics=self.metrics)
+            self.fallback = FallbackPlayer(
+                self._backend, cookies=self.cookies, metrics=self.metrics
+            )
         return self._backend
 
     # ------------------------------------------------------------------
@@ -92,7 +101,7 @@ class Music(commands.Cog):
                 self.logger.info("Music backend pre-initialized successfully")
             except Exception as e:
                 self.logger.warning("Failed to pre-initialize backend: %s", e)
-        
+
         # Don't wait for this - let it run in background
         self.bot.loop.create_task(_init_backend())
 
@@ -139,7 +148,9 @@ class Music(commands.Cog):
         await self._clear_now_playing_message(state)
         self._states.pop(guild_id, None)
 
-    async def _ensure_voice(self, interaction: nextcord.Interaction) -> tuple[Optional[mafic.Player], Optional[str]]:
+    async def _ensure_voice(
+        self, interaction: nextcord.Interaction
+    ) -> tuple[Optional[mafic.Player], Optional[str]]:
         user = interaction.user
         if user is None or not isinstance(user, nextcord.Member) or user.voice is None:
             return None, "You must join a voice channel first."
@@ -216,7 +227,9 @@ class Music(commands.Cog):
                 }
             )
             try:
-                context.setdefault("track_identifier", getattr(handle.track, "identifier", None))
+                context.setdefault(
+                    "track_identifier", getattr(handle.track, "identifier", None)
+                )
                 context.setdefault("track_id", getattr(handle.track, "id", None))
             except AttributeError:
                 pass
@@ -330,7 +343,10 @@ class Music(commands.Cog):
     async def play(
         self,
         interaction: nextcord.Interaction,
-        query: str = nextcord.SlashOption(description="Type music name, link, playlist, radio and media link.", autocomplete=True),
+        query: str = nextcord.SlashOption(
+            description="Type music name, link, playlist, radio and media link.",
+            autocomplete=True,
+        ),
     ) -> None:
         # CRITICAL: Defer IMMEDIATELY to prevent timeout on slow systems like Raspberry Pi
         try:
@@ -338,8 +354,14 @@ class Music(commands.Cog):
         except Exception as e:
             self.logger.error("Failed to defer interaction: %s", e)
             return
-        
-        self.logger.info("Slash play invoked", extra={"guild_id": getattr(interaction.guild, 'id', None), "user_id": getattr(interaction.user, 'id', None)})
+
+        self.logger.info(
+            "Slash play invoked",
+            extra={
+                "guild_id": getattr(interaction.guild, "id", None),
+                "user_id": getattr(interaction.user, "id", None),
+            },
+        )
         player, error = await self._ensure_voice(interaction)
         if error:
             await safe_reply(
@@ -361,9 +383,9 @@ class Music(commands.Cog):
                 )
             except TrackLoadFailure as exc:
                 self.metrics.incr_failed()
-                self.logger.error('Track load failure', exc_info=exc)
-                if getattr(exc, 'cause', None):
-                    self.logger.error('Underlying cause: %s', exc.cause)
+                self.logger.error("Track load failure", exc_info=exc)
+                if getattr(exc, "cause", None):
+                    self.logger.error("Underlying cause: %s", exc.cause)
                 await safe_reply(
                     interaction,
                     embed=self.embed_factory.failure(str(exc)),
@@ -387,7 +409,9 @@ class Music(commands.Cog):
             await self._ensure_playing(interaction.guild.id)
 
     @play.on_autocomplete("query")
-    async def play_autocomplete(self, interaction: nextcord.Interaction, value: str) -> list:
+    async def play_autocomplete(
+        self, interaction: nextcord.Interaction, value: str
+    ) -> list:
         """Provide track suggestions for the `query` option.
 
         Uses the Lavalink resolver to fetch search results and returns a
@@ -412,10 +436,16 @@ class Music(commands.Cog):
                 dur = int(getattr(t, "duration", 0) or 0)
                 mm = dur // 60
                 ss = dur % 60
-                label = f"{t.title} - {mm:02d}:{ss:02d}" if getattr(t, "title", None) else f"{value}"
+                label = (
+                    f"{t.title} - {mm:02d}:{ss:02d}"
+                    if getattr(t, "title", None)
+                    else f"{value}"
+                )
                 val = t.uri or t.title or value
                 try:
-                    choices.append(nextcord.SlashOptionChoice(name=label[:100], value=str(val)))
+                    choices.append(
+                        nextcord.SlashOptionChoice(name=label[:100], value=str(val))
+                    )
                 except Exception:
                     # If the choice object fails for any reason, skip it.
                     continue
@@ -447,7 +477,9 @@ class Music(commands.Cog):
         await safe_reply(interaction, "Skipped the current track.")
         await self._ensure_playing(guild.id)
 
-    @nextcord.slash_command(name="stop", description="Stop playback and clear the queue")
+    @nextcord.slash_command(
+        name="stop", description="Stop playback and clear the queue"
+    )
     async def stop(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
@@ -537,8 +569,12 @@ class Music(commands.Cog):
         else:
             await safe_reply(interaction, "No tracks removed.", ephemeral=True)
 
-    @nextcord.slash_command(name="move", description="Move a track to a different position")
-    async def move(self, interaction: nextcord.Interaction, source: int, destination: int) -> None:
+    @nextcord.slash_command(
+        name="move", description="Move a track to a different position"
+    )
+    async def move(
+        self, interaction: nextcord.Interaction, source: int, destination: int
+    ) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None:
@@ -596,7 +632,9 @@ class Music(commands.Cog):
         )
         await self._ensure_playing(guild.id)
 
-    @nextcord.slash_command(name="ytcheck", description="Show YouTube stack diagnostics")
+    @nextcord.slash_command(
+        name="ytcheck", description="Show YouTube stack diagnostics"
+    )
     async def ytcheck(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
@@ -618,62 +656,74 @@ class Music(commands.Cog):
         if age is not None:
             fields.append(f"Cookie file age: {int(age)}s")
         fields.append(f"Metrics: {report.metrics}")
-        embed = nextcord.Embed(title="YouTube diagnostics", description="\n".join(fields))
+        embed = nextcord.Embed(
+            title="YouTube diagnostics", description="\n".join(fields)
+        )
         await safe_reply(interaction, embed=embed)
 
     # ------------------------------------------------------------------
     # Mafic event listeners
     # ------------------------------------------------------------------
     @commands.Cog.listener()
-    async def on_track_end(self, event: mafic.TrackEndEvent) -> None:  # pragma: no cover - integration
+    async def on_track_end(
+        self, event: mafic.TrackEndEvent
+    ) -> None:  # pragma: no cover - integration
         guild_id = event.player.guild.id
         state = self._states.get(guild_id)
         if not state:
             return
         current_entry = state.now_playing
-        track_obj = getattr(event, 'track', None) or getattr(event.player, 'current', None)
+        track_obj = getattr(event, "track", None) or getattr(
+            event.player, "current", None
+        )
         context = self._track_log_context(guild_id, current_entry, track_obj)
-        reason = event.reason or 'UNKNOWN'
-        context['end_reason'] = reason
-        title = context.get('track_title') or 'unknown track'
+        reason = event.reason or "UNKNOWN"
+        context["end_reason"] = reason
+        title = context.get("track_title") or "unknown track"
         state.now_playing = None
-        if reason != 'FINISHED':
+        if reason != "FINISHED":
             self.logger.warning(
-                'Track ended early (%s): %s',
+                "Track ended early (%s): %s",
                 reason,
                 title,
                 extra=context,
             )
         else:
             self.logger.info(
-                'Track finished: %s',
+                "Track finished: %s",
                 title,
                 extra=context,
             )
         await self._ensure_playing(guild_id)
 
     @commands.Cog.listener()
-    async def on_track_exception(self, event: mafic.TrackExceptionEvent) -> None:  # pragma: no cover
+    async def on_track_exception(
+        self, event: mafic.TrackExceptionEvent
+    ) -> None:  # pragma: no cover
         guild_id = event.player.guild.id
         state = self._states.get(guild_id)
         if not state:
             return
         current_entry = state.now_playing
-        track_obj = getattr(event, 'track', None) or getattr(event.player, 'current', None)
+        track_obj = getattr(event, "track", None) or getattr(
+            event.player, "current", None
+        )
         context = self._track_log_context(guild_id, current_entry, track_obj)
         exception = event.exception
-        message = getattr(exception, 'message', None) or str(exception)
-        severity = getattr(exception, 'severity', None) or 'unknown'
-        cause = getattr(exception, 'cause', None)
-        context['exception_message'] = message
-        context['exception_severity'] = getattr(exception, 'severity', None)
+        message = getattr(exception, "message", None) or str(exception)
+        severity = getattr(exception, "severity", None) or "unknown"
+        cause = getattr(exception, "cause", None)
+        context["exception_message"] = message
+        context["exception_severity"] = getattr(exception, "severity", None)
         if cause is not None:
-            context['exception_cause'] = str(cause)
+            context["exception_cause"] = str(cause)
         self.metrics.incr_failed()
-        self.logger.error('Track exception [%s]: %s', severity, message, extra=context)
+        self.logger.error("Track exception [%s]: %s", severity, message, extra=context)
 
         if current_entry and not current_entry.is_fallback:
-            base_error = TrackLoadFailure(message, cause=exception if isinstance(exception, Exception) else None)
+            base_error = TrackLoadFailure(
+                message, cause=exception if isinstance(exception, Exception) else None
+            )
             try:
                 fallback_entry = await self.fallback.build_fallback_entry(
                     current_entry.query,
@@ -683,15 +733,15 @@ class Music(commands.Cog):
                     base_error=base_error,
                 )
             except TrackLoadFailure as fallback_exc:
-                context['fallback_error'] = str(fallback_exc)
-                self.logger.error('Fallback resolution failed', extra=context)
+                context["fallback_error"] = str(fallback_exc)
+                self.logger.error("Fallback resolution failed", extra=context)
                 state.now_playing = None
                 await self._ensure_playing(guild_id)
                 return
             else:
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
-                context_fallback['fallback_trigger'] = 'track_exception'
-                self.logger.info('Switching to fallback stream', extra=context_fallback)
+                context_fallback["fallback_trigger"] = "track_exception"
+                self.logger.info("Switching to fallback stream", extra=context_fallback)
                 state.now_playing = None
                 state.queue.add_next(fallback_entry)
                 await self._ensure_playing(guild_id)
@@ -701,22 +751,28 @@ class Music(commands.Cog):
         await self._ensure_playing(guild_id)
 
     @commands.Cog.listener()
-    async def on_track_stuck(self, event: mafic.TrackStuckEvent) -> None:  # pragma: no cover
+    async def on_track_stuck(
+        self, event: mafic.TrackStuckEvent
+    ) -> None:  # pragma: no cover
         guild_id = event.player.guild.id
         state = self._states.get(guild_id)
         if not state:
             return
         current_entry = state.now_playing
-        track_obj = getattr(event, 'track', None) or getattr(event.player, 'current', None)
+        track_obj = getattr(event, "track", None) or getattr(
+            event.player, "current", None
+        )
         context = self._track_log_context(guild_id, current_entry, track_obj)
-        threshold = getattr(event, 'threshold', None)
-        context['threshold_ms'] = threshold
-        title = context.get('track_title') or 'unknown track'
+        threshold = getattr(event, "threshold", None)
+        context["threshold_ms"] = threshold
+        title = context.get("track_title") or "unknown track"
         self.metrics.incr_failed()
-        self.logger.warning('Track stuck at %s ms: %s', threshold, title, extra=context)
+        self.logger.warning("Track stuck at %s ms: %s", threshold, title, extra=context)
 
         if current_entry and not current_entry.is_fallback:
-            base_error = TrackLoadFailure(f'Track stuck after {threshold} ms', cause=None)
+            base_error = TrackLoadFailure(
+                f"Track stuck after {threshold} ms", cause=None
+            )
             try:
                 fallback_entry = await self.fallback.build_fallback_entry(
                     current_entry.query,
@@ -726,15 +782,17 @@ class Music(commands.Cog):
                     base_error=base_error,
                 )
             except TrackLoadFailure as fallback_exc:
-                context['fallback_error'] = str(fallback_exc)
-                self.logger.error('Fallback resolution failed after track stuck', extra=context)
+                context["fallback_error"] = str(fallback_exc)
+                self.logger.error(
+                    "Fallback resolution failed after track stuck", extra=context
+                )
                 state.now_playing = None
                 await self._ensure_playing(guild_id)
                 return
             else:
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
-                context_fallback['fallback_trigger'] = 'track_stuck'
-                self.logger.info('Switching to fallback stream', extra=context_fallback)
+                context_fallback["fallback_trigger"] = "track_stuck"
+                self.logger.info("Switching to fallback stream", extra=context_fallback)
                 state.now_playing = None
                 state.queue.add_next(fallback_entry)
                 await self._ensure_playing(guild_id)
@@ -742,7 +800,6 @@ class Music(commands.Cog):
 
         state.now_playing = None
         await self._ensure_playing(guild_id)
-
 
 
 def setup(bot: commands.Bot) -> None:

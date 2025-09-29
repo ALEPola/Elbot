@@ -1,17 +1,37 @@
 """High level music playback utilities for Elbot."""
 
-from .audio_backend import LavalinkAudioBackend
-from .fallback import FallbackPlayer
-from .queue import MusicQueue, QueuedTrack
-from .embeds import EmbedFactory
-from .diagnostics import DiagnosticsReport, DiagnosticsService
+from .core import (
+    FallbackPlayer,
+    LavalinkAudioBackend,
+    LavalinkUnavailable,
+    MusicQueue,
+    QueuedTrack,
+    TrackHandle,
+    TrackLoadFailure,
+)
+from .support import (
+    CookieManager,
+    DiagnosticsReport,
+    DiagnosticsService,
+    EmbedFactory,
+    PlaybackMetrics,
+    QueuePaginator,
+    configure_json_logging,
+)
 
 __all__ = [
-    "LavalinkAudioBackend",
     "FallbackPlayer",
+    "LavalinkAudioBackend",
+    "LavalinkUnavailable",
     "MusicQueue",
     "QueuedTrack",
-    "EmbedFactory",
+    "TrackHandle",
+    "TrackLoadFailure",
+    "CookieManager",
     "DiagnosticsReport",
     "DiagnosticsService",
+    "EmbedFactory",
+    "PlaybackMetrics",
+    "QueuePaginator",
+    "configure_json_logging",
 ]
