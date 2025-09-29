@@ -235,7 +235,9 @@ def main() -> None:
         logger.info("bot ready user=%s id=%s", bot.user, bot.user.id)
         if not getattr(bot, "_app_commands_synced", False):
             try:
-                await bot.sync_all_application_commands()
+                await bot.sync_all_application_commands(use_rollout=False)
+                if Config.GUILD_ID:
+                    await bot.sync_application_commands(guild_id=Config.GUILD_ID)
             except Exception:  # pragma: no cover - sync failures
                 logger.exception("failed to sync application commands")
             else:

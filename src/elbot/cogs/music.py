@@ -85,7 +85,16 @@ class Music(commands.Cog):
     # Cog lifecycle
     # ------------------------------------------------------------------
     async def cog_load(self) -> None:  # type: ignore[override]
-        await self.backend.wait_ready()
+        # Pre-initialize backend in background to avoid lazy loading delays
+        async def _init_backend():
+            try:
+                await self.backend.wait_ready()
+                self.logger.info("Music backend pre-initialized successfully")
+            except Exception as e:
+                self.logger.warning("Failed to pre-initialize backend: %s", e)
+        
+        # Don't wait for this - let it run in background
+        self.bot.loop.create_task(_init_backend())
 
     async def _cog_cleanup(self) -> None:
         for guild_id, state in list(self._states.items()):
@@ -323,9 +332,14 @@ class Music(commands.Cog):
         interaction: nextcord.Interaction,
         query: str = nextcord.SlashOption(description="Type music name, link, playlist, radio and media link.", autocomplete=True),
     ) -> None:
+        # CRITICAL: Defer IMMEDIATELY to prevent timeout on slow systems like Raspberry Pi
+        try:
+            await interaction.response.defer(ephemeral=False)
+        except Exception as e:
+            self.logger.error("Failed to defer interaction: %s", e)
+            return
+        
         self.logger.info("Slash play invoked", extra={"guild_id": getattr(interaction.guild, 'id', None), "user_id": getattr(interaction.user, 'id', None)})
-        # Defer publicly so the queued message we send is visible to everyone
-        await interaction.response.defer(ephemeral=False)
         player, error = await self._ensure_voice(interaction)
         if error:
             await safe_reply(
