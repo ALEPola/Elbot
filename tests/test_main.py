@@ -2,6 +2,7 @@ import argparse
 import asyncio
 
 import pytest
+from urllib.parse import urlparse
 
 import elbot.config as config_module
 from elbot import cli, main
@@ -26,7 +27,7 @@ class _FakeResponse:
 
 class _FakeSession:
     def __init__(self, responses):
-        self._responses = iter(responses)
+        self._responses = responses
 
     async def __aenter__(self) -> "_FakeSession":
         return self
@@ -35,21 +36,34 @@ class _FakeSession:
         return False
 
     def get(self, url, **kwargs):  # pragma: no cover - signature compat
-        try:
-            return next(self._responses)
-        except StopIteration:  # pragma: no cover - defensive
+        path = urlparse(url).path.lstrip("/")
+        response = self._responses.get(path)
+        if response is None:
             raise AssertionError(f"unexpected request to {url}")
+        return response()
 
 
 def _install_fake_session(monkeypatch):
     def _factory(*_args, **_kwargs):
-        return _FakeSession(
-            [
-                _FakeResponse(200, {"plugins": []}),
-                _FakeResponse(404, {}),
-                _FakeResponse(200, {"tracks": []}),
-            ]
-        )
+        def _once(payload):
+            used = {"value": False}
+
+            def _next():
+                if used["value"]:
+                    raise AssertionError("response consumed more than once")
+                used["value"] = True
+                return payload
+
+            return _next
+
+        responses = {
+            "version": _once(_FakeResponse(200, {"plugins": []})),
+            "v4/version": _once(_FakeResponse(404, {})),
+            "loadtracks": _once(_FakeResponse(200, {"tracks": []})),
+            "v4/loadtracks": _once(_FakeResponse(404, {})),
+        }
+
+        return _FakeSession(responses)
 
     monkeypatch.setattr(main.aiohttp, "ClientSession", _factory)
 
