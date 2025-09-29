@@ -51,3 +51,13 @@ def test_invalid_f1_channel_id_logs_warning(monkeypatch, caplog):
     assert config.Config.F1_CHANNEL_ID == 0
     messages = [r.message for r in caplog.records]
     assert any("Invalid F1_CHANNEL_ID" in m for m in messages)
+
+
+def test_default_lavalink_port_when_unset(monkeypatch):
+    monkeypatch.delenv("LAVALINK_PORT", raising=False)
+
+    import elbot.config as config
+
+    importlib.reload(config)
+
+    assert config.Config.LAVALINK_PORT == config.DEFAULT_LAVALINK_PORT
