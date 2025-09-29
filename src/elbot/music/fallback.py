@@ -66,12 +66,30 @@ class FallbackPlayer:
         requester_display: str,
         channel_id: int,
     ) -> QueuedTrack:
-        """Resolve a queued track, resorting to yt-dlp when necessary."""
+        """Resolve a queued track, preferring yt-dlp fallback first."""
 
         start = time.perf_counter()
         prefer_search = not query.startswith("http")
+
+        base_error = TrackLoadFailure("Fallback-first resolution (Lavalink deferred)")
         try:
-            handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
+            fallback_entry = await self._resolve_fallback(
+                query,
+                requested_by=requested_by,
+                requester_display=requester_display,
+                channel_id=channel_id,
+                base_error=base_error,
+            )
+        except TrackLoadFailure as fallback_exc:
+            self.logger.warning(
+                "Fallback resolution failed, attempting Lavalink",
+                extra={"query": query, "error": str(fallback_exc)},
+            )
+            try:
+                handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
+            except TrackLoadFailure as lavalink_exc:
+                self.metrics.incr_failed()
+                raise lavalink_exc from fallback_exc
             self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return self._build_entry(
                 handle,
@@ -82,18 +100,7 @@ class FallbackPlayer:
                 is_fallback=False,
                 fallback_source=None,
             )
-        except TrackLoadFailure as first_error:
-            self.logger.warning(
-                "Lavalink resolve failed, attempting fallback",
-                extra={"query": query, "error": str(first_error)},
-            )
-            fallback_entry = await self._resolve_fallback(
-                query,
-                requested_by=requested_by,
-                requester_display=requester_display,
-                channel_id=channel_id,
-                base_error=first_error,
-            )
+        else:
             self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return fallback_entry
 
