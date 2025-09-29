@@ -61,11 +61,13 @@ The installer creates a `.env` file with your settings. Key variables:
 | `DISCORD_TOKEN` | ✅ | Your Discord bot token |
 | `OPENAI_API_KEY` | ⭐ | Enables AI chat and image generation |
 | `AUTO_LAVALINK` | | Auto-start music server (default: `1`) |
+| `VOICE_CHAT_ENABLED` | | Load the experimental `/voice_chat` cog (default: `false`) |
 | `AUTO_UPDATE_WEBHOOK` | | Discord webhook notified when scheduled updates fail |
 | `ICS_URL` | | F1 calendar feed URL |
 | `LOCAL_TIMEZONE` | | Your timezone (e.g., `America/New_York`) |
 
-See [`.env.example`](.env.example) for all options.
+See [`.env.example`](.env.example) for all options. Set `VOICE_CHAT_ENABLED=1` to expose the placeholder voice chat slash commands once
+you are ready to experiment with realtime audio integrations.
 
 For unattended installs export the prefixed variables before running
 `elbotctl install --non-interactive` (or the provisioning scripts). The
@@ -77,6 +79,7 @@ installer automatically maps them to the `.env` keys:
 - `ELBOT_LAVALINK_HOST` → `LAVALINK_HOST`
 - `ELBOT_USERNAME` → `ELBOT_USERNAME`
 - `ELBOT_AUTO_UPDATE_WEBHOOK` → `AUTO_UPDATE_WEBHOOK`
+- `ELBOT_VOICE_CHAT_ENABLED` → `VOICE_CHAT_ENABLED`
 
 Direct exports such as `DISCORD_TOKEN=...` also work when running the
 installer in non-interactive mode.

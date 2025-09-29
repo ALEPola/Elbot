@@ -115,7 +115,7 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
 
             if handshake:
                 params = {"identifier": "ytsearch:elbot health"}
-                load_paths = ["v4/loadtracks", "loadtracks"]
+                load_paths = ["loadtracks", "v4/loadtracks"]
                 load_ok = False
                 for lp in load_paths:
                     try:
@@ -135,7 +135,7 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
                                     tracks = possible_tracks
                             if not tracks:
                                 failure_reason = f"/{lp} returned no tracks"
-                                continue
+                                break
                             load_ok = True
                             break
                     except Exception as exc:
