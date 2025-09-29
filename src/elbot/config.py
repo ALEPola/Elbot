@@ -26,8 +26,7 @@ _running_under_pytest = bool(os.getenv("PYTEST_CURRENT_TEST")) or any(
 if not _running_under_pytest:
     load_dotenv(BASE_DIR / ".env")
 
-logger = logging.getLogger("elbot.config")
-_gid_str = os.getenv("GUILD_ID")
+logger = logging.getLogger("elbot.config")\r\nAUTO_EXPORT_TRUE = {"1", "true", "yes", "on"}\r\n_gid_str = os.getenv("GUILD_ID")
 
 def _select_dynamic_lavalink_port(start: int = DYNAMIC_PORT_START, attempts: int = DYNAMIC_PORT_ATTEMPTS) -> int:
     """Return a free TCP port on 127.0.0.1 for Lavalink."""
@@ -140,7 +139,25 @@ def log_cookie_status() -> None:
     """Log the configured YouTube cookie file, if any."""
 
     path = Config.YT_COOKIES_FILE
+    auto_export = os.getenv("YTDLP_AUTO_EXPORT")
     if not path:
+        if str(auto_export or "").lower() in AUTO_EXPORT_TRUE:
+            target = (
+                os.getenv("YTDLP_COOKIES_OUTPUT")
+                or os.getenv("YTDLP_COOKIES_FILE")
+                or os.getenv("YTDLP_COOKIES_PATH")
+            )
+            if not target:
+                data_dir = os.getenv("ELBOT_DATA_DIR")
+                if data_dir:
+                    target = str(Path(data_dir).expanduser() / "yt-cookies.txt")
+            browser = os.getenv("YTDLP_BROWSER") or "<auto>"
+            logger.info(
+                "cookies: auto-export enabled browser=%s target=%s",
+                browser,
+                target or "<default>",
+            )
+            return
         logger.info("cookies: none")
         return
 
@@ -151,7 +168,6 @@ def log_cookie_status() -> None:
 
     mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
     logger.info("cookies: path=%s mtime=%s", resolved, mtime.isoformat())
-
 
 
 
