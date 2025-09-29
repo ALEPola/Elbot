@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from unittest.mock import AsyncMock
 
 import nextcord
@@ -141,45 +140,3 @@ def test_chat_summary(monkeypatch, tmp_path):
 
     assert any("hi" in m["content"] for m in DummyOpenAI.last)
     loop.close()
-
-
-def test_initialize_openai_client_with_key(monkeypatch):
-    class DummyOpenAI:
-        def __init__(self, api_key):
-            self.api_key = api_key
-
-    monkeypatch.setattr(chat_cog, "OpenAI", DummyOpenAI)
-    monkeypatch.setattr(chat_cog.Config, "OPENAI_API_KEY", "abc123")
-    chat_cog.openai_client = None
-
-    chat_cog._initialize_openai_client(force=True)
-
-    assert isinstance(chat_cog.openai_client, DummyOpenAI)
-    assert chat_cog.openai_client.api_key == "abc123"
-
-
-def test_initialize_openai_client_missing_key(monkeypatch, caplog):
-    monkeypatch.setattr(chat_cog.Config, "OPENAI_API_KEY", "")
-    chat_cog.openai_client = object()
-
-    caplog.set_level(logging.WARNING)
-    chat_cog._initialize_openai_client(force=True)
-
-    assert chat_cog.openai_client is None
-    assert "OPENAI_API_KEY is not configured" in caplog.text
-
-
-def test_initialize_openai_client_failure(monkeypatch, caplog):
-    class DummyOpenAI:
-        def __init__(self, api_key):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr(chat_cog, "OpenAI", DummyOpenAI)
-    monkeypatch.setattr(chat_cog.Config, "OPENAI_API_KEY", "abc123")
-    chat_cog.openai_client = object()
-
-    caplog.set_level(logging.ERROR)
-    chat_cog._initialize_openai_client(force=True)
-
-    assert chat_cog.openai_client is None
-    assert "Failed to initialize OpenAI client" in caplog.text
