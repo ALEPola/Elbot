@@ -72,17 +72,6 @@ class CookieManager:
             "quiet": True,
             "format": "bestaudio/best",
             "noplaylist": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": [
-                        "android",
-                        "android_embedded",
-                        "ios",
-                        "tv_embedded",
-                    ],
-                    "player_skip": ["webpage"],
-                }
-            },
         }
         if self._path and self._path.exists():
             options["cookiefile"] = str(self._path)

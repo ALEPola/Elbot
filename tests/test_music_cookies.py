@@ -22,9 +22,6 @@ def test_cookie_manager_tracks_mtime(tmp_path):
     assert age2 is None or age2 >= 0
     opts = manager.yt_dlp_options()
     assert opts["cookiefile"] == str(cookie_file)
-    yt_args = opts.get("extractor_args", {}).get("youtube", {})
-    assert "android" in yt_args.get("player_client", [])
-    assert "webpage" in yt_args.get("player_skip", [])
 
 
 def test_cookie_manager_handles_missing_file(tmp_path):
@@ -35,6 +32,4 @@ def test_cookie_manager_handles_missing_file(tmp_path):
     assert manager.cookie_age_seconds() is None
     opts = manager.yt_dlp_options()
     assert "cookiefile" not in opts
-    yt_args = opts.get("extractor_args", {}).get("youtube", {})
-    assert "android" in yt_args.get("player_client", [])
 
