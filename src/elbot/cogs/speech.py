@@ -70,6 +70,12 @@ class SpeechCog(commands.Cog):
         voice_name = random.choice(VOICE_OPTIONS)
 
         voice_client = guild.voice_client
+        if voice_client and not voice_client.is_connected():
+            try:
+                await voice_client.disconnect(force=True)
+            except Exception:  # pragma: no cover - best effort cleanup
+                pass
+            voice_client = None
         joined_here = False
         try:
             target_channel = user.voice.channel
