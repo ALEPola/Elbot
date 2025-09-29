@@ -86,7 +86,7 @@ class AICog(commands.Cog):
         file = self._history_dir / f"{user_id}.json"
         try:
             if file.exists():
-                data = json.loads(file.read_text())
+                data = json.loads(file.read_text(encoding="utf-8"))
             else:
                 data = []
         except Exception:
@@ -100,7 +100,7 @@ class AICog(commands.Cog):
         if not file.exists():
             return []
         try:
-            return json.loads(file.read_text())
+            return json.loads(file.read_text(encoding="utf-8"))
         except Exception:
             return []
 
@@ -388,3 +388,4 @@ class AICog(commands.Cog):
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(AICog(bot))
     logger.info("✅ Loaded AICog")
+

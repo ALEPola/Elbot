@@ -104,6 +104,9 @@ class Config:
         required = ["DISCORD_TOKEN", "LAVALINK_HOST", "LAVALINK_PASSWORD"]
         missing = Config._missing_keys(required)
 
+        if "DISCORD_TOKEN" in missing and Config.DISCORD_TOKEN:
+            missing.remove("DISCORD_TOKEN")
+
         if missing:
             joined = ", ".join(missing)
             logger.error("configuration missing required keys: %s", joined)
