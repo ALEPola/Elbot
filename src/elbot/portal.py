@@ -364,6 +364,7 @@ def update_status():
         update_log=update_log,
         elbotctl_output=elbotctl_output,
         auto_update=AUTO_UPDATE,
+        auto_update_status=deploy.auto_update_status(),
         errors=errors,
     )
 
