@@ -102,10 +102,18 @@ installer in non-interactive mode.
 - `/f1_results` - Latest race results
 - `/f1_subscribe` - Get race reminders
 
-### Utilities 🔧
+### Utilities & Moderation 🔧
 - `/ping` - Check bot latency
 - `/uptime` - Bot runtime info
+- `/system_info` - Host hardware overview
+- `/cogs` - List loaded bot extensions
+- `/kick <member>` - Remove a member from the server
+- `/ban <member>` - Ban a member from the server
+- `/clear_messages <count>` - Bulk delete recent messages
+- `/clear_bot_messages <count>` - Remove the bot's recent responses
 - `/ytcheck` - YouTube playback diagnostics
+
+All of the above commands are bundled in the combined **UtilityCog** so diagnostic and moderation tooling stay loaded together.
 
 ## 🖥️ Management Portal
 

@@ -13,5 +13,5 @@ def test_load_all_cogs(monkeypatch):
     intents = nextcord.Intents.none()
     bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
     load_all_cogs(bot, cogs_dir="cogs")
-    expected = {"ChatCog", "ImageCog", "DiagnosticCog", "Music"}
+    expected = {"ChatCog", "ImageCog", "UtilityCog", "Music"}
     assert expected.issubset(set(bot.cogs.keys()))
