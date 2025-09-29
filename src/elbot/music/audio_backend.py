@@ -163,17 +163,8 @@ class LavalinkAudioBackend:
         return True
 
     async def close(self) -> None:
-        """Shut down the Lavalink node if one exists."""
-
         if self._node:
-            try:
-                disconnect_coro = getattr(self._node, "disconnect", None)
-                if disconnect_coro:
-                    await disconnect_coro()
-            except Exception:
-                # Older/newer versions of Mafic may not implement ``disconnect``;
-                # swallow the error so shutdown continues cleanly.
-                pass
+            await self._node.disconnect()
         self._node = None
         self._ready.clear()
 
@@ -247,3 +238,4 @@ class LavalinkAudioBackend:
             raise LavalinkUnavailable("Lavalink node is not ready")
         track = await self._node.decode_track(encoded)
         return TrackHandle.from_mafic(track)
+    #h
