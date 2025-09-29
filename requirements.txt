@@ -7,8 +7,9 @@ platformdirs>=4.2
 psutil
 mafic>=2.10.1
 yt-dlp>=2025.9.26
-Flask
 icalendar
 aiohttp
 cachetools
 ffmpeg
+# Optional portal dependencies:
+# Flask

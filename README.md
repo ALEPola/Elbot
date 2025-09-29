@@ -107,9 +107,15 @@ installer in non-interactive mode.
 - `/uptime` - Bot runtime info
 - `/ytcheck` - YouTube playback diagnostics
 
-## 🖥️ Management Portal
+## 🖥️ Management Portal (optional)
 
-Access the web interface to manage your bot:
+Install the optional portal extra to enable the Flask management UI:
+
+```bash
+pip install "elbot[portal]"
+```
+
+Launch it when you need to manage the bot:
 
 ```bash
 elbot-portal  # Default: http://localhost:8000
@@ -154,7 +160,8 @@ elbotctl update  # Manual update
 ```
 
 Or enable automatic daily updates:
-1. Open the portal: `elbot-portal`
+1. Open the portal (`pip install "elbot[portal]"` if you have not already)
+   and start it with `elbot-portal`.
 2. Navigate to the home page.
 3. In the *Auto Update Scheduler* card choose **Enable Timer** (systemd) or **Install Cron Job** (cron-capable hosts).
 4. Optional: set `AUTO_UPDATE_WEBHOOK` in `.env` so failed runs send a Discord alert.
@@ -166,10 +173,11 @@ The scheduled job runs `python -m elbot.core.auto_update_job`, writes to `logs/a
 ```
 Elbot/
 ├── src/elbot/
-│   ├── cogs/        # Bot commands and features
-│   ├── music/       # Music playback system
-│   ├── core/        # Core utilities
-│   └── portal.py    # Web management interface
+│   ├── cogs/            # Bot commands and features
+│   ├── music/           # Music playback system
+│   ├── core/            # Core utilities
+│   └── ...
+├── src/elbot_portal/    # Optional Flask management interface
 ├── infra/
 │   ├── docker/      # Container configurations
 │   ├── scripts/     # Installation and deployment

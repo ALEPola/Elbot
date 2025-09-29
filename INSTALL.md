@@ -112,7 +112,8 @@ elbotctl service restart
 
 ## 4. Docker
 
-The bundled `infra/docker/docker-compose.yml` file starts the bot, management portal and Lavalink in a single command:
+The bundled `infra/docker/docker-compose.yml` file starts the bot and Lavalink in a single command.
+Run the optional portal separately if you enable it.
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up --build
@@ -142,7 +143,13 @@ Whenever you change `.env`, restart the bot.
 
 ## 7. Running the management portal
 
-Install the package in editable mode (already done by the scripts) and launch:
+Install the optional extra to pull in Flask before launching the portal:
+
+```bash
+pip install "elbot[portal]"
+```
+
+Then start the UI:
 
 ```bash
 elbot-portal
