@@ -45,6 +45,10 @@ MAFIC_MAX_SUPPORTED_LAVALINK_VERSION = os.getenv(
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
 MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.13.5"
+DEFAULT_YOUTUBE_PLUGIN_VERSION = os.getenv(
+    "LAVALINK_DEFAULT_YOUTUBE_PLUGIN_VERSION",
+    MINIMUM_YOUTUBE_PLUGIN_VERSION,
+)
 YOUTUBE_PLUGIN_METADATA_URL = (
     "https://maven.lavalink.dev/releases/dev/lavalink/youtube/youtube-plugin/maven-metadata.xml"
 )
@@ -109,7 +113,12 @@ def _determine_youtube_plugin_version() -> str:
             f"[auto-lavalink] WARNING: Resolved youtube plugin version {latest!r} is below the minimum supported; falling back.",
             file=sys.stderr,
         )
-    return MINIMUM_YOUTUBE_PLUGIN_VERSION
+    else:
+        print(
+            f"[auto-lavalink] WARNING: Falling back to default youtube plugin version {DEFAULT_YOUTUBE_PLUGIN_VERSION!r} (metadata unavailable).",
+            file=sys.stderr,
+        )
+    return DEFAULT_YOUTUBE_PLUGIN_VERSION
 
 
 YOUTUBE_PLUGIN_VERSION = _determine_youtube_plugin_version()

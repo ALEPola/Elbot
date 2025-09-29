@@ -238,6 +238,22 @@ class FallbackPlayer:
             category = self._categorize_exception(exc)
             self.metrics.record_extractor_failure(category)
             self.metrics.incr_failed()
+            lowered = str(exc).lower()
+            if "sign in to confirm you" in lowered:
+                cookie_path = self.cookies.cookie_file()
+                self.logger.error(
+                    "YouTube rejected unauthenticated request; configure YT_COOKIES_FILE with fresh export",
+                    extra={
+                        "query": query,
+                        "cookie_configured": bool(cookie_path and cookie_path.exists()),
+                        "cookie_path": str(cookie_path) if cookie_path else None,
+                    },
+                )
+                message = (
+                    "YouTube rejected unauthenticated playback. "
+                    "Export fresh cookies and set YT_COOKIES_FILE or YTDLP_COOKIES_FILE."
+                )
+                raise TrackLoadFailure(message, cause=exc) from exc
             raise TrackLoadFailure("yt-dlp extraction failed", cause=exc) from exc
 
         if "entries" in info:
