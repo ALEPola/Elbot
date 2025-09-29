@@ -1,33 +1,60 @@
-﻿import pytest
-
 from pathlib import Path
 
-from elbot.core import docker_tasks, service_manager
+import pytest
+
+from elbot.core import deploy, docker_tasks
 
 
 class _DummyError(RuntimeError):
     pass
 
 
-def test_install_service_passes_flags(monkeypatch):
-    captured: list[list[str]] = []
+def test_install_service_systemd(monkeypatch, tmp_path: Path) -> None:
+    recorded: dict[str, tuple[Path, bool, str]] = {}
 
-    def fake_run(args: list[str]) -> None:
-        captured.append(args)
+    def fake_install(root: Path, *, require_lavalink: bool, python_executable: str) -> None:
+        recorded["systemd"] = (root, require_lavalink, python_executable)
 
-    service_manager.install_service(fake_run, require_lavalink=True, force=True)
+    monkeypatch.setattr(deploy.service_install, "install_systemd_service", fake_install)
 
-    assert captured == [["-m", "elbot.service_install", "--require-lavalink", "--force"]]
+    deploy.install_service(
+        tmp_path,
+        python_executable="/venv/bin/python",
+        require_lavalink=True,
+        platform_override="systemd",
+    )
+
+    assert recorded["systemd"] == (tmp_path, True, "/venv/bin/python")
 
 
-def test_remove_service_invokes_runner():
-    captured: list[list[str]] = []
+def test_install_service_windows(monkeypatch, tmp_path: Path) -> None:
+    recorded: dict[str, tuple[Path, str]] = {}
 
-    def fake_run(args: list[str]) -> None:
-        captured.append(args)
+    def fake_install(root: Path, *, python_executable: str) -> None:
+        recorded["windows"] = (root, python_executable)
 
-    service_manager.remove_service(fake_run)
-    assert captured == [["-m", "elbot.service_install", "--remove"]]
+    monkeypatch.setattr(deploy.service_install, "install_windows_service", fake_install)
+
+    deploy.install_service(
+        tmp_path,
+        python_executable="C:/venv/Scripts/python.exe",
+        platform_override="windows",
+    )
+
+    assert recorded["windows"] == (tmp_path, "C:/venv/Scripts/python.exe")
+
+
+def test_remove_service_launchd(monkeypatch) -> None:
+    called = {}
+
+    def fake_remove() -> None:
+        called["launchd"] = True
+
+    monkeypatch.setattr(deploy.service_install, "uninstall_launchd_service", fake_remove)
+
+    deploy.remove_service(platform_override="darwin")
+
+    assert called["launchd"] is True
 
 
 def test_control_service_windows_maps_actions():
@@ -36,20 +63,21 @@ def test_control_service_windows_maps_actions():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.control_service(
+    deploy.control_service(
         "start",
         is_windows=True,
         run=fake_run,
         ensure_command=lambda _: True,
         error_cls=_DummyError,
+        windows_service_name="CustomElbot",
     )
 
-    assert captured == [["sc", "start", "Elbot"]]
+    assert captured == [["sc", "start", "CustomElbot"]]
 
 
 def test_control_service_windows_invalid_action():
     with pytest.raises(_DummyError):
-        service_manager.control_service(
+        deploy.control_service(
             "enable",
             is_windows=True,
             run=lambda _: None,
@@ -60,7 +88,7 @@ def test_control_service_windows_invalid_action():
 
 def test_control_service_systemd_requires_systemctl():
     with pytest.raises(_DummyError):
-        service_manager.control_service(
+        deploy.control_service(
             "start",
             is_windows=False,
             run=lambda _: None,
@@ -75,7 +103,7 @@ def test_control_service_systemd_status_runs_command():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.control_service(
+    deploy.control_service(
         "status",
         is_windows=False,
         run=fake_run,
@@ -83,12 +111,12 @@ def test_control_service_systemd_status_runs_command():
         error_cls=_DummyError,
     )
 
-    assert captured == [["systemctl", "status", "elbot.service"]]
+    assert captured == [["systemctl", "status", deploy.SERVICE_NAME_DEFAULT]]
 
 
 def test_control_service_systemd_invalid_action():
     with pytest.raises(_DummyError):
-        service_manager.control_service(
+        deploy.control_service(
             "reload",
             is_windows=False,
             run=lambda _: None,
@@ -103,7 +131,7 @@ def test_control_service_systemd_start():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.control_service(
+    deploy.control_service(
         "start",
         is_windows=False,
         run=fake_run,
@@ -111,7 +139,7 @@ def test_control_service_systemd_start():
         error_cls=_DummyError,
     )
 
-    assert captured == [["systemctl", "start", "elbot.service"]]
+    assert captured == [["systemctl", "start", deploy.SERVICE_NAME_DEFAULT]]
 
 
 def test_docker_run_compose_actions(tmp_path: Path) -> None:

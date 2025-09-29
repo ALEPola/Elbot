@@ -14,7 +14,7 @@ from typing import Iterable, Optional
 
 from collections.abc import Mapping
 
-from .core import docker_tasks, env_tools, network, prerequisites, runtime, service_manager
+from .core import deploy, docker_tasks, env_tools, network, prerequisites, runtime
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 INFRA_DIR = PROJECT_ROOT / "infra"
@@ -152,6 +152,13 @@ def _run_in_venv(args: Iterable[str]) -> subprocess.CompletedProcess:
     )
 
 
+def _venv_python() -> Path:
+    python = runtime.venv_python(VENV_DIR, is_windows=IS_WINDOWS)
+    if not python.exists():
+        raise CommandError("virtual environment not found; run 'elbotctl install' first")
+    return python
+
+
 def _pip_install(args: Iterable[str]) -> None:
     runtime.pip_install(
         args,
@@ -210,8 +217,10 @@ def command_install(args: argparse.Namespace) -> None:
 
     if not args.no_service:
         try:
-            service_manager.install_service(
-                _run_in_venv,
+            python = _venv_python()
+            deploy.install_service(
+                PROJECT_ROOT,
+                python_executable=str(python),
                 require_lavalink=args.require_lavalink,
             )
         except subprocess.CalledProcessError as exc:
@@ -221,6 +230,8 @@ def command_install(args: argparse.Namespace) -> None:
             else:
                 _echo("Retry with sudo: `sudo elbotctl service install --require-lavalink` or rerun the installer with --no-service.")
             raise
+        except RuntimeError as exc:
+            raise CommandError(str(exc)) from exc
     _echo("Installation complete. Use 'elbotctl service start' or 'elbotctl run' to launch the bot.")
 
 
@@ -256,52 +267,53 @@ def command_env_import(args: argparse.Namespace) -> None:
 
 
 def command_service_install(args: argparse.Namespace) -> None:
-    service_manager.install_service(
-        _run_in_venv,
+    python = _venv_python()
+    deploy.install_service(
+        PROJECT_ROOT,
+        python_executable=str(python),
         require_lavalink=args.require_lavalink,
-        force=args.force,
     )
 
 
 def command_service_remove(_: argparse.Namespace) -> None:
-    service_manager.remove_service(_run_in_venv)
+    deploy.remove_service()
 
 
 def command_service_start(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    deploy.control_service(
         "start",
         is_windows=IS_WINDOWS,
-        run=_run,
+        run=lambda cmd: _run(cmd),
         ensure_command=_ensure_command,
         error_cls=CommandError,
     )
 
 
 def command_service_stop(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    deploy.control_service(
         "stop",
         is_windows=IS_WINDOWS,
-        run=_run,
+        run=lambda cmd: _run(cmd),
         ensure_command=_ensure_command,
         error_cls=CommandError,
     )
 
 
 def command_service_restart(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    deploy.control_service(
         "restart",
         is_windows=IS_WINDOWS,
-        run=_run,
+        run=lambda cmd: _run(cmd),
         ensure_command=_ensure_command,
         error_cls=CommandError,
     )
 
 
 def command_service_status(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    deploy.control_service(
         "status",
         is_windows=IS_WINDOWS,
-        run=_run,
+        run=lambda cmd: _run(cmd),
         ensure_command=_ensure_command,
         error_cls=CommandError,
     )
@@ -317,10 +329,10 @@ def command_update(args: argparse.Namespace) -> None:
         _pip_install(["install", "-e", str(PROJECT_ROOT)])
     if not args.skip_service:
         try:
-            service_manager.control_service(
+            deploy.control_service(
                 "restart",
                 is_windows=IS_WINDOWS,
-                run=_run,
+                run=lambda cmd: _run(cmd),
                 ensure_command=_ensure_command,
                 error_cls=CommandError,
             )
@@ -406,7 +418,10 @@ def command_docker(args: argparse.Namespace) -> None:
 def command_uninstall(args: argparse.Namespace) -> None:
     if IS_WINDOWS:
         _echo("Removing Windows service (if installed)...")
-        _run_in_venv(["-m", "elbot.service_install", "--remove"])
+        try:
+            deploy.remove_service(platform_override="windows")
+        except RuntimeError:
+            pass
         if args.delete:
             _echo("Delete the project directory manually once this process exits (file handles prevent auto-removal on Windows).")
         if args.purge:

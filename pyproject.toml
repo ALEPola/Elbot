@@ -38,7 +38,7 @@ test = [
 [project.scripts]
 elbot = "elbot.main:main"
 elbot-portal = "elbot.portal:main"
-elbot-install-service = "elbot.service_install:main"
+elbot-install-service = "elbot.core.deploy:main"
 elbotctl = "elbot.cli:main"
 
 [tool.setuptools.package-dir]

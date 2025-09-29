@@ -30,9 +30,14 @@ def _systemd_unit_exists(unit_name: str) -> bool:
     return unit_name in (result.stdout or "")
 
 
-def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> None:
+def install_systemd_service(
+    root_dir: Path,
+    *,
+    require_lavalink: bool = False,
+    python_executable: str | None = None,
+) -> None:
     service_file = SYSTEMD_SERVICE_FILE
-    python = sys.executable
+    python = python_executable or sys.executable
     user = os.getenv("SUDO_USER") or os.getenv("USER", "root")
     env_file = root_dir / ".env"
     unit = """[Unit]
@@ -71,9 +76,9 @@ WantedBy=multi-user.target
     print("Elbot systemd service installed, enabled and started.")
 
 
-def install_windows_service(root_dir: Path) -> None:
+def install_windows_service(root_dir: Path, *, python_executable: str | None = None) -> None:
     """Install Windows service via pywin32 helper."""
-    python = sys.executable
+    python = python_executable or sys.executable
     # Install with auto startup and working directory argument so .env resolves
     subprocess.run(
         [python, "-m", "elbot.win_service", "install", "--startup=auto", "--working-dir", str(root_dir)],
@@ -83,9 +88,14 @@ def install_windows_service(root_dir: Path) -> None:
     print("Elbot Windows service installed and started.")
 
 
-def install_launchd_service(root_dir: Path, require_lavalink: bool = False) -> None:
+def install_launchd_service(
+    root_dir: Path,
+    *,
+    require_lavalink: bool = False,
+    python_executable: str | None = None,
+) -> None:
     """Install a user LaunchAgent on macOS (Darwin)."""
-    python = sys.executable
+    python = python_executable or sys.executable
     label = "com.elbot.bot"
     agents = Path.home() / "Library" / "LaunchAgents"
     agents.mkdir(parents=True, exist_ok=True)

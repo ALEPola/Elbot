@@ -136,6 +136,14 @@ elbotctl service start
 elbotctl service status
 ```
 
+Prefer a module-only workflow? The consolidated deploy helper mirrors these actions:
+
+```bash
+python -m elbot.core.deploy service install
+python -m elbot.core.deploy service status
+python -m elbot.core.deploy auto-update enable
+```
+
 The installer keeps the strict dependency when a `lavalink.service` unit file is registered so startup ordering still works.
 The generated service loads environment variables from `.env`, so rerun the wizard or update the file (and use `dos2unix` if edited on Windows) instead of editing the unit file when tokens change.
 

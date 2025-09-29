@@ -78,6 +78,13 @@ elbotctl service install --require-lavalink  # Falls back gracefully if Lavalink
 elbotctl service status
 ```
 
+Or call the unified helper directly:
+
+```bash
+python -m elbot.core.deploy service install
+python -m elbot.core.deploy auto-update enable
+```
+
 When a Lavalink unit file is present the installer still wires Elbot to require it so ordering guarantees remain intact.
 
 Run `elbotctl service remove` to uninstall it.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -26,7 +27,7 @@ from flask import (
 from openai import OpenAI
 
 
-from .core import auto_update
+from .core import deploy
 from .config import Config
 from .music.cookies import CookieManager
 from .music.diagnostics import DiagnosticsService
@@ -171,7 +172,7 @@ def _read_tail(path: Path, max_lines: int = 200) -> str:
 def inject_flags():
     return {
         'configured': _is_configured(),
-        'auto_update_status': auto_update.current_status(),
+        'auto_update_status': deploy.auto_update_status(),
         'legacy_auto_update': AUTO_UPDATE,
         'auto_update': AUTO_UPDATE,
         'auto_lavalink_enabled': _auto_lavalink_enabled(),
@@ -381,23 +382,29 @@ def toggle_auto_update():
     next_url = request.form.get('next') or url_for('index')
     try:
         if action == 'enable':
-            if auto_update.systemd_supported():
-                auto_update.enable_systemd_timer(ROOT_DIR, sys.executable, SERVICE_NAME)
-                flash('Systemd auto-update timer enabled.', 'success')
-            elif auto_update.cron_supported():
-                auto_update.enable_cron(ROOT_DIR, sys.executable, SERVICE_NAME)
-                flash('Cron auto-update job installed.', 'success')
+            try:
+                mode = deploy.enable_auto_update(ROOT_DIR, sys.executable, SERVICE_NAME)
+            except deploy.DeployError as exc:
+                flash(str(exc), 'error')
             else:
-                flash('No scheduler available (systemd or cron).', 'error')
+                if mode == 'systemd':
+                    flash('Systemd auto-update timer enabled.', 'success')
+                elif mode == 'cron':
+                    flash('Cron auto-update job installed.', 'success')
+                else:  # pragma: no cover - defensive
+                    flash('Auto-update scheduler enabled.', 'success')
         elif action == 'disable':
-            if auto_update.systemd_supported():
-                auto_update.disable_systemd_timer()
-                flash('Systemd auto-update timer disabled.', 'success')
-            elif auto_update.cron_supported():
-                auto_update.disable_cron()
-                flash('Cron auto-update job removed.', 'success')
+            try:
+                mode = deploy.disable_auto_update()
+            except deploy.DeployError as exc:
+                flash(str(exc), 'error')
             else:
-                flash('No scheduler available to disable.', 'error')
+                if mode == 'systemd':
+                    flash('Systemd auto-update timer disabled.', 'success')
+                elif mode == 'cron':
+                    flash('Cron auto-update job removed.', 'success')
+                else:  # pragma: no cover - defensive
+                    flash('Auto-update scheduler disabled.', 'success')
         else:
             flash('Unsupported auto-update action.', 'error')
     except subprocess.CalledProcessError as exc:
@@ -420,18 +427,30 @@ def service_action(action: str):
         flash('Invalid service action.', 'error')
         return redirect(url_for('index'))
     try:
-        result = subprocess.run(
-            ['systemctl', action, SERVICE_NAME],
-            cwd=ROOT_DIR,
-            text=True,
-            capture_output=True,
-            check=True,
+        result = deploy.control_service(
+            action,
+            run=lambda cmd: subprocess.run(
+                cmd,
+                cwd=ROOT_DIR,
+                text=True,
+                capture_output=True,
+                check=True,
+            ),
+            ensure_command=lambda name: shutil.which(name) is not None,
+            service_name=SERVICE_NAME,
+            error_cls=RuntimeError,
         )
-        flash(result.stdout or f'Service {action} executed.', 'success')
+        if isinstance(result, subprocess.CompletedProcess):
+            output = (result.stdout or '').strip()
+            flash(output or f'Service {action} executed.', 'success')
+        else:  # pragma: no cover - defensive
+            flash(f'Service {action} executed.', 'success')
     except FileNotFoundError:
         flash('systemctl is not available on this system.', 'error')
     except subprocess.CalledProcessError as exc:
         flash(exc.stdout or exc.stderr or f'Failed to {action} service.', 'error')
+    except RuntimeError as exc:
+        flash(str(exc), 'error')
     return redirect(url_for('index'))
 
 
