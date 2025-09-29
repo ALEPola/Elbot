@@ -26,7 +26,9 @@ _running_under_pytest = bool(os.getenv("PYTEST_CURRENT_TEST")) or any(
 if not _running_under_pytest:
     load_dotenv(BASE_DIR / ".env")
 
-logger = logging.getLogger("elbot.config")\r\nAUTO_EXPORT_TRUE = {"1", "true", "yes", "on"}\r\n_gid_str = os.getenv("GUILD_ID")
+logger = logging.getLogger("elbot.config")
+AUTO_EXPORT_TRUE = {"1", "true", "yes", "on"}
+_gid_str = os.getenv("GUILD_ID")
 
 def _select_dynamic_lavalink_port(start: int = DYNAMIC_PORT_START, attempts: int = DYNAMIC_PORT_ATTEMPTS) -> int:
     """Return a free TCP port on 127.0.0.1 for Lavalink."""
