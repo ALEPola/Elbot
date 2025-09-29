@@ -91,10 +91,11 @@ installer in non-interactive mode.
 - `/shuffle` - Randomize queue order
 
 ### AI Features 🤖
-- `/chat <message>` - Chat with AI assistant
-- `/chat_summary` - Get conversation recap
-- `/chat_reset` - Clear chat history
-- `/dalle <prompt>` - Generate an image
+- `/ai chat <message>` - Chat with the AI assistant
+- `/ai chat_summary` - Get an AI conversation recap
+- `/ai chat_reset` - Clear your chat history
+- `/ai image <prompt>` - Generate an image with DALL·E
+- `/ai voice` - Experimental voice chat placeholder
 
 ### Formula 1 🏎️
 - `/f1_schedule` - View upcoming races

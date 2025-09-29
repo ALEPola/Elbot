@@ -47,6 +47,7 @@ def _install_fake_session(monkeypatch):
             [
                 _FakeResponse(200, {"plugins": []}),
                 _FakeResponse(200, {"tracks": []}),
+                _FakeResponse(200, {"tracks": []}),
             ]
         )
 
