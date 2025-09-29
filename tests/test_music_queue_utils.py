@@ -2,8 +2,7 @@ import os
 
 os.environ["MAFIC_LIBRARY"] = "nextcord"
 
-from elbot.music.queue import MusicQueue, QueuedTrack
-from elbot.music.audio_backend import TrackHandle
+from elbot.music import MusicQueue, QueuedTrack, TrackHandle
 
 
 class DummyTrack:
@@ -73,4 +72,3 @@ def test_queue_remove_index_bounds():
     assert queue.remove_index(5) is None
     assert queue.remove_index(0).id == "x"
     assert len(queue) == 0
-

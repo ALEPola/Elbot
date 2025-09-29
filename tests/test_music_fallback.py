@@ -5,10 +5,13 @@ import pytest
 
 os.environ["MAFIC_LIBRARY"] = "nextcord"
 
-from elbot.music.audio_backend import TrackHandle, TrackLoadFailure
-from elbot.music.fallback import FallbackPlayer
-from elbot.music.metrics import PlaybackMetrics
-from elbot.music.cookies import CookieManager
+from elbot.music import (
+    CookieManager,
+    FallbackPlayer,
+    PlaybackMetrics,
+    TrackHandle,
+    TrackLoadFailure,
+)
 
 
 class DummyTrack:
@@ -106,4 +109,3 @@ async def test_fallback_player_uses_yt_dlp(monkeypatch):
     assert snapshot["fallback_used"] == 1
     assert snapshot["last_fallback_source"] == "https://stream"
     assert backend.calls[-1][0] == "https://stream"
-
