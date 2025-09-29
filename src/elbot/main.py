@@ -235,9 +235,21 @@ def main() -> None:
         logger.info("bot ready user=%s id=%s", bot.user, bot.user.id)
         if not getattr(bot, "_app_commands_synced", False):
             try:
-                await bot.sync_all_application_commands(use_rollout=False)
+                sync_kwargs = {"use_rollout": False}
+                try:
+                    await bot.sync_all_application_commands(delete_unknown=False, **sync_kwargs)
+                except TypeError:
+                    await bot.sync_all_application_commands(**sync_kwargs)
+                except nextcord.errors.NotFound:
+                    logger.warning("global command sync reported unknown command; continuing without deleting")
                 if Config.GUILD_ID:
-                    await bot.sync_application_commands(guild_id=Config.GUILD_ID)
+                    guild_kwargs = {"guild_id": Config.GUILD_ID}
+                    try:
+                        await bot.sync_application_commands(delete_unknown=False, **guild_kwargs)
+                    except TypeError:
+                        await bot.sync_application_commands(**guild_kwargs)
+                    except nextcord.errors.NotFound:
+                        logger.warning("guild command sync reported unknown command; continuing without deleting", extra={"guild_id": Config.GUILD_ID})
             except Exception:  # pragma: no cover - sync failures
                 logger.exception("failed to sync application commands")
             else:
