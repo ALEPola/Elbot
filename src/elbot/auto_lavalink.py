@@ -44,8 +44,10 @@ MAFIC_MAX_SUPPORTED_LAVALINK_VERSION = os.getenv(
 )
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
-MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.16.1"
-YOUTUBE_PLUGIN_VERSION = os.getenv("LAVALINK_YOUTUBE_PLUGIN_VERSION", MINIMUM_YOUTUBE_PLUGIN_VERSION)
+MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.13.5"
+YOUTUBE_PLUGIN_METADATA_URL = (
+    "https://maven.lavalink.dev/releases/dev/lavalink/youtube/youtube-plugin/maven-metadata.xml"
+)
 
 AUTO_LAVALINK_PORT_START = int(os.getenv("AUTO_LAVALINK_PORT_START", "2333"))
 AUTO_LAVALINK_PORT_TRIES = max(1, int(os.getenv("AUTO_LAVALINK_PORT_TRIES", "40")))
@@ -72,6 +74,45 @@ def _version_less_than(candidate: str, minimum: str) -> bool:
     cand += (0,) * (length - len(cand))
     required += (0,) * (length - len(required))
     return cand < required
+
+
+def _fetch_latest_youtube_plugin_version() -> str | None:
+    try:
+        with urllib.request.urlopen(YOUTUBE_PLUGIN_METADATA_URL, timeout=10) as resp:
+            data = resp.read().decode("utf-8", "ignore")
+    except Exception as exc:
+        print(
+            "[auto-lavalink] WARNING: Failed to resolve latest youtube plugin version "
+            f"from {YOUTUBE_PLUGIN_METADATA_URL}: {exc}.",
+            file=sys.stderr,
+        )
+        return None
+    for tag in ("release", "latest"):
+        match = re.search(rf"<{tag}>([^<]+)</{tag}>", data)
+        if match:
+            return match.group(1).strip()
+    matches = re.findall(r"<version>([^<]+)</version>", data)
+    if matches:
+        return matches[-1].strip()
+    return None
+
+
+def _determine_youtube_plugin_version() -> str:
+    configured = os.getenv("LAVALINK_YOUTUBE_PLUGIN_VERSION")
+    if configured:
+        return configured
+    latest = _fetch_latest_youtube_plugin_version()
+    if latest and not _version_less_than(latest, MINIMUM_YOUTUBE_PLUGIN_VERSION):
+        return latest
+    if latest:
+        print(
+            f"[auto-lavalink] WARNING: Resolved youtube plugin version {latest!r} is below the minimum supported; falling back.",
+            file=sys.stderr,
+        )
+    return MINIMUM_YOUTUBE_PLUGIN_VERSION
+
+
+YOUTUBE_PLUGIN_VERSION = _determine_youtube_plugin_version()
 
 if _version_less_than(YOUTUBE_PLUGIN_VERSION, MINIMUM_YOUTUBE_PLUGIN_VERSION):
     print(f"[auto-lavalink] WARNING: youtube-source plugin version {YOUTUBE_PLUGIN_VERSION!r} is below the minimum supported {MINIMUM_YOUTUBE_PLUGIN_VERSION}.", file=sys.stderr)

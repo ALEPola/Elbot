@@ -87,10 +87,31 @@ class Music(commands.Cog):
     async def cog_load(self) -> None:  # type: ignore[override]
         await self.backend.wait_ready()
 
-    async def cog_unload(self) -> None:  # type: ignore[override]
+    async def _cog_cleanup(self) -> None:
         for guild_id, state in list(self._states.items()):
             await self._disconnect(guild_id, state)
-        await self.backend.close()
+        backend = self._backend
+        if backend is not None:
+            await backend.close()
+            self._backend = None
+            self.fallback = None
+
+    def cog_unload(self) -> None:  # type: ignore[override]
+        async def _run_cleanup() -> None:
+            try:
+                await self._cog_cleanup()
+            except Exception:  # pragma: no cover - defensive cleanup
+                self.logger.exception("Music cog cleanup failed during unload")
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_run_cleanup())
+        else:
+            try:
+                loop.create_task(_run_cleanup())
+            except RuntimeError:
+                asyncio.run(_run_cleanup())
 
     # ------------------------------------------------------------------
     # State helpers
