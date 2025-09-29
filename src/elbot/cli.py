@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
+from collections.abc import Mapping
+
 from .core import docker_tasks, env_tools, network, prerequisites, runtime, service_manager
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -47,11 +49,45 @@ OPTIONAL_ENV_VARS: dict[str, str] = {
 }
 
 
-PORT_CONFLICT_HINTS: dict[int, str] = {
-    2333: "LAVALINK_PORT",
-    8000: "PORT",
+DEFAULT_PORT_HINTS: dict[str, int] = {
+    "LAVALINK_PORT": 2333,
+    "PORT": 8000,
 }
-PORT_CONFLICT_PORTS = tuple(PORT_CONFLICT_HINTS.keys())
+
+
+def _parse_port(value: Optional[str]) -> Optional[int]:
+    if not value:
+        return None
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return None
+    return port if port > 0 else None
+
+
+def _build_port_conflict_state(env_pairs: Mapping[str, str]) -> tuple[dict[int, tuple[str, ...]], tuple[int, ...]]:
+    hints: dict[int, list[str]] = {}
+    for env_key, default_port in DEFAULT_PORT_HINTS.items():
+        configured = _parse_port(env_pairs.get(env_key))
+        port = configured if configured is not None else default_port
+        if port:
+            hints.setdefault(port, []).append(env_key)
+
+    normalized = {port: tuple(names) for port, names in hints.items()}
+    return normalized, tuple(normalized.keys())
+
+
+def _current_port_conflict_state() -> tuple[dict[int, tuple[str, ...]], tuple[int, ...]]:
+    hints, ports = _build_port_conflict_state(env_tools.read_env(ENV_FILE))
+    global PORT_CONFLICT_HINTS, PORT_CONFLICT_PORTS
+    PORT_CONFLICT_HINTS = hints
+    PORT_CONFLICT_PORTS = ports
+    return hints, ports
+
+
+PORT_CONFLICT_HINTS: dict[int, tuple[str, ...]]
+PORT_CONFLICT_PORTS: tuple[int, ...]
+PORT_CONFLICT_HINTS, PORT_CONFLICT_PORTS = _build_port_conflict_state(env_tools.read_env(ENV_FILE))
 
 
 class CommandError(RuntimeError):
@@ -73,19 +109,34 @@ def _ensure_command(name: str) -> bool:
 
 
 def _warn_port_conflicts() -> None:
-    conflicts = network.detect_port_conflicts(PORT_CONFLICT_PORTS)
+    hints, ports = _current_port_conflict_state()
+    conflicts = network.detect_port_conflicts(ports)
     if not conflicts:
         return
 
     ports = ", ".join(str(port) for port in conflicts)
     _echo(f"Warning: the following ports appear to be in use: {ports}.")
 
-    hints = [PORT_CONFLICT_HINTS[port] for port in conflicts if port in PORT_CONFLICT_HINTS]
-    if hints:
-        if len(hints) == 1:
-            _echo(f"Stop other services or adjust {hints[0]} in .env before continuing.")
+    hint_names: list[str] = []
+    for port in conflicts:
+        hint_names.extend(hints.get(port, ()))
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for name in hint_names:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+
+    if deduped:
+        if len(deduped) == 1:
+            _echo(f"Stop other services or adjust {deduped[0]} in .env before continuing.")
+        elif len(deduped) == 2:
+            joined = " and ".join(deduped)
+            _echo(f"Stop other services or adjust {joined} in .env before continuing.")
         else:
-            joined = " and ".join(hints)
+            joined = ", ".join(deduped[:-1]) + f", and {deduped[-1]}"
             _echo(f"Stop other services or adjust {joined} in .env before continuing.")
     else:
         _echo("Stop other services or update your configuration to avoid the conflict.")

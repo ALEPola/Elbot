@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Iterable
 
 import pytest
 
@@ -41,3 +42,23 @@ def test_command_install_non_interactive_env(monkeypatch: pytest.MonkeyPatch, tm
     env_contents = env_file.read_text(encoding="utf-8")
     assert "DISCORD_TOKEN=secret" in env_contents
     assert "OPENAI_API_KEY=open-ai" in env_contents
+
+
+def test_warn_port_conflicts_uses_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("LAVALINK_PORT=4545\nPORT=9999\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "ENV_FILE", env_file)
+
+    def fake_detect(ports: Iterable[int]) -> set[int]:
+        assert 4545 in ports
+        assert 9999 in ports
+        return {4545}
+
+    monkeypatch.setattr(cli.network, "detect_port_conflicts", fake_detect)
+
+    cli._warn_port_conflicts()
+
+    output = capsys.readouterr().out
+    assert "4545" in output
+    assert "LAVALINK_PORT" in output
