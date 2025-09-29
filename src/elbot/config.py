@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,9 @@ from typing import Iterable, List
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+DYNAMIC_PORT_START = 2333
+DYNAMIC_PORT_ATTEMPTS = 40
+_DYNAMIC_PORT_SENTINELS = {"", "0", "auto", "dynamic", "random"}
 # Only auto-load the .env file when not running under pytest to let tests
 # control environment via monkeypatch. Detect pytest either via the
 # PYTEST_CURRENT_TEST env var or by inspecting sys.argv for 'pytest'.
@@ -24,6 +28,19 @@ if not _running_under_pytest:
 logger = logging.getLogger("elbot.config")
 _gid_str = os.getenv("GUILD_ID")
 
+def _select_dynamic_lavalink_port(start: int = DYNAMIC_PORT_START, attempts: int = DYNAMIC_PORT_ATTEMPTS) -> int:
+    """Return a free TCP port on 127.0.0.1 for Lavalink."""
+
+    last_port = start + attempts - 1
+    for port in range(start, last_port + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError(f"No free TCP port available in {start}-{last_port}")
 
 class Config:
     """Central configuration loaded from environment variables."""
@@ -52,12 +69,15 @@ class Config:
     LAVALINK_HOST = os.getenv("LAVALINK_HOST", "localhost")
     LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
 
-    _port_raw = os.getenv("LAVALINK_PORT", "0")
-    try:
-        LAVALINK_PORT = int(_port_raw)
-    except ValueError:
-        logger.error("Invalid LAVALINK_PORT value; expected integer, got '%s'", _port_raw)
-        raise SystemExit(1)
+    _port_raw = os.getenv("LAVALINK_PORT")
+    if _port_raw:
+        try:
+            LAVALINK_PORT = int(_port_raw)
+        except ValueError:
+            logger.error("Invalid LAVALINK_PORT value; expected integer, got '%s'", _port_raw)
+            raise SystemExit(1)
+    else:
+        LAVALINK_PORT = DEFAULT_LAVALINK_PORT
 
     YT_COOKIES_FILE = os.getenv("YT_COOKIES_FILE") or os.getenv("YTDLP_COOKIES_FILE")
     if not YT_COOKIES_FILE:
@@ -96,6 +116,25 @@ class Config:
             sys.exit(1)
 
 
+def get_lavalink_connection_info() -> tuple[str, int, str, bool]:
+    """Return Lavalink connection info using runtime environment overrides."""
+
+    host = os.getenv("LAVALINK_HOST") or Config.LAVALINK_HOST or "127.0.0.1"
+    port = Config.LAVALINK_PORT
+    port_raw = os.getenv("LAVALINK_PORT")
+    if port_raw:
+        try:
+            port = int(port_raw)
+        except ValueError:
+            logger.warning(
+                "Invalid runtime LAVALINK_PORT '%s'; falling back to %s",
+                port_raw,
+                port,
+            )
+    password = os.getenv("LAVALINK_PASSWORD") or Config.LAVALINK_PASSWORD
+    secure = os.getenv("LAVALINK_SSL", "false").lower() == "true"
+    return host, port, password, secure
+
 def log_cookie_status() -> None:
     """Log the configured YouTube cookie file, if any."""
 
@@ -111,3 +150,8 @@ def log_cookie_status() -> None:
 
     mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
     logger.info("cookies: path=%s mtime=%s", resolved, mtime.isoformat())
+
+
+
+
+

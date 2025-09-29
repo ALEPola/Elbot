@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import inspect
 from typing import Iterable, List, Optional
 
+from elbot.config import get_lavalink_connection_info
+
 os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 
@@ -130,10 +132,7 @@ class LavalinkAudioBackend:
             if self._node is not None:
                 return
 
-            host = os.getenv("LAVALINK_HOST", "127.0.0.1")
-            port = int(os.getenv("LAVALINK_PORT", "2333"))
-            password = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
-            secure = os.getenv("LAVALINK_SSL", "false").lower() == "true"
+            host, port, password, secure = get_lavalink_connection_info()
             session_id = os.getenv("LAVALINK_SESSION", "elbot")
 
             self.logger.info(

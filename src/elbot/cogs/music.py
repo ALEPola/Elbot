@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional, TYPE_CHECKING
 
@@ -15,6 +14,7 @@ except Exception:
     mafic = None
 from nextcord.ext import commands
 
+from elbot.config import get_lavalink_connection_info
 from elbot.music import EmbedFactory, FallbackPlayer, LavalinkAudioBackend, MusicQueue, QueuedTrack
 from elbot.music.audio_backend import TrackLoadFailure
 from elbot.music.cookies import CookieManager
@@ -34,11 +34,7 @@ def _ensure_logging() -> None:
 
 
 def _lavalink_config() -> tuple[str, int, str, bool]:
-    host = os.getenv("LAVALINK_HOST", "127.0.0.1")
-    port = int(os.getenv("LAVALINK_PORT", "2333"))
-    password = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
-    secure = os.getenv("LAVALINK_SSL", "false").lower() == "true"
-    return host, port, password, secure
+    return get_lavalink_connection_info()
 
 
 @dataclass
@@ -715,6 +711,3 @@ class Music(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(Music(bot))
-
-
-
