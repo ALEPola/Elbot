@@ -60,8 +60,24 @@ class VoiceChatCog(commands.Cog):
         channel = voice_state.channel
         logger.debug("Connecting to voice channel %s", channel)
 
-        # Connect the bot to the voice channel
-        vc = await channel.connect()
+        voice_client = interaction.guild.voice_client if interaction.guild else None
+        vc = voice_client
+        joined_here = False
+        try:
+            if voice_client:
+                if voice_client.channel != channel:
+                    await voice_client.move_to(channel)
+                vc = voice_client
+            else:
+                vc = await channel.connect()
+                joined_here = True
+        except nextcord.ClientException:
+            await interaction.followup.send(
+                "⚠️ I’m already connected to a voice channel; please disconnect me first.",
+                delete_after=10,
+            )
+            return
+
         logger.info("Connected to voice channel %s for realtime chat", channel)
 
         try:
@@ -76,7 +92,8 @@ class VoiceChatCog(commands.Cog):
             )
         finally:
             logger.info("Disconnecting from voice channel %s", channel)
-            await vc.disconnect()
+            if joined_here and vc:
+                await vc.disconnect()
 
     @nextcord.slash_command(
         name="voice_chat_toggle",

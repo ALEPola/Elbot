@@ -164,7 +164,12 @@ class LavalinkAudioBackend:
 
     async def close(self) -> None:
         if self._node:
-            await self._node.disconnect()
+            try:
+                disconnect_coro = getattr(self._node, "disconnect", None)
+                if disconnect_coro:
+                    await disconnect_coro()
+            except Exception:
+                pass
         self._node = None
         self._ready.clear()
 
