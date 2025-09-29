@@ -323,6 +323,7 @@ class Music(commands.Cog):
         interaction: nextcord.Interaction,
         query: str = nextcord.SlashOption(description="Type music name, link, playlist, radio and media link.", autocomplete=True),
     ) -> None:
+        self.logger.info("Slash play invoked", extra={"guild_id": getattr(interaction.guild, 'id', None), "user_id": getattr(interaction.user, 'id', None)})
         # Defer publicly so the queued message we send is visible to everyone
         await interaction.response.defer(ephemeral=False)
         player, error = await self._ensure_voice(interaction)
