@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DYNAMIC_PORT_START = 2333
+DEFAULT_LAVALINK_PORT = DYNAMIC_PORT_START
 DYNAMIC_PORT_ATTEMPTS = 40
 _DYNAMIC_PORT_SENTINELS = {"", "0", "auto", "dynamic", "random"}
 # Only auto-load the .env file when not running under pytest to let tests
