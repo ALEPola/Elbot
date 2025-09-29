@@ -127,7 +127,7 @@ Provide configuration via environment variables or bind-mount a `.env` file.
 - If you edit `.env` on Windows, run `dos2unix .env` (or an equivalent) before reinstalling the service so the file keeps Unix `\n` newlines.
 - Ensure the required values are present:
   - `DISCORD_TOKEN`
-  - `OPENAI_API_KEY` (optional but required for `/chat` and `/dalle`)
+  - `OPENAI_API_KEY` (optional but required for `/ai` commands)
 - Adjust optional settings such as `COMMAND_PREFIX`, `AUTO_LAVALINK`, `ICS_URL`, `LOCAL_TIMEZONE`, and Lavalink credentials if you host your own node.
 
 Whenever you change `.env`, restart the bot.

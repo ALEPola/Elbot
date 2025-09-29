@@ -1,10 +1,11 @@
 import asyncio
+import time
 from unittest.mock import AsyncMock
 
 import nextcord
 from nextcord.ext import commands
 
-from elbot.cogs import chat as chat_cog
+from elbot.cogs import ai as ai_cog
 
 
 class DummyInteraction:
@@ -26,7 +27,13 @@ def test_chat_response_truncated(monkeypatch):
 
     class DummyCompletion:
         def __init__(self, content):
-            self.choices = [type("Choice", (), {"message": type("Msg", (), {"content": content})()})()]
+            self.choices = [
+                type(
+                    "Choice",
+                    (),
+                    {"message": type("Msg", (), {"content": content})()},
+                )()
+            ]
 
     class DummyOpenAI:
         def __init__(self, content):
@@ -42,7 +49,7 @@ def test_chat_response_truncated(monkeypatch):
                 },
             )()
 
-    monkeypatch.setattr(chat_cog, "openai_client", DummyOpenAI(long_content))
+    monkeypatch.setattr(ai_cog, "openai_client", DummyOpenAI(long_content))
 
     async def fake_to_thread(func, *a, **k):
         return func()
@@ -53,13 +60,13 @@ def test_chat_response_truncated(monkeypatch):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
-    cog = chat_cog.ChatCog(bot)
+    cog = ai_cog.AICog(bot)
 
     interaction = DummyInteraction()
-    asyncio.run(cog.chat(interaction, message="hello"))
+    asyncio.run(cog._handle_chat(interaction, message="hello"))
 
     sent = interaction.followup.send.call_args.args[0]
-    assert len(sent) <= chat_cog.MAX_RESPONSE_LENGTH
+    assert len(sent) <= ai_cog.MAX_RESPONSE_LENGTH
     assert sent.endswith("...")
     loop.close()
 
@@ -69,7 +76,13 @@ def test_chat_history(monkeypatch):
 
     class DummyCompletion:
         def __init__(self, content):
-            self.choices = [type("Choice", (), {"message": type("Msg", (), {"content": content})()})()]
+            self.choices = [
+                type(
+                    "Choice",
+                    (),
+                    {"message": type("Msg", (), {"content": content})()},
+                )()
+            ]
 
     class DummyOpenAI:
         def __init__(self):
@@ -77,25 +90,33 @@ def test_chat_history(monkeypatch):
                 recorded.append(messages)
                 return DummyCompletion("ok")
 
-            self.chat = type("Chat", (), {"completions": type("Completions", (), {"create": create})()})()
+            self.chat = type(
+                "Chat", (), {"completions": type("Completions", (), {"create": create})()}
+            )()
 
-    monkeypatch.setattr(chat_cog, "openai_client", DummyOpenAI())
-    monkeypatch.setattr(chat_cog, "RATE_LIMIT", 0)
+    monkeypatch.setattr(ai_cog, "openai_client", DummyOpenAI())
 
     async def fake_to_thread(func, *a, **k):
         return func()
 
     monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
 
+    def allow_requests(cache, user_id, *, rate_limit=ai_cog.RATE_LIMIT_SECONDS):
+        now = time.monotonic()
+        cache[user_id] = now
+        return True, now
+
+    monkeypatch.setattr(ai_cog, "_allow_request", allow_requests)
+
     intents = nextcord.Intents.none()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
-    cog = chat_cog.ChatCog(bot)
+    cog = ai_cog.AICog(bot)
     interaction = DummyInteraction()
 
-    asyncio.run(cog.chat(interaction, message="hi"))
-    asyncio.run(cog.chat(interaction, message="again"))
+    asyncio.run(cog._handle_chat(interaction, message="hi"))
+    asyncio.run(cog._handle_chat(interaction, message="again"))
 
     assert len(recorded) == 2
     assert recorded[1][0]["content"] == "hi"
@@ -106,7 +127,13 @@ def test_chat_history(monkeypatch):
 def test_chat_summary(monkeypatch, tmp_path):
     class DummyCompletion:
         def __init__(self, content):
-            self.choices = [type("Choice", (), {"message": type("Msg", (), {"content": content})()})()]
+            self.choices = [
+                type(
+                    "Choice",
+                    (),
+                    {"message": type("Msg", (), {"content": content})()},
+                )()
+            ]
 
     class DummyOpenAI:
         def __init__(self):
@@ -114,29 +141,29 @@ def test_chat_summary(monkeypatch, tmp_path):
                 DummyOpenAI.last = messages
                 return DummyCompletion("summary")
 
-            self.chat = type("Chat", (), {"completions": type("Completions", (), {"create": create})()})()
+            self.chat = type(
+                "Chat", (), {"completions": type("Completions", (), {"create": create})()}
+            )()
 
-    monkeypatch.setattr(chat_cog, "openai_client", DummyOpenAI())
-    monkeypatch.setattr(chat_cog, "RATE_LIMIT", 0)
+    monkeypatch.setattr(ai_cog, "openai_client", DummyOpenAI())
 
     async def fake_to_thread(func, *a, **k):
         return func()
 
     monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
-    monkeypatch.setattr(chat_cog.Config, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(ai_cog.Config, "BASE_DIR", tmp_path)
 
     intents = nextcord.Intents.none()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     bot = commands.Bot(command_prefix="!", intents=intents, loop=loop)
-    cog = chat_cog.ChatCog(bot)
+    cog = ai_cog.AICog(bot)
     interaction = DummyInteraction()
 
-    # Create some persisted history
     cog._persist_history(123, "user", "hi")
     cog._persist_history(123, "assistant", "there")
 
-    asyncio.run(cog.chat_summary(interaction))
+    asyncio.run(cog.ai_chat_summary(interaction))
 
     assert any("hi" in m["content"] for m in DummyOpenAI.last)
     loop.close()
