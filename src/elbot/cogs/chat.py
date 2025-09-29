@@ -18,8 +18,38 @@ from elbot.utils import safe_reply
 
 logger = logging.getLogger("elbot.chat")
 
+
 # Module-level OpenAI client (tests monkeypatch this). Cog will prefer this
 openai_client = None
+
+
+def _initialize_openai_client(force: bool = False) -> None:
+    """Initialize the shared OpenAI client if an API key is configured."""
+
+    global openai_client
+
+    if not force and openai_client is not None:
+        return
+
+    api_key = getattr(Config, "OPENAI_API_KEY", "") or None
+    if not api_key:
+        logger.warning(
+            "OPENAI_API_KEY is not configured; chat and speech features are disabled."
+        )
+        openai_client = None
+        return
+
+    try:
+        openai_client = OpenAI(api_key=api_key)
+    except Exception:
+        logger.error(
+            "Failed to initialize OpenAI client; chat and speech features are disabled.",
+            exc_info=True,
+        )
+        openai_client = None
+
+
+_initialize_openai_client()
 OPENAI_MODEL = Config.OPENAI_MODEL
 RATE_LIMIT = 5  # seconds between requests per user
 # Maximum characters allowed in a response
@@ -180,5 +210,7 @@ class ChatCog(commands.Cog):
 
 
 def setup(bot: commands.Bot):
+    if openai_client is None:
+        _initialize_openai_client(force=True)
     bot.add_cog(ChatCog(bot))
     logger.info("✅ Loaded ChatCog")
