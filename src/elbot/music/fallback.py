@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import yt_dlp
 
@@ -199,6 +199,7 @@ class FallbackPlayer:
             )
 
         track_handle = handle[0]
+        track_handle = self._augment_handle_metadata(track_handle, info, selected_source)
         entry = self._build_entry(
             track_handle,
             query=query,
@@ -277,5 +278,64 @@ class FallbackPlayer:
             fallback_source=fallback_source,
         )
         return entry
+
+
+    def _augment_handle_metadata(
+        self, handle: TrackHandle, info: Dict[str, Any], fallback_source: Optional[str]
+    ) -> TrackHandle:
+        title = str(info.get("title") or info.get("track", "")).strip() or handle.title
+        author = str(
+            info.get("uploader")
+            or info.get("channel")
+            or info.get("artist")
+            or info.get("creator")
+            or handle.author
+        ).strip() or handle.author
+
+        duration = handle.duration
+        for key in ("duration", "length", "approx_duration_ms"):
+            value = info.get(key)
+            if value is None:
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                continue
+            if numeric <= 0:
+                continue
+            if key == "approx_duration_ms" or numeric >= 10_000:
+                duration = int(numeric)
+            else:
+                duration = int(numeric * 1000)
+            break
+
+        uri = handle.uri
+        for key in ("webpage_url", "original_url", "url"):
+            candidate = info.get(key)
+            if isinstance(candidate, str) and candidate:
+                uri = uri or candidate
+                break
+
+        source = handle.source
+        if source in ("unknown", "http") and fallback_source:
+            source = "http" if fallback_source.startswith("http") else source
+
+        if (
+            title == handle.title
+            and author == handle.author
+            and duration == handle.duration
+            and uri == handle.uri
+            and source == handle.source
+        ):
+            return handle
+
+        return TrackHandle(
+            track=handle.track,
+            title=title,
+            author=author,
+            duration=duration,
+            uri=uri,
+            source=source,
+        )
 
 
