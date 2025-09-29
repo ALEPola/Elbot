@@ -134,6 +134,8 @@ elbotctl run
 elbotctl service install --require-lavalink  # Coordinates with Lavalink when available
 elbotctl service start
 elbotctl service status
+elbotctl auto-update enable --service-name elbot.service  # Optional scheduler helper
+elbotctl auto-update status
 ```
 
 Prefer a module-only workflow? The consolidated deploy helper mirrors these actions:
@@ -166,6 +168,10 @@ Or enable automatic daily updates:
 2. Navigate to the home page.
 3. In the *Auto Update Scheduler* card choose **Enable Timer** (systemd) or **Install Cron Job** (cron-capable hosts).
 4. Optional: set `AUTO_UPDATE_WEBHOOK` in `.env` so failed runs send a Discord alert.
+
+Prefer the CLI? `elbotctl auto-update enable` mirrors the portal button, while
+`elbotctl auto-update disable` and `elbotctl auto-update status` let you manage
+or inspect the scheduler without opening the web UI.
 
 The scheduled job runs `python -m elbot.core.auto_update_job`, writes to `logs/auto-update.log`, and restarts the bot after successful updates. You can still rely on the legacy background thread by launching the portal with `AUTO_UPDATE=1 elbot-portal`.
 

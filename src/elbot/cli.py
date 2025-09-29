@@ -319,6 +319,46 @@ def command_service_status(_: argparse.Namespace) -> None:
     )
 
 
+def command_auto_update_enable(args: argparse.Namespace) -> None:
+    root = Path(args.root) if args.root else PROJECT_ROOT
+    python = args.python or str(_venv_python())
+    mode = deploy.enable_auto_update(
+        root,
+        python,
+        service_name=args.service_name or deploy.SERVICE_NAME_DEFAULT,
+    )
+    _echo(f"Auto updates enabled via {mode}.")
+
+
+def command_auto_update_disable(_: argparse.Namespace) -> None:
+    mode = deploy.disable_auto_update()
+    _echo(f"Auto updates disabled for {mode}.")
+
+
+def command_auto_update_status(_: argparse.Namespace) -> None:
+    status = deploy.auto_update_status()
+    if status.mode == "disabled":
+        _echo("Auto updates are disabled.")
+        return
+
+    _echo(f"Auto updates managed via {status.mode}.")
+    details = status.details
+    if details:
+        enabled = "yes" if details.enabled else "no"
+        active = "yes" if details.active else "no"
+        _echo(f"  enabled: {enabled}")
+        _echo(f"  active: {active}")
+        if details.last_trigger:
+            _echo(f"  last trigger: {details.last_trigger}")
+        if details.next_run:
+            _echo(f"  next run: {details.next_run}")
+        if details.error:
+            _echo(f"  last error: {details.error}")
+    else:
+        enabled = "yes" if status.cron_enabled else "no"
+        _echo(f"  cron installed: {enabled}")
+
+
 def command_update(args: argparse.Namespace) -> None:
     if (PROJECT_ROOT / ".git").exists() and not args.skip_pull and _ensure_command("git"):
         _run(["git", "pull", "--ff-only"])
@@ -477,6 +517,20 @@ def build_parser() -> argparse.ArgumentParser:
     service_sub.add_parser("stop", help="Stop the service").set_defaults(func=command_service_stop)
     service_sub.add_parser("restart", help="Restart the service").set_defaults(func=command_service_restart)
     service_sub.add_parser("status", help="Show service status").set_defaults(func=command_service_status)
+
+    scheduler = sub.add_parser("auto-update", help="Manage automatic update scheduling")
+    scheduler_sub = scheduler.add_subparsers(dest="auto_update_command", required=True)
+    auto_enable = scheduler_sub.add_parser("enable", help="Enable scheduled updates")
+    auto_enable.add_argument("--root", type=Path)
+    auto_enable.add_argument("--python")
+    auto_enable.add_argument("--service-name")
+    auto_enable.set_defaults(func=command_auto_update_enable)
+    scheduler_sub.add_parser("disable", help="Disable scheduled updates").set_defaults(
+        func=command_auto_update_disable
+    )
+    scheduler_sub.add_parser("status", help="Show scheduled update status").set_defaults(
+        func=command_auto_update_status
+    )
 
     updater = sub.add_parser("update", help="Pull latest code and refresh dependencies")
     updater.add_argument("--skip-pull", action="store_true")

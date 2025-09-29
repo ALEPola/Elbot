@@ -76,6 +76,8 @@ To install or manage the service later use:
 ```bash
 elbotctl service install --require-lavalink  # Falls back gracefully if Lavalink isn't registered yet
 elbotctl service status
+elbotctl auto-update enable  # Optional scheduler helper
+elbotctl auto-update status
 ```
 
 Or call the unified helper directly:
@@ -113,6 +115,8 @@ You can control the Windows service with:
 ```powershell
 elbotctl service status
 elbotctl service restart
+elbotctl auto-update enable
+elbotctl auto-update status
 ```
 
 (Use `Remove-Service` only if you want to uninstall the service.)
