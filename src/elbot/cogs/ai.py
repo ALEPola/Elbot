@@ -108,7 +108,7 @@ class AICog(commands.Cog):
         client = _ensure_openai_client()
         if not client:
             logger.warning("OpenAI client not configured; cannot generate reply")
-            return "⚠️ Chat functionality is not available right now."
+            return "Sorry, chat functionality is not available right now."
 
         try:
             completion = await asyncio.to_thread(
@@ -117,7 +117,7 @@ class AICog(commands.Cog):
             content = completion.choices[0].message.content
         except Exception:
             logger.error("OpenAI error while generating response.", exc_info=True)
-            return "⚠️ Sorry, something went wrong with the chat bot."
+            return "Sorry, something went wrong with the chat bot."
 
         if len(content) > MAX_RESPONSE_LENGTH:
             return content[: MAX_RESPONSE_LENGTH - 3] + "..."
@@ -130,7 +130,7 @@ class AICog(commands.Cog):
         if not allowed:
             await safe_reply(
                 interaction,
-                "🕑 Please wait a few seconds before chatting again.",
+                "Please wait a few seconds before chatting again.",
                 ephemeral=True,
             )
             return
@@ -189,7 +189,7 @@ class AICog(commands.Cog):
             logger.warning(
                 "Failed to remove chat history for %s: %s", interaction.user.id, exc
             )
-        await safe_reply(interaction, "✅ Chat history cleared.", ephemeral=True)
+        await safe_reply(interaction, "Chat history cleared.", ephemeral=True)
 
     @ai.subcommand(name="chat_summary", description="Summarize recent AI conversations.")
     async def ai_chat_summary(self, interaction: nextcord.Interaction) -> None:
@@ -207,7 +207,7 @@ class AICog(commands.Cog):
         if not client:
             await safe_reply(
                 interaction,
-                "⚠️ Chat functionality is not available right now.",
+                "Sorry, chat functionality is not available right now.",
                 ephemeral=True,
             )
             return
@@ -225,14 +225,17 @@ class AICog(commands.Cog):
             content = summary.choices[0].message.content
         except Exception:
             logger.error("OpenAI error while summarizing.", exc_info=True)
-            content = "⚠️ Failed to generate summary."
+            content = "Failed to generate summary."
+
+        if len(content) > MAX_RESPONSE_LENGTH:
+            content = content[: MAX_RESPONSE_LENGTH - 3] + '...'
 
         await safe_reply(interaction, content, ephemeral=True)
 
     # ------------------------------------------------------------------
     # Image generation helpers
     # ------------------------------------------------------------------
-    @ai.subcommand(name="image", description="Generate an image using DALL·E 3.")
+    @ai.subcommand(name="image", description="Generate an image using DALL-E 3.")
     async def ai_image(self, interaction: nextcord.Interaction, prompt: str) -> None:
         await interaction.response.defer(with_message=True)
 
@@ -252,7 +255,7 @@ class AICog(commands.Cog):
         if not client:
             await safe_reply(
                 interaction,
-                "⚠️ Image generation is not available right now.",
+                "Image generation is not available right now.",
                 ephemeral=True,
             )
             return
@@ -282,7 +285,7 @@ class AICog(commands.Cog):
             return
 
         image_url = response.data[0].url
-        embed = nextcord.Embed(title="Here’s your generated image:")
+        embed = nextcord.Embed(title="Here's your generated image:")
         embed.set_image(url=image_url)
         await safe_reply(interaction, embed=embed)
 
@@ -298,7 +301,7 @@ class AICog(commands.Cog):
     async def ai_voice(self, interaction: nextcord.Interaction) -> None:
         if not self._voice_chat_enabled(interaction.guild_id):
             await interaction.response.send_message(
-                "🚫 Voice chat is currently disabled on this server.",
+                "Voice chat is currently disabled on this server.",
                 ephemeral=True,
             )
             return
@@ -308,7 +311,7 @@ class AICog(commands.Cog):
         voice_state = interaction.user.voice
         if not voice_state or not voice_state.channel:
             await interaction.followup.send(
-                "⚠️ You need to be connected to a voice channel to use this command.",
+                "You need to be connected to a voice channel to use this command.",
                 delete_after=10,
             )
             return
@@ -329,7 +332,7 @@ class AICog(commands.Cog):
                 joined_here = True
         except nextcord.ClientException:
             await interaction.followup.send(
-                "⚠️ I’m already connected to a voice channel; disconnect me first.",
+                "I'm already connected to a voice channel; disconnect me first.",
                 delete_after=10,
             )
             return
@@ -338,7 +341,7 @@ class AICog(commands.Cog):
 
         try:
             await interaction.followup.send(
-                "🎤 Voice chat is not yet fully implemented. This is a placeholder.",
+                "Voice chat is not yet fully implemented. This is a placeholder.",
                 delete_after=10,
             )
         finally:
@@ -355,7 +358,7 @@ class AICog(commands.Cog):
     ) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message(
-                "⚠️ This command can only be used inside a server.",
+                "This command can only be used inside a server.",
                 ephemeral=True,
             )
             return
@@ -363,17 +366,17 @@ class AICog(commands.Cog):
         perms = getattr(interaction.user, "guild_permissions", None)
         if not (perms and perms.manage_guild):
             await interaction.response.send_message(
-                "🚫 You need the Manage Server permission to use this command.",
+                "You need the Manage Server permission to use this command.",
                 ephemeral=True,
             )
             return
 
         if enabled:
             self._disabled_voice_guilds.discard(interaction.guild_id)
-            status_message = "✅ Voice chat has been enabled for this server."
+            status_message = "Voice chat has been enabled for this server."
         else:
             self._disabled_voice_guilds.add(interaction.guild_id)
-            status_message = "🚫 Voice chat has been disabled for this server."
+            status_message = "Voice chat has been disabled for this server."
 
         logger.info(
             "Voice chat %s by %s in guild %s",
@@ -387,5 +390,5 @@ class AICog(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(AICog(bot))
-    logger.info("✅ Loaded AICog")
+    logger.info("Loaded AICog")
 

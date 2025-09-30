@@ -97,7 +97,14 @@ class Config:
 
     @staticmethod
     def _missing_keys(keys: Iterable[str]) -> List[str]:
-        return [key for key in keys if not os.getenv(key)]
+        missing: List[str] = []
+        for key in keys:
+            value = os.getenv(key)
+            if not value:
+                value = getattr(Config, key, "")
+            if not value:
+                missing.append(key)
+        return missing
 
     @staticmethod
     def validate() -> None:
