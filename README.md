@@ -60,10 +60,18 @@ The installer creates a `.env` file with your settings. Key variables:
 |----------|----------|-------------|
 | `DISCORD_TOKEN` | ✅ | Your Discord bot token |
 | `OPENAI_API_KEY` | ⭐ | Enables AI chat and image generation |
+| `OPENAI_MODEL` | | Defaults to `gpt-4`; override to match your API plan |
+| `COMMAND_PREFIX` | | Prefix used by legacy text commands (default `!`) |
+| `LAVALINK_HOST` | ✅ | Lavalink hostname (auto-lavalink uses `127.0.0.1`) |
+| `LAVALINK_PORT` | ✅ | Lavalink port (`2333` by default; auto-lavalink can auto-pick) |
+| `LAVALINK_PASSWORD` | ✅ | Lavalink password (`youshallnotpass` by default) |
+| `YT_COOKIES_FILE` | ⭐ | Path to exported YouTube cookies for higher reliability |
 | `AUTO_LAVALINK` | | Auto-start music server (default: `1`) |
 | `AUTO_UPDATE_WEBHOOK` | | Discord webhook notified when scheduled updates fail |
 | `ICS_URL` | | F1 calendar feed URL |
-| `LOCAL_TIMEZONE` | | Your timezone (e.g., `America/New_York`) |
+| `LOCAL_TIMEZONE` | | IANA timezone for F1 reminders (falls back to UTC) |
+| `GUILD_ID` | | Restrict slash command registration to a test guild |
+| `F1_CHANNEL_ID` | | Default channel for race reminders |
 
 See [`.env.example`](.env.example) for all options.
 
@@ -88,7 +96,10 @@ installer in non-interactive mode.
 - `/skip` - Skip current track
 - `/stop` - Stop playback and clear queue
 - `/queue` - View current queue
+- `/remove <index|start-end>` - Remove a queued track or range
+- `/move <source> <destination>` - Reorder a track inside the queue
 - `/shuffle` - Randomize queue order
+- `/replay` - Replay the last finished track
 
 ### AI Features 🤖
 - `/ai chat <message>` - Chat with the AI assistant
@@ -96,17 +107,26 @@ installer in non-interactive mode.
 - `/ai chat_reset` - Clear your chat history
 - `/ai image <prompt>` - Generate an image with DALL·E
 - `/ai voice` - Experimental voice chat placeholder
+- `/ai voice_toggle <enabled>` - Enable or disable AI voice chat per server
 
 ### Formula 1 🏎️
 - `/f1_schedule` - View upcoming races
 - `/f1_countdown` - Time until next session
 - `/f1_results` - Latest race results
 - `/f1_subscribe` - Get race reminders
+- `/f1_unsubscribe` - Stop receiving reminders
 
 ### Utilities 🔧
 - `/ping` - Check bot latency
 - `/uptime` - Bot runtime info
 - `/ytcheck` - YouTube playback diagnostics
+- `/musicdebug` - Lavalink connection snapshot
+
+### Moderation 🛡️
+- `/kick <member>` - Remove a member with optional reason
+- `/ban <member>` - Ban a member with optional reason
+- `/clear_messages <count>` - Bulk-delete recent messages
+- `/clear_bot_messages <count>` - Purge recent messages sent by the bot
 
 ## 🖥️ Management Portal
 
@@ -211,9 +231,9 @@ Elbot uses a resilient dual-mode system:
 - **Primary**: Lavalink v4 with [`youtube-source`](https://github.com/lavalink-devs/youtube-source) plugin
 - **Fallback**: Direct yt-dlp extraction when Lavalink fails
 
-> **Heads-up (Sep 2025):** Auto-Lavalink now defaults to `youtube-source` 1.16.1 because older builds cannot decode YouTube's new SABR signatures. If you pin `LAVALINK_YOUTUBE_PLUGIN_VERSION`, keep it at or above this release to avoid playback failures.
+> **Heads-up (Sep 2025):** Auto-Lavalink resolves the latest `youtube-source` plugin version at startup and falls back to `1.13.5` if metadata cannot be fetched. Pin `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to lock in a specific release.
 
-> Keep `yt-dlp` at **2025.9.4** or newer (`pip install --upgrade yt-dlp` inside the venv) so the fallback extractor understands the same signature changes.
+> Keep `yt-dlp` at **2025.9.26** or newer (`pip install --upgrade yt-dlp` inside the venv) so the fallback extractor understands the same signature changes.
 
 > Auto-Lavalink now auto-selects an open port; leave `LAVALINK_PORT` unset or set it to `0` unless you require a fixed value.
 
@@ -268,7 +288,7 @@ sudo lsof -i :8000
 ## 📚 Documentation
 
 - [Installation Guide](INSTALL.md) - Detailed setup instructions
-- [Discord Setup](DISCORD_SETUP.md) - Bot creation walkthrough
+- [Performance Tuning](PERFORMANCE_TUNING.md) - Advanced Lavalink and system tweaks
 - [API Docs](https://docs.nextcord.dev) - Nextcord documentation
 
 ## 🤝 Contributing
