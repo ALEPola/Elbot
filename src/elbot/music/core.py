@@ -277,6 +277,18 @@ class MusicQueue:
         with self._lock:
             return len(self._queue)
 
+    def _insert_at_locked(self, index: int, track: QueuedTrack) -> None:
+        if not self._queue or index <= 0:
+            self._queue.appendleft(track)
+            return
+        size = len(self._queue)
+        if index >= size:
+            self._queue.append(track)
+            return
+        self._queue.rotate(-index)
+        self._queue.appendleft(track)
+        self._queue.rotate(index)
+
     def snapshot(self) -> List[QueuedTrack]:
         with self._lock:
             return list(self._queue)
@@ -301,7 +313,10 @@ class MusicQueue:
         with self._lock:
             if index < 0 or index >= len(self._queue):
                 return None
-            return list(self._queue)[index]
+            try:
+                return self._queue[index]
+            except IndexError:
+                return None
 
     def clear(self) -> None:
         with self._lock:
@@ -309,37 +324,44 @@ class MusicQueue:
 
     def remove_index(self, index: int) -> Optional[QueuedTrack]:
         with self._lock:
-            if index < 0 or index >= len(self._queue):
+            size = len(self._queue)
+            if index < 0 or index >= size:
                 return None
-            items = list(self._queue)
-            track = items.pop(index)
-            self._queue = deque(items)
+            self._queue.rotate(-index)
+            track = self._queue.popleft()
+            self._queue.rotate(index)
             return track
 
     def remove_range(self, start: int, end: int) -> List[QueuedTrack]:
         with self._lock:
-            if start < 0:
-                start = 0
-            items = list(self._queue)
-            end = min(end, len(items) - 1)
-            removed: List[QueuedTrack] = []
+            size = len(self._queue)
+            if size == 0:
+                return []
+            start = max(start, 0)
+            end = min(end, size - 1)
             if start > end:
-                return removed
-            for idx in range(end, start - 1, -1):
-                removed.append(items.pop(idx))
-            self._queue = deque(items)
-            removed.reverse()
+                return []
+            count = end - start + 1
+            removed: List[QueuedTrack] = []
+            self._queue.rotate(-start)
+            for _ in range(count):
+                removed.append(self._queue.popleft())
+            self._queue.rotate(start)
             return removed
 
     def move(self, source_index: int, dest_index: int) -> bool:
         with self._lock:
-            items = list(self._queue)
-            if source_index < 0 or source_index >= len(items):
+            size = len(self._queue)
+            if size == 0 or source_index < 0 or source_index >= size:
                 return False
-            dest_index = max(0, min(dest_index, len(items) - 1))
-            track = items.pop(source_index)
-            items.insert(dest_index, track)
-            self._queue = deque(items)
+            dest_index = max(0, min(dest_index, size - 1))
+            if source_index == dest_index:
+                return True
+            self._queue.rotate(-source_index)
+            track = self._queue.popleft()
+            self._queue.rotate(source_index)
+            insert_index = min(dest_index, len(self._queue))
+            self._insert_at_locked(insert_index, track)
             return True
 
     def shuffle(self) -> None:

@@ -243,6 +243,13 @@ class F1Cog(commands.Cog):
             self.schedule_cache["schedule"] = await fetch_events(limit=10)
         return self.schedule_cache["schedule"]
 
+
+    async def _resolve_schedule(self):
+        schedule = self.get_schedule()
+        if inspect.isawaitable(schedule):
+            schedule = await schedule
+        return schedule
+
     @tasks.loop(time=dt_time(hour=12, tzinfo=AwareZone(LOCAL_TZ)))
     async def weekly_update(self):
         """Every Sunday at 12:00, post the next Grand Prix to the configured channel."""
@@ -254,9 +261,7 @@ class F1Cog(commands.Cog):
             logger.error("F1Cog: CHANNEL_ID not found.")
             return
 
-        events = self.get_schedule()
-        if inspect.iscoroutine(events):
-            events = await events
+        events = await self._resolve_schedule()
         if not events:
             events = await fetch_events(limit=1)
         events = events[:1]
@@ -278,9 +283,7 @@ class F1Cog(commands.Cog):
     async def reminder_loop(self):
         """Check every minute and DM subscribers if a session starts within 1 hour."""
         now = datetime.now(LOCAL_TZ)
-        schedule = self.get_schedule()
-        if inspect.iscoroutine(schedule):
-            schedule = await schedule
+        schedule = await self._resolve_schedule()
         if not schedule:
             schedule = await fetch_events(limit=5)
         for dt, name in schedule[:5]:
@@ -314,9 +317,7 @@ class F1Cog(commands.Cog):
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             await safe_reply(interaction, "Not available in this server.", ephemeral=True)
             return
-        events = self.get_schedule()
-        if inspect.iscoroutine(events):
-            events = await events
+        events = await self._resolve_schedule()
         if not events:
             events = await fetch_events(limit=count)
         events = events[:count]
@@ -333,9 +334,7 @@ class F1Cog(commands.Cog):
         if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
             await safe_reply(interaction, "Not available in this server.", ephemeral=True)
             return
-        events = self.get_schedule()
-        if inspect.iscoroutine(events):
-            events = await events
+        events = await self._resolve_schedule()
         if not events:
             events = await fetch_events(limit=1)
         events = events[:1]

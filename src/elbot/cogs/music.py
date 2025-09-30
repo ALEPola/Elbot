@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Dict, Optional, TYPE_CHECKING
 
@@ -61,6 +62,7 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         _ensure_logging()
         self.bot = bot
+        self._backend_lock = threading.Lock()
         self.logger = logging.getLogger("elbot.music")
         # Defer creating the Lavalink backend until it's actually needed so
         # importing the cog doesn't require the 'mafic' package to be
@@ -85,14 +87,16 @@ class Music(commands.Cog):
     @property
     def backend(self) -> LavalinkAudioBackend:
         if self._backend is None:
-            self._backend = LavalinkAudioBackend(self.bot)
-            # initialize fallback that relies on backend
-            self.fallback = FallbackPlayer(
-                self._backend,
-                cookies=self.cookies,
-                metrics=self.metrics,
-                search_cache=self.search_cache,
-            )
+            with self._backend_lock:
+                if self._backend is None:
+                    self._backend = LavalinkAudioBackend(self.bot)
+                    # initialize fallback that relies on backend
+                    self.fallback = FallbackPlayer(
+                        self._backend,
+                        cookies=self.cookies,
+                        metrics=self.metrics,
+                        search_cache=self.search_cache,
+                    )
         return self._backend
 
     # ------------------------------------------------------------------
@@ -118,6 +122,7 @@ class Music(commands.Cog):
             await backend.close()
             self._backend = None
             self.fallback = None
+        await self.diagnostics.close()
 
     def cog_unload(self) -> None:  # type: ignore[override]
         async def _run_cleanup() -> None:

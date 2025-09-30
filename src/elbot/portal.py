@@ -28,7 +28,7 @@ from openai import OpenAI
 
 from .core import auto_update
 from .config import Config
-from .music import CookieManager, DiagnosticsService, PlaybackMetrics
+from .music import CookieManager, DiagnosticsReport, DiagnosticsService, PlaybackMetrics
 
 ROOT_DIR = Config.BASE_DIR
 ENV_FILE = ROOT_DIR / ".env"
@@ -128,8 +128,14 @@ def _collect_diagnostics() -> Tuple[Dict[str, Any] | None, str | None, int]:
     except ValueError as exc:
         return None, str(exc), 400
 
+    async def _run_collect() -> DiagnosticsReport:
+        try:
+            return await service.collect()
+        finally:
+            await service.close()
+
     try:
-        report = asyncio.run(service.collect())
+        report = asyncio.run(_run_collect())
     except asyncio.TimeoutError:
         return None, "Timed out while contacting the Lavalink server.", 504
     except Exception as exc:  # pragma: no cover - diagnostic failures surfaced to UI

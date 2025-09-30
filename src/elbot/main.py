@@ -186,14 +186,14 @@ def main() -> None:
 
     Config.validate()
     log_cookie_status()
-    asyncio.run(_lavalink_health_check())
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(_lavalink_health_check())
 
     intents = nextcord.Intents.default()
     intents.message_content = True
     intents.voice_states = True
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
 
     bot = commands.Bot(
         command_prefix=Config.PREFIX,

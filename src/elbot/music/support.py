@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import asyncio
 import json
 import logging
 import os
@@ -639,6 +640,7 @@ class DiagnosticsReport:
     metrics: Dict[str, Any]
 
 
+
 class DiagnosticsService:
     """Collect lightweight diagnostics from Lavalink and yt-dlp."""
 
@@ -658,24 +660,36 @@ class DiagnosticsService:
         self.secure = secure
         self.cookies = cookies
         self.metrics = metrics
+        scheme = "https" if secure else "http"
+        self._base_url = f"{scheme}://{host}:{port}"
+        self._headers = {"Authorization": password}
+        self._timeout = aiohttp.ClientTimeout(total=5)
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._session_lock: Optional[asyncio.Lock] = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                self._session = aiohttp.ClientSession(
+                    headers=self._headers, timeout=self._timeout
+                )
+            return self._session
 
     async def collect(self) -> DiagnosticsReport:
-        base_url = f"{'https' if self.secure else 'http'}://{self.host}:{self.port}"
-        headers = {"Authorization": self.password}
-        timeout = aiohttp.ClientTimeout(total=5)
         version_data: Dict[str, Any] = {}
         plugin_data: Dict[str, Any] = {}
         latency_ms: Optional[float] = None
-
-        async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
-            start = time.perf_counter()
-            async with session.get(f"{base_url}/version") as resp:
-                if resp.status == 200:
-                    version_data = await resp.json()
-            latency_ms = (time.perf_counter() - start) * 1000
-            async with session.get(f"{base_url}/plugins") as resp:
-                if resp.status == 200:
-                    plugin_data = await resp.json()
+        session = await self._get_session()
+        start_time = time.perf_counter()
+        async with session.get(f"{self._base_url}/version") as resp:
+            if resp.status == 200:
+                version_data = await resp.json()
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        async with session.get(f"{self._base_url}/plugins") as resp:
+            if resp.status == 200:
+                plugin_data = await resp.json()
 
         plugin_version = None
         plugins = (
@@ -700,6 +714,17 @@ class DiagnosticsService:
             metrics=self.metrics.snapshot(),
         )
         return report
+
+    async def close(self) -> None:
+        if self._session_lock is None:
+            if self._session and not self._session.closed:
+                await self._session.close()
+            self._session = None
+            return
+        async with self._session_lock:
+            if self._session and not self._session.closed:
+                await self._session.close()
+            self._session = None
 
 
 class _JsonFormatter(logging.Formatter):
