@@ -233,12 +233,47 @@ def _download_jre(base: Path) -> Path:
     return java_bin
 
 
+def _check_java_version(java_bin: str) -> bool:
+    """Check if Java binary is version 17 or higher."""
+    try:
+        result = subprocess.run(
+            [java_bin, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        # Java prints version to stderr
+        output = result.stderr + result.stdout
+        # Look for version pattern like "17.0.16" or "21.0.1"
+        match = re.search(r'version "(\d+)(?:\.(\d+))?', output)
+        if match:
+            major = int(match.group(1))
+            return major >= 17
+    except Exception:
+        pass
+    return False
+
+
 def _get_java_bin() -> str:
     from shutil import which
 
+    # Common Java installation paths on Linux systems
+    common_paths = [
+        "/usr/bin/java",
+        "/usr/lib/jvm/java-17-openjdk-arm64/bin/java",
+        "/usr/lib/jvm/java-17-openjdk-amd64/bin/java",
+        "/usr/lib/jvm/default-java/bin/java",
+    ]
+
+    # First try which() - works if PATH is set correctly
     j = which("java")
-    if j:
+    if j and _check_java_version(j):
         return j
+
+    # Try common installation paths directly
+    for path in common_paths:
+        if os.path.exists(path) and _check_java_version(path):
+            return path
 
     # Attempt to download a portable JRE into APP_DIR
     try:
