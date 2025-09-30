@@ -218,10 +218,14 @@ Elbot uses a resilient dual-mode system:
 > Auto-Lavalink now auto-selects an open port; leave `LAVALINK_PORT` unset or set it to `0` unless you require a fixed value.
 
 To unlock age-restricted content **and** keep large queues from triggering YouTube's `429 Too Many Requests` throttling:
-1. Export your YouTube cookies from a logged-in browser profile (see the [yt-dlp cookies guide](https://github.com/yt-dlp/yt-dlp/wiki/How-to-use-your-own-YouTube-Cookies)).
-2. Set `YT_COOKIES_FILE=/path/to/cookies.txt` in `.env` (or mount the file in Docker deployments).
+1. Install the **"Get cookies.txt LOCALLY"** browser extension ([Chrome](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) | [Firefox](https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/))
+2. Log into YouTube in your browser (any Google account works, no premium required)
+3. Click the extension icon while on youtube.com and export as `cookies.txt`
+4. Save `cookies.txt` in your Elbot directory (next to `.env`)
+5. Set `YOUTUBE_COOKIES_PATH=./cookies.txt` in `.env` (or use absolute path)
+6. Restart the bot: `elbotctl service restart`
 
-Refresh the cookie export periodically—especially for 24/7 music sessions—so Lavalink and yt-dlp can reuse the authenticated session for smooth playback.
+**Important:** Refresh the cookie export monthly—especially for 24/7 music sessions—so Lavalink and yt-dlp can maintain authenticated playback.
 
 ## 🧪 Testing
 
