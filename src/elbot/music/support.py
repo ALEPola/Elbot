@@ -23,6 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 __all__ = [
     "CookieManager",
+    "SearchCache",
     "PlaybackMetrics",
     "EmbedFactory",
     "QueuePaginator",
@@ -100,6 +101,277 @@ class CookieManager:
         if self._path is None or self._mtime is None:
             return None
         return max(0.0, time.time() - self._mtime)
+
+
+_CACHE_LOGGER = logging.getLogger("elbot.music.cache")
+
+
+@dataclass
+class CacheRecord:
+    key: str
+    query: str
+    sources: List[str]
+    identifier: Optional[str]
+    created_at: float
+    ttl: int
+    last_used: float
+
+    def expired(self, *, now: Optional[float] = None) -> bool:
+        if now is None:
+            now = time.time()
+        return now >= self.created_at + self.ttl
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "key": self.key,
+            "query": self.query,
+            "sources": self.sources,
+            "identifier": self.identifier,
+            "created_at": self.created_at,
+            "ttl": self.ttl,
+            "last_used": self.last_used,
+        }
+
+    @classmethod
+    def from_json(cls, payload: Dict[str, Any]) -> Optional["CacheRecord"]:
+        if not isinstance(payload, dict):
+            return None
+        key = str(payload.get("key") or "").strip()
+        if not key:
+            return None
+        raw_sources = payload.get("sources") or []
+        sources = []
+        for item in raw_sources:
+            if isinstance(item, str):
+                stripped = item.strip()
+                if stripped and stripped not in sources:
+                    sources.append(stripped)
+        if not sources:
+            return None
+        identifier = payload.get("identifier")
+        if identifier is not None:
+            identifier = str(identifier).strip() or None
+        try:
+            created_at = float(payload.get("created_at") or time.time())
+            ttl = int(payload.get("ttl") or 0)
+            last_used = float(payload.get("last_used") or created_at)
+        except (TypeError, ValueError):
+            return None
+        if ttl <= 0:
+            return None
+        query = str(payload.get("query") or key)
+        return cls(
+            key=key,
+            query=query,
+            sources=sources,
+            identifier=identifier,
+            created_at=created_at,
+            ttl=ttl,
+            last_used=last_used,
+        )
+
+
+class SearchCache:
+    """Persistent cache for resolved stream URLs with TTL pruning."""
+
+    VERSION = 1
+
+    def __init__(
+        self,
+        *,
+        path: Optional[Path] = None,
+        default_ttl: Optional[int] = None,
+        max_entries: int = 400,
+        persist: bool = True,
+    ) -> None:
+        self.persist = persist
+        env_path = os.getenv("ELBOT_MUSIC_CACHE_FILE", "").strip() if persist else ""
+        base_path: Optional[Path] = None
+        if persist:
+            if path is not None:
+                base_path = Path(path).expanduser()
+            elif env_path:
+                base_path = Path(env_path).expanduser()
+            else:
+                base_path = Path("chat_history/music_search_cache.json").expanduser()
+        self.path: Optional[Path] = base_path
+
+        env_ttl = os.getenv("ELBOT_MUSIC_CACHE_TTL", "").strip()
+        ttl = default_ttl if default_ttl is not None else 6 * 3600
+        if env_ttl:
+            try:
+                ttl = max(60, int(env_ttl))
+            except ValueError:
+                _CACHE_LOGGER.warning("Invalid ELBOT_MUSIC_CACHE_TTL: %s", env_ttl)
+        self.default_ttl = ttl
+
+        env_size = os.getenv("ELBOT_MUSIC_CACHE_SIZE", "").strip()
+        if env_size:
+            try:
+                max_entries = max(10, int(env_size))
+            except ValueError:
+                _CACHE_LOGGER.warning("Invalid ELBOT_MUSIC_CACHE_SIZE: %s", env_size)
+        self.max_entries = max_entries
+
+        self._lock = threading.Lock()
+        self._entries: Dict[str, CacheRecord] = {}
+        self._load()
+
+    def get(self, query: str) -> Optional[CacheRecord]:
+        key = self._key(query)
+        with self._lock:
+            record = self._entries.get(key)
+            if record is None:
+                return None
+            now = time.time()
+            if record.expired(now=now):
+                del self._entries[key]
+                self._persist_locked()
+                return None
+            record.last_used = now
+            return CacheRecord(
+                key=record.key,
+                query=record.query,
+                sources=list(record.sources),
+                identifier=record.identifier,
+                created_at=record.created_at,
+                ttl=record.ttl,
+                last_used=record.last_used,
+            )
+
+    def remember(
+        self,
+        query: str,
+        *,
+        sources: Sequence[str],
+        identifier: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> None:
+        cleaned = []
+        for item in sources:
+            if not isinstance(item, str):
+                continue
+            stripped = item.strip()
+            if stripped and stripped not in cleaned:
+                cleaned.append(stripped)
+        if not cleaned:
+            return
+        now = time.time()
+        ttl_value = int(ttl or self.default_ttl)
+        ttl_value = max(60, ttl_value)
+        key = self._key(query)
+        identifier_value: Optional[str] = None
+        if identifier is not None:
+            candidate = str(identifier).strip()
+            if candidate:
+                identifier_value = candidate
+        record = CacheRecord(
+            key=key,
+            query=query,
+            sources=cleaned,
+            identifier=identifier_value,
+            created_at=now,
+            ttl=ttl_value,
+            last_used=now,
+        )
+        with self._lock:
+            self._entries[key] = record
+            self._prune_locked(now=now)
+            self._persist_locked()
+
+    def evict(self, query: str) -> None:
+        key = self._key(query)
+        with self._lock:
+            if key in self._entries:
+                del self._entries[key]
+                self._persist_locked()
+
+    def clear(self) -> None:
+        with self._lock:
+            if not self._entries:
+                return
+            self._entries.clear()
+            self._persist_locked()
+
+    def size(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+    def _load(self) -> None:
+        if not self.persist or self.path is None or not self.path.exists():
+            return
+        try:
+            payload = json.loads(self.path.read_text("utf-8"))
+        except Exception as exc:
+            _CACHE_LOGGER.warning("Failed to load music cache %s: %s", self.path, exc)
+            return
+        entries = payload.get("entries")
+        if not isinstance(entries, list):
+            return
+        now = time.time()
+        with self._lock:
+            for item in entries:
+                record = CacheRecord.from_json(item)
+                if not record:
+                    continue
+                if record.expired(now=now):
+                    continue
+                key = record.key
+                self._entries[key] = record
+            self._prune_locked(now=now)
+
+    def _persist_locked(self) -> None:
+        if not self.persist or self.path is None:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        payload = {
+            "version": self.VERSION,
+            "saved_at": time.time(),
+            "entries": [record.to_json() for record in self._entries.values()],
+        }
+        tmp_path = self.path.with_suffix(".tmp")
+        try:
+            tmp_path.write_text(
+                json.dumps(payload, ensure_ascii=True, indent=2),
+                encoding="utf-8",
+            )
+            tmp_path.replace(self.path)
+        except Exception as exc:
+            _CACHE_LOGGER.warning("Failed to persist music cache %s: %s", self.path, exc)
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+
+    def _prune_locked(self, *, now: Optional[float] = None) -> None:
+        if now is None:
+            now = time.time()
+        expired_keys = [key for key, record in self._entries.items() if record.expired(now=now)]
+        for key in expired_keys:
+            del self._entries[key]
+        if len(self._entries) <= self.max_entries:
+            return
+        sorted_items = sorted(
+            self._entries.items(), key=lambda item: item[1].last_used
+        )
+        excess = len(self._entries) - self.max_entries
+        for key, _ in sorted_items[:excess]:
+            del self._entries[key]
+
+    def _key(self, query: str) -> str:
+        text = str(query or "").strip()
+        if not text:
+            return ""
+        if "://" in text:
+            return text
+        lowered = text.lower()
+        return " ".join(lowered.split())
+
+
 
 
 @dataclass

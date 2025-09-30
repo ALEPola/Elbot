@@ -18,7 +18,7 @@ import yt_dlp
 
 from elbot.config import get_lavalink_connection_info
 
-from .support import CookieManager, PlaybackMetrics
+from .support import CookieManager, PlaybackMetrics, SearchCache
 
 os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
@@ -393,11 +393,13 @@ class FallbackPlayer:
         cookies: Optional[CookieManager] = None,
         metrics: Optional[PlaybackMetrics] = None,
         logger: Optional[logging.Logger] = None,
+        search_cache: Optional[SearchCache] = None,
     ) -> None:
         self.backend = backend
         self.cookies = cookies or CookieManager()
         self.metrics = metrics or PlaybackMetrics()
         self.logger = logger or logging.getLogger("elbot.music.fallback")
+        self.cache = search_cache or SearchCache(persist=False)
 
     async def build_queue_entry(
         self,
@@ -411,6 +413,16 @@ class FallbackPlayer:
 
         start = time.perf_counter()
         prefer_search = not query.startswith("http")
+
+        cached_entry = await self._resolve_cached(
+            query,
+            requested_by=requested_by,
+            requester_display=requester_display,
+            channel_id=channel_id,
+        )
+        if cached_entry is not None:
+            self.metrics.observe_startup((time.perf_counter() - start) * 1000)
+            return cached_entry
 
         try:
             handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
@@ -458,6 +470,15 @@ class FallbackPlayer:
     ) -> QueuedTrack:
         """Directly build a fallback entry without retrying Lavalink."""
 
+        cached_entry = await self._resolve_cached(
+            query,
+            requested_by=requested_by,
+            requester_display=requester_display,
+            channel_id=channel_id,
+        )
+        if cached_entry is not None:
+            return cached_entry
+
         self.logger.info(
             "Attempting direct fallback resolution",
             extra={"query": query, "requested_by": requested_by},
@@ -469,6 +490,78 @@ class FallbackPlayer:
             channel_id=channel_id,
             base_error=base_error,
         )
+
+
+    async def _resolve_cached(
+        self,
+        query: str,
+        *,
+        requested_by: int,
+        requester_display: str,
+        channel_id: int,
+    ) -> Optional[QueuedTrack]:
+        if not self.cache:
+            return None
+        cached = self.cache.get(query)
+        if not cached:
+            return None
+
+        last_error: Optional[Exception] = None
+        for candidate in cached.sources:
+            try:
+                handles = await self.backend.resolve_tracks(
+                    candidate, prefer_search=False
+                )
+            except TrackLoadFailure as exc:
+                last_error = exc
+                self.logger.debug(
+                    "Cached candidate failed",
+                    extra={
+                        "query": query,
+                        "candidate": candidate,
+                        "error": str(exc),
+                    },
+                )
+                continue
+            if not handles:
+                self.logger.debug(
+                    "Cached candidate yielded no tracks",
+                    extra={"query": query, "candidate": candidate},
+                )
+                continue
+            track_handle = handles[0]
+            entry = self._build_entry(
+                track_handle,
+                query=query,
+                requested_by=requested_by,
+                requester_display=requester_display,
+                channel_id=channel_id,
+                is_fallback=True,
+                fallback_source=candidate,
+            )
+            self.metrics.incr_fallback()
+            self.metrics.record_fallback_source(candidate)
+            self.logger.info(
+                "Resolved stream from cache",
+                extra={
+                    "query": query,
+                    "candidate": candidate,
+                    "identifier": cached.identifier,
+                    "requested_by": requested_by,
+                },
+            )
+            return entry
+
+        self.cache.evict(query)
+        self.logger.warning(
+            "Cached entry invalidated",
+            extra={
+                "query": query,
+                "identifier": cached.identifier,
+                "error": str(last_error) if last_error else None,
+            },
+        )
+        return None
 
     async def _resolve_lavalink(
         self, query: str, *, prefer_search: bool
@@ -560,6 +653,25 @@ class FallbackPlayer:
             is_fallback=True,
             fallback_source=selected_source,
         )
+        if self.cache:
+            identifier = None
+            if isinstance(info, dict):
+                raw_identifier = info.get("id")
+                if raw_identifier:
+                    candidate = str(raw_identifier).strip()
+                    if candidate:
+                        identifier = candidate
+            try:
+                self.cache.remember(
+                    query,
+                    sources=sources_to_try,
+                    identifier=identifier,
+                )
+            except Exception as exc:
+                self.logger.debug(
+                    "Failed to update search cache",
+                    extra={"query": query, "error": str(exc)},
+                )
         self.metrics.record_fallback_source(selected_source)
         self.logger.info(
             "Resolved fallback stream",

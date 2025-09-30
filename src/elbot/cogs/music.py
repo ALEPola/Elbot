@@ -20,6 +20,7 @@ from elbot.music import (
     CookieManager,
     DiagnosticsService,
     EmbedFactory,
+    SearchCache,
     FallbackPlayer,
     LavalinkAudioBackend,
     MusicQueue,
@@ -67,6 +68,7 @@ class Music(commands.Cog):
         self._backend = None
         self.metrics = PlaybackMetrics()
         self.cookies = CookieManager()
+        self.search_cache = SearchCache()
         self.fallback = None
         self.embed_factory = EmbedFactory()
         host, port, password, secure = _lavalink_config()
@@ -86,7 +88,10 @@ class Music(commands.Cog):
             self._backend = LavalinkAudioBackend(self.bot)
             # initialize fallback that relies on backend
             self.fallback = FallbackPlayer(
-                self._backend, cookies=self.cookies, metrics=self.metrics
+                self._backend,
+                cookies=self.cookies,
+                metrics=self.metrics,
+                search_cache=self.search_cache,
             )
         return self._backend
 

@@ -12,6 +12,7 @@ from .core import (
 from .support import (
     CookieManager,
     DiagnosticsReport,
+    SearchCache,
     DiagnosticsService,
     EmbedFactory,
     PlaybackMetrics,
@@ -29,6 +30,7 @@ __all__ = [
     "TrackLoadFailure",
     "CookieManager",
     "DiagnosticsReport",
+    "SearchCache",
     "DiagnosticsService",
     "EmbedFactory",
     "PlaybackMetrics",
