@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import os
@@ -432,6 +433,7 @@ class FallbackPlayer:
         self.metrics = metrics or PlaybackMetrics()
         self.logger = logger or logging.getLogger("elbot.music.fallback")
         self.cache = search_cache or SearchCache(persist=False)
+        self._fallback_hedge_delay = max(0.0, float(os.getenv("ELBOT_FALLBACK_HEDGE_DELAY", "1.5")))
 
     async def build_queue_entry(
         self,
@@ -456,9 +458,10 @@ class FallbackPlayer:
             self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return cached_entry
 
-        try:
+        fallback_cause: list[Optional[TrackLoadFailure]] = [None]
+
+        async def lavalink_entry() -> QueuedTrack:
             handle = await self._resolve_lavalink(query, prefer_search=prefer_search)
-            self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return self._build_entry(
                 handle,
                 query=query,
@@ -468,29 +471,71 @@ class FallbackPlayer:
                 is_fallback=False,
                 fallback_source=None,
             )
-        except TrackLoadFailure as lavalink_exc:
-            self.logger.warning(
-                "Lavalink resolution failed, attempting yt-dlp fallback",
-                extra={"query": query, "error": str(lavalink_exc)},
+
+        async def hedged_fallback_entry() -> QueuedTrack:
+            delay = self._fallback_hedge_delay
+            if delay > 0:
+                await asyncio.sleep(delay)
+            return await self._resolve_fallback(
+                query,
+                requested_by=requested_by,
+                requester_display=requester_display,
+                channel_id=channel_id,
+                base_error=fallback_cause[0],
             )
 
-            try:
-                fallback_entry = await self._resolve_fallback(
-                    query,
-                    requested_by=requested_by,
-                    requester_display=requester_display,
-                    channel_id=channel_id,
-                    base_error=lavalink_exc,
-                )
-                self.metrics.observe_startup((time.perf_counter() - start) * 1000)
-                return fallback_entry
-            except TrackLoadFailure as fallback_exc:
-                self.metrics.incr_failed()
-                raise TrackLoadFailure(
-                    f"Both Lavalink and yt-dlp failed: {fallback_exc}",
-                    cause=lavalink_exc,
-                ) from fallback_exc
+        lavalink_task = asyncio.create_task(lavalink_entry())
+        fallback_task = asyncio.create_task(hedged_fallback_entry())
+        tasks: set[asyncio.Task[QueuedTrack]] = {lavalink_task, fallback_task}
+        errors: List[TrackLoadFailure] = []
 
+        try:
+            while tasks:
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for finished in done:
+                    try:
+                        entry = await finished
+                    except asyncio.CancelledError:
+                        continue
+                    except TrackLoadFailure as exc:
+                        errors.append(exc)
+                        if finished is lavalink_task:
+                            fallback_cause[0] = exc
+                            self.logger.warning(
+                                "Lavalink resolution failed, waiting for yt-dlp fallback",
+                                extra={"query": query, "error": str(exc)},
+                            )
+                        tasks = pending
+                    else:
+                        pending_list = list(pending)
+                        for task in pending_list:
+                            task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            if pending_list:
+                                await asyncio.gather(*pending_list, return_exceptions=True)
+                        tasks = set()
+                        self.metrics.observe_startup((time.perf_counter() - start) * 1000)
+                        return entry
+                tasks = pending
+        finally:
+            if tasks:
+                to_cancel = list(tasks)
+                for task in to_cancel:
+                    task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    if to_cancel:
+                        await asyncio.gather(*to_cancel, return_exceptions=True)
+
+        self.metrics.incr_failed()
+        if errors:
+            primary = errors[-1]
+            if len(errors) > 1:
+                raise TrackLoadFailure(
+                    "Both Lavalink and yt-dlp failed",
+                    cause=primary,
+                ) from primary
+            raise primary
+        raise TrackLoadFailure("Failed to resolve track")
     async def build_fallback_entry(
         self,
         query: str,
@@ -849,3 +894,5 @@ class FallbackPlayer:
             uri=uri,
             source=source,
         )
+
+
