@@ -167,8 +167,18 @@ class LavalinkAudioBackend:
         return True
 
     async def close(self) -> None:
-        if self._node:
-            await self._node.disconnect()
+        node = self._node
+        if node is not None:
+            close = getattr(node, "close", None)
+            if callable(close):
+                await close()
+            else:
+                destroy = getattr(self._pool, "destroy_node", None)
+                if callable(destroy):
+                    try:
+                        await destroy(node)
+                    except TypeError:
+                        await destroy(getattr(node, "label", None))
         self._node = None
         self._ready.clear()
 
