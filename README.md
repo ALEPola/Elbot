@@ -217,16 +217,25 @@ Elbot uses a resilient dual-mode system:
 
 > Auto-Lavalink now auto-selects an open port; leave `LAVALINK_PORT` unset or set it to `0` unless you require a fixed value.
 
-To unlock age-restricted content **and** keep large queues from triggering YouTube's `429 Too Many Requests` throttling:
-1. Install the **"Get cookies.txt LOCALLY"** browser extension ([Chrome](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) | [Firefox](https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/))
-2. Log into YouTube in your browser (any Google account works, no premium required)
-3. Click the extension icon while on youtube.com and export as `cookies.txt`
-4. Save `cookies.txt` in your Elbot directory (next to `.env`)
-5. Set `YOUTUBE_COOKIES_PATH=./cookies.txt` in `.env` (or use absolute path)
-6. Restart the bot: `elbotctl service restart`
+### Provide YouTube cookies (recommended)
 
-**Important:** Refresh the cookie export monthly—especially for 24/7 music sessions—so Lavalink and yt-dlp can maintain authenticated playback.
+Elbot's yt-dlp fallback performs best with authenticated cookies. Supplying them unlocks age-restricted content and prevents YouTube `429 Too Many Requests` throttling during long queues.
 
+**Option A - Browser export**
+1. Install the "Get cookies.txt LOCALLY" extension ([Chrome](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) / [Firefox](https://addons.mozilla.org/firefox/addon/get-cookies-txt-locally/)).
+2. Sign in to https://youtube.com in that browser profile.
+3. While on youtube.com, click the extension and export `cookies.txt`.
+4. Move `cookies.txt` into your Elbot directory (next to `.env`).
+
+**Option B - Command line (works on Pi/servers)**
+- Linux / Raspberry Pi (Chromium): `yt-dlp --cookies-from-browser chromium --write-cookies ~/youtube_cookies.txt https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+- macOS (Chrome): `yt-dlp --cookies-from-browser chrome --write-cookies ~/youtube_cookies.txt https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+- Windows (PowerShell, Chrome): `yt-dlp --cookies-from-browser chrome --write-cookies "$Env:USERPROFILE\youtube_cookies.txt" https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+  > Adjust the browser flag (`chromium`, `firefox`, `edge`, ...) if you use something else.
+
+After exporting, set `YT_COOKIES_FILE` in `.env` (or your service config) to the cookie file path and restart Elbot: `elbotctl service restart`.
+
+**Important:** Refresh the cookie export monthly (especially for 24/7 music sessions) so Lavalink and yt-dlp stay authenticated.
 ## 🧪 Testing
 
 ```bash
@@ -287,3 +296,4 @@ Built with:
 <p align="center">
   Made with ❤️ by the Elbot Team
 </p>
+

@@ -10,7 +10,24 @@ Regardless of platform you need:
 - Java 17+ JRE (required for Lavalink)
 - `ffmpeg` available on your PATH (or set `FFMPEG_PATH` in `.env`)
 - A Discord bot token and optional OpenAI API key if you intend to use chat and image commands
-- (Recommended) A fresh YouTube cookies export if you plan to run large queues or 24/7 playback—configure `YT_COOKIES_FILE` to avoid `429` throttling. Follow the [yt-dlp cookies guide](https://github.com/yt-dlp/yt-dlp/wiki/How-to-use-your-own-YouTube-Cookies) to create the file.
+- (Recommended) A fresh YouTube cookies export if you plan to run large queues or 24/7 playback—configure `YT_COOKIES_FILE` to avoid `429` throttling.
+
+### Provide YouTube cookies
+
+Elbot's yt-dlp fallback performs best with authenticated cookies. Supplying them unlocks age-restricted tracks and prevents YouTube `429` throttling on long sessions.
+
+**Browser export**
+1. Install the "Get cookies.txt LOCALLY" extension ([Chrome](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) / [Firefox](https://addons.mozilla.org/firefox/addon/get-cookies-txt-locally/)).
+2. Sign in to https://youtube.com in that browser profile.
+3. Export `cookies.txt` while on youtube.com and move it into the Elbot repository.
+
+**Command line (useful on servers/Pi)**
+- Linux / Raspberry Pi (Chromium): `yt-dlp --cookies-from-browser chromium --write-cookies ~/youtube_cookies.txt https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+- macOS (Chrome): `yt-dlp --cookies-from-browser chrome --write-cookies ~/youtube_cookies.txt https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+- Windows (PowerShell, Chrome): `yt-dlp --cookies-from-browser chrome --write-cookies "$Env:USERPROFILE\youtube_cookies.txt" https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+  > Adjust the browser flag (`chromium`, `firefox`, `edge`, ...) if you use something else.
+
+Point `YT_COOKIES_FILE` in `.env` (or your service configuration) at the exported file and restart Elbot. Refresh the cookie export monthly for 24/7 nodes.
 
 Platform-specific notes:
 
