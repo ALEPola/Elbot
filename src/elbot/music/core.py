@@ -433,7 +433,12 @@ class FallbackPlayer:
         self.metrics = metrics or PlaybackMetrics()
         self.logger = logger or logging.getLogger("elbot.music.fallback")
         self.cache = search_cache or SearchCache(persist=False)
+        primary = os.getenv("ELBOT_PRIMARY_BACKEND", "fallback").strip().lower()
+        if primary not in {"lavalink", "fallback"}:
+            primary = "fallback"
+        self._primary_backend = primary
         self._fallback_hedge_delay = max(0.0, float(os.getenv("ELBOT_FALLBACK_HEDGE_DELAY", "1.5")))
+        self._lavalink_hedge_delay = max(0.0, float(os.getenv("ELBOT_LAVALINK_HEDGE_DELAY", "0.0")))
 
     async def build_queue_entry(
         self,
@@ -443,7 +448,7 @@ class FallbackPlayer:
         requester_display: str,
         channel_id: int,
     ) -> QueuedTrack:
-        """Resolve a queued track, trying Lavalink first for better performance."""
+        """Resolve a queued track using the configured backend precedence."""
 
         start = time.perf_counter()
         prefer_search = not query.startswith("http")
@@ -458,6 +463,7 @@ class FallbackPlayer:
             self.metrics.observe_startup((time.perf_counter() - start) * 1000)
             return cached_entry
 
+        primary_is_fallback = self._primary_backend == "fallback"
         fallback_cause: list[Optional[TrackLoadFailure]] = [None]
 
         async def lavalink_entry() -> QueuedTrack:
@@ -472,10 +478,7 @@ class FallbackPlayer:
                 fallback_source=None,
             )
 
-        async def hedged_fallback_entry() -> QueuedTrack:
-            delay = self._fallback_hedge_delay
-            if delay > 0:
-                await asyncio.sleep(delay)
+        async def fallback_entry() -> QueuedTrack:
             return await self._resolve_fallback(
                 query,
                 requested_by=requested_by,
@@ -484,8 +487,19 @@ class FallbackPlayer:
                 base_error=fallback_cause[0],
             )
 
-        lavalink_task = asyncio.create_task(lavalink_entry())
-        fallback_task = asyncio.create_task(hedged_fallback_entry())
+        def schedule(task_fn, delay: float) -> asyncio.Task[QueuedTrack]:
+            async def runner() -> QueuedTrack:
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                return await task_fn()
+
+            return asyncio.create_task(runner())
+
+        lavalink_delay = self._lavalink_hedge_delay if primary_is_fallback else 0.0
+        fallback_delay = 0.0 if primary_is_fallback else self._fallback_hedge_delay
+
+        lavalink_task = schedule(lavalink_entry, lavalink_delay)
+        fallback_task = schedule(fallback_entry, fallback_delay)
         tasks: set[asyncio.Task[QueuedTrack]] = {lavalink_task, fallback_task}
         errors: List[TrackLoadFailure] = []
 
@@ -503,6 +517,11 @@ class FallbackPlayer:
                             fallback_cause[0] = exc
                             self.logger.warning(
                                 "Lavalink resolution failed, waiting for yt-dlp fallback",
+                                extra={"query": query, "error": str(exc)},
+                            )
+                        else:
+                            self.logger.warning(
+                                "yt-dlp fallback failed, waiting for Lavalink",
                                 extra={"query": query, "error": str(exc)},
                             )
                         tasks = pending
@@ -528,14 +547,15 @@ class FallbackPlayer:
 
         self.metrics.incr_failed()
         if errors:
-            primary = errors[-1]
+            primary_error = errors[-1]
             if len(errors) > 1:
                 raise TrackLoadFailure(
                     "Both Lavalink and yt-dlp failed",
-                    cause=primary,
-                ) from primary
-            raise primary
+                    cause=primary_error,
+                ) from primary_error
+            raise primary_error
         raise TrackLoadFailure("Failed to resolve track")
+
     async def build_fallback_entry(
         self,
         query: str,
