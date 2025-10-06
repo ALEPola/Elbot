@@ -1,4 +1,4 @@
-"""Support utilities for the music subsystem."""
+﻿"""Support utilities for the music subsystem."""
 
 from __future__ import annotations
 
@@ -493,7 +493,24 @@ class EmbedFactory:
         )
         embed.add_field(name="Queue position", value=str(position), inline=True)
         embed.add_field(name="Estimated time", value=_format_eta(eta_ms), inline=True)
-        embed.set_footer(text=f"Requested by {track.requester_display}")
+        footer = f"Requested by {track.requester_display}"
+        if track.is_fallback:
+            footer += " (via yt-dlp)"
+        embed.set_footer(text=footer)
+        return embed
+
+    def loading(
+        self,
+        track: "QueuedTrack",
+        *,
+        message: str,
+    ) -> nextcord.Embed:
+        info = track.handle
+        embed = nextcord.Embed(title="Preparing stream", color=self.color)
+        embed.description = f"[{info.title}]({info.uri or track.query})\n{message}"
+        embed.add_field(name="Channel", value=info.author or "Unknown", inline=True)
+        embed.add_field(name="Duration", value=_format_duration(info.duration), inline=True)
+        embed.set_footer(text="Fallback" if track.is_fallback else "Lavalink")
         return embed
 
     def queue_page(
@@ -751,3 +768,4 @@ def configure_json_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_JsonFormatter())
     logging.basicConfig(level=level, handlers=[handler])
+

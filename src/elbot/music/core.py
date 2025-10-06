@@ -495,8 +495,12 @@ class FallbackPlayer:
 
             return asyncio.create_task(runner())
 
-        lavalink_delay = self._lavalink_hedge_delay if primary_is_fallback else 0.0
-        fallback_delay = 0.0 if primary_is_fallback else self._fallback_hedge_delay
+        if primary_is_fallback:
+            fallback_delay = 0.0
+            lavalink_delay = self._lavalink_hedge_delay
+        else:
+            fallback_delay = self._fallback_hedge_delay
+            lavalink_delay = 0.0
 
         lavalink_task = schedule(lavalink_entry, lavalink_delay)
         fallback_task = schedule(fallback_entry, fallback_delay)

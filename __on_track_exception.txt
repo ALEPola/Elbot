@@ -1,0 +1,56 @@
+@commands.Cog.listener()
+    async def on_track_exception(
+        self, event: mafic.TrackExceptionEvent
+    ) -> None:  # pragma: no cover
+        guild_id = event.player.guild.id
+        state = self._states.get(guild_id)
+        if not state:
+            return
+        current_entry = state.now_playing
+        track_obj = getattr(event, "track", None) or getattr(
+            event.player, "current", None
+        )
+        context = self._track_log_context(guild_id, current_entry, track_obj)
+        exception = event.exception
+        message = getattr(exception, "message", None) or str(exception)
+        severity = getattr(exception, "severity", None) or "unknown"
+        cause = getattr(exception, "cause", None)
+        context["exception_message"] = message
+        context["exception_severity"] = getattr(exception, "severity", None)
+        if cause is not None:
+            context["exception_cause"] = str(cause)
+        self.metrics.incr_failed()
+        self.logger.error("Track exception [%s]: %s", severity, message, extra=context)
+
+        if current_entry and not current_entry.is_fallback:
+            base_error = TrackLoadFailure(
+                message, cause=exception if isinstance(exception, Exception) else None
+            )
+            try:
+                fallback_entry = await self.fallback.build_fallback_entry(
+                    current_entry.query,
+                    requested_by=current_entry.requested_by,
+                    requester_display=current_entry.requester_display,
+                    channel_id=current_entry.channel_id,
+                    base_error=base_error,
+                )
+            except TrackLoadFailure as fallback_exc:
+                context["fallback_error"] = str(fallback_exc)
+                self.logger.error("Fallback resolution failed", extra=context)
+                state.now_playing = None
+                await self._ensure_playing(guild_id)
+                return
+            else:
+                context_fallback = self._track_log_context(guild_id, fallback_entry)
+                context_fallback["fallback_trigger"] = "track_exception"
+                self.logger.info("Switching to fallback stream", extra=context_fallback)
+                state.now_playing = None
+                state.queue.add_next(fallback_entry)
+                await self._ensure_playing(guild_id)
+                return
+
+        state.now_playing = None
+        await self._ensure_playing(guild_id)
+
+    @commands.Cog.listener()
+    async def on_track_stuck
