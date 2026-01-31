@@ -357,6 +357,10 @@ class Music(commands.Cog):
             description="Type music name, link, playlist, radio and media link.",
             autocomplete=True,
         ),
+        play_next: bool = nextcord.SlashOption(
+            description="Queue the track to play immediately after the current one.",
+            default=False,
+        ),
     ) -> None:
         # CRITICAL: Defer IMMEDIATELY to prevent timeout on slow systems like Raspberry Pi
         try:
@@ -383,7 +387,11 @@ class Music(commands.Cog):
         assert interaction.guild is not None
         state = self._get_state(interaction.guild.id)
         async with state.lock:
-            eta_ms = self._calculate_eta_ms(interaction.guild.id)
+            if play_next and state.now_playing and state.player:
+                position = getattr(state.player, "position", 0)
+                eta_ms = max(state.now_playing.handle.duration - int(position), 0)
+            else:
+                eta_ms = self._calculate_eta_ms(interaction.guild.id)
             try:
                 queued_track = await self.fallback.build_queue_entry(
                     query,
@@ -402,8 +410,12 @@ class Music(commands.Cog):
                     ephemeral=True,
                 )
                 return
-            state.queue.add(queued_track)
-            queue_position = len(state.queue)
+            if play_next:
+                state.queue.add_next(queued_track)
+                queue_position = 1
+            else:
+                state.queue.add(queued_track)
+                queue_position = len(state.queue)
             msg = await safe_reply(
                 interaction,
                 embed=self.embed_factory.queued(
