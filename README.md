@@ -92,7 +92,7 @@ installer in non-interactive mode.
 ## 🎮 Bot Commands
 
 ### Music 🎵
-- `/play <query>` - Play a song or add to queue
+- `/play <query> [play_next]` - Play a song or add to queue (set play_next to jump the queue)
 - `/skip` - Skip current track
 - `/stop` - Stop playback and clear queue
 - `/queue` - View current queue
@@ -316,4 +316,3 @@ Built with:
 <p align="center">
   Made with ❤️ by the Elbot Team
 </p>
-
