@@ -1,17 +1,17 @@
 ﻿import pytest
 
-from elbot.core import prerequisites
+from elbot.core import ops
 
 
 def test_find_missing_detects_commands():
-    missing = prerequisites.find_missing(["ffmpeg", "java"], lambda name: name == "java")
+    missing = ops.find_missing(["ffmpeg", "java"], lambda name: name == "java")
     assert missing == ["ffmpeg"]
 
 
 def test_ensure_prerequisites_no_missing():
     calls = []
 
-    result = prerequisites.ensure_prerequisites(
+    result = ops.ensure_prerequisites(
         install_packages=True,
         non_interactive=False,
         platform_name="Linux",
@@ -30,7 +30,7 @@ def test_ensure_prerequisites_auto_install(monkeypatch):
     commands_run = []
     responses = iter(["",])  # default to Enter meaning yes
 
-    result = prerequisites.ensure_prerequisites(
+    result = ops.ensure_prerequisites(
         install_packages=True,
         non_interactive=False,
         platform_name="linux",
@@ -50,7 +50,7 @@ def test_ensure_prerequisites_decline_install():
     echoes: list[str] = []
     commands_run: list[list[str]] = []
 
-    result = prerequisites.ensure_prerequisites(
+    result = ops.ensure_prerequisites(
         install_packages=True,
         non_interactive=False,
         platform_name="linux",
@@ -70,7 +70,7 @@ def test_ensure_prerequisites_decline_install():
 def test_ensure_prerequisites_no_auto_install():
     echoes: list[str] = []
 
-    result = prerequisites.ensure_prerequisites(
+    result = ops.ensure_prerequisites(
         install_packages=False,
         non_interactive=True,
         platform_name="Windows",

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from elbot.core import docker_tasks, service_manager
+from elbot.core import ops
 
 
 class _DummyError(RuntimeError):
@@ -15,7 +15,7 @@ def test_install_service_passes_flags(monkeypatch):
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.install_service(fake_run, require_lavalink=True, force=True)
+    ops.install_service(fake_run, require_lavalink=True, force=True)
 
     assert captured == [["-m", "elbot.service_install", "--require-lavalink", "--force"]]
 
@@ -26,7 +26,7 @@ def test_remove_service_invokes_runner():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.remove_service(fake_run)
+    ops.remove_service(fake_run)
     assert captured == [["-m", "elbot.service_install", "--remove"]]
 
 
@@ -36,7 +36,7 @@ def test_control_service_windows_maps_actions():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.control_service(
+    ops.control_service(
         "start",
         is_windows=True,
         run=fake_run,
@@ -49,7 +49,7 @@ def test_control_service_windows_maps_actions():
 
 def test_control_service_windows_invalid_action():
     with pytest.raises(_DummyError):
-        service_manager.control_service(
+        ops.control_service(
             "enable",
             is_windows=True,
             run=lambda _: None,
@@ -60,7 +60,7 @@ def test_control_service_windows_invalid_action():
 
 def test_control_service_systemd_requires_systemctl():
     with pytest.raises(_DummyError):
-        service_manager.control_service(
+        ops.control_service(
             "start",
             is_windows=False,
             run=lambda _: None,
@@ -75,7 +75,7 @@ def test_control_service_systemd_status_runs_command():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.control_service(
+    ops.control_service(
         "status",
         is_windows=False,
         run=fake_run,
@@ -88,7 +88,7 @@ def test_control_service_systemd_status_runs_command():
 
 def test_control_service_systemd_invalid_action():
     with pytest.raises(_DummyError):
-        service_manager.control_service(
+        ops.control_service(
             "reload",
             is_windows=False,
             run=lambda _: None,
@@ -103,7 +103,7 @@ def test_control_service_systemd_start():
     def fake_run(args: list[str]) -> None:
         captured.append(args)
 
-    service_manager.control_service(
+    ops.control_service(
         "start",
         is_windows=False,
         run=fake_run,
@@ -123,26 +123,26 @@ def test_docker_run_compose_actions(tmp_path: Path) -> None:
     def fake_run(args: list[str]) -> None:
         calls.append(args)
 
-    docker_tasks.run_compose_action(
+    ops.run_compose_action(
         "up",
         docker_dir=tmp_path,
         run=fake_run,
         remove_orphans=True,
         error_cls=_DummyError,
     )
-    docker_tasks.run_compose_action(
+    ops.run_compose_action(
         "down",
         docker_dir=tmp_path,
         run=fake_run,
         error_cls=_DummyError,
     )
-    docker_tasks.run_compose_action(
+    ops.run_compose_action(
         "pull",
         docker_dir=tmp_path,
         run=fake_run,
         error_cls=_DummyError,
     )
-    docker_tasks.run_compose_action(
+    ops.run_compose_action(
         "logs",
         docker_dir=tmp_path,
         run=fake_run,
@@ -164,7 +164,7 @@ def test_docker_unknown_action_raises(tmp_path: Path) -> None:
     compose.write_text("", encoding="utf-8")
 
     with pytest.raises(_DummyError):
-        docker_tasks.run_compose_action(
+        ops.run_compose_action(
             "restart",
             docker_dir=tmp_path,
             run=lambda _: None,
@@ -174,4 +174,4 @@ def test_docker_unknown_action_raises(tmp_path: Path) -> None:
 
 def test_docker_missing_compose(tmp_path: Path) -> None:
     with pytest.raises(_DummyError):
-        docker_tasks.ensure_compose_file(tmp_path, error_cls=_DummyError)
+        ops.ensure_compose_file(tmp_path, error_cls=_DummyError)

@@ -20,8 +20,8 @@ def test_command_install_non_interactive_env(monkeypatch: pytest.MonkeyPatch, tm
     monkeypatch.setattr(cli, "VENV_DIR", tmp_path / ".venv")
 
     monkeypatch.setattr(cli, "_warn_port_conflicts", lambda: None)
-    monkeypatch.setattr(cli.prerequisites, "ensure_prerequisites", lambda **_: None)
-    monkeypatch.setattr(cli.runtime, "create_venv", lambda *_, **__: None)
+    monkeypatch.setattr(cli.ops, "ensure_prerequisites", lambda **_: None)
+    monkeypatch.setattr(cli.ops, "create_venv", lambda *_, **__: None)
     monkeypatch.setattr(cli, "_pip_install", lambda *_, **__: None)
     monkeypatch.setattr(cli, "_run_in_venv", lambda *_, **__: None)
 
@@ -55,7 +55,7 @@ def test_warn_port_conflicts_uses_env_file(monkeypatch: pytest.MonkeyPatch, tmp_
         assert 9999 in ports
         return {4545}
 
-    monkeypatch.setattr(cli.network, "detect_port_conflicts", fake_detect)
+    monkeypatch.setattr(cli.ops, "detect_port_conflicts", fake_detect)
 
     cli._warn_port_conflicts()
 

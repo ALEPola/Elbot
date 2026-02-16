@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from elbot.core import runtime
+from elbot.core import ops
 
 
 class _DummyError(RuntimeError):
@@ -11,8 +11,8 @@ class _DummyError(RuntimeError):
 
 def test_venv_python_paths(tmp_path: Path) -> None:
     venv_dir = tmp_path / ".venv"
-    assert runtime.venv_python(venv_dir, is_windows=False) == venv_dir / "bin" / "python"
-    assert runtime.venv_python(venv_dir, is_windows=True) == venv_dir / "Scripts" / "python.exe"
+    assert ops.venv_python(venv_dir, is_windows=False) == venv_dir / "bin" / "python"
+    assert ops.venv_python(venv_dir, is_windows=True) == venv_dir / "Scripts" / "python.exe"
 
 
 def test_create_venv_invokes_runner(tmp_path: Path) -> None:
@@ -23,7 +23,7 @@ def test_create_venv_invokes_runner(tmp_path: Path) -> None:
         calls.append(args)
         (venv_dir / "bin").mkdir(parents=True, exist_ok=True)
 
-    runtime.create_venv(venv_dir, run=fake_run, echo=None, python_executable="python")
+    ops.create_venv(venv_dir, run=fake_run, echo=None, python_executable="python")
 
     assert calls == [["python", "-m", "venv", str(venv_dir)]]
     assert venv_dir.exists()
@@ -41,7 +41,7 @@ def test_create_venv_force_removes_existing(tmp_path: Path) -> None:
         calls.append(args)
         (venv_dir / "bin").mkdir(parents=True, exist_ok=True)
 
-    runtime.create_venv(venv_dir, force=True, run=fake_run, echo=None, python_executable="python")
+    ops.create_venv(venv_dir, force=True, run=fake_run, echo=None, python_executable="python")
 
     assert not placeholder.exists()
     assert venv_dir.exists()
@@ -70,7 +70,7 @@ def test_run_in_venv_executes_command(tmp_path: Path) -> None:
     def fake_run(args: list[str]) -> None:
         calls.append(args)
 
-    runtime.run_in_venv(
+    ops.run_in_venv(
         ["-m", "module"],
         venv_dir=venv_dir,
         is_windows=False,
@@ -85,7 +85,7 @@ def test_run_in_venv_missing_python_raises(tmp_path: Path) -> None:
     venv_dir = tmp_path / ".venv"
 
     with pytest.raises(_DummyError):
-        runtime.run_in_venv(
+        ops.run_in_venv(
             ["-m", "module"],
             venv_dir=venv_dir,
             is_windows=False,
@@ -104,7 +104,7 @@ def test_pip_install_invokes_runner(tmp_path: Path) -> None:
     def fake_run(args: list[str]) -> None:
         calls.append(args)
 
-    runtime.pip_install(
+    ops.pip_install(
         ["install", "pkg"],
         venv_dir=venv_dir,
         is_windows=False,
@@ -119,7 +119,7 @@ def test_pip_install_missing_binary_raises(tmp_path: Path) -> None:
     venv_dir = tmp_path / ".venv"
 
     with pytest.raises(_DummyError):
-        runtime.pip_install(
+        ops.pip_install(
             ["install", "pkg"],
             venv_dir=venv_dir,
             is_windows=False,
