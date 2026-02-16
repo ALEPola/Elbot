@@ -68,6 +68,7 @@ The installer creates a `.env` file with your settings. Key variables:
 | `YT_COOKIES_FILE` | ⭐ | Path to exported YouTube cookies for higher reliability |
 | `AUTO_LAVALINK` | | Auto-start music server (default: `1`) |
 | `AUTO_UPDATE_WEBHOOK` | | Discord webhook notified when scheduled updates fail |
+| `ELBOT_PORTAL_SECRET` | | Flask session secret for the web portal (set this in production) |
 | `ICS_URL` | | F1 calendar feed URL |
 | `LOCAL_TIMEZONE` | | IANA timezone for F1 reminders (falls back to UTC) |
 | `GUILD_ID` | | Restrict slash command registration to a test guild |

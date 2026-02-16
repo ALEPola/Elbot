@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 import subprocess
 import sys
 import threading
@@ -54,10 +55,22 @@ SENSITIVE_KEYS = {
     "AUTO_UPDATE_WEBHOOK",
 }
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
-app.secret_key = os.environ.get("ELBOT_PORTAL_SECRET", "change-me")
-
 logger = logging.getLogger("elbot.portal")
+
+def _portal_secret_key() -> str:
+    configured = os.environ.get("ELBOT_PORTAL_SECRET", "").strip()
+    if configured:
+        return configured
+    generated = secrets.token_urlsafe(32)
+    logger.warning(
+        "ELBOT_PORTAL_SECRET is not set; using an ephemeral session secret. "
+        "Set ELBOT_PORTAL_SECRET in the environment for persistent sessions."
+    )
+    return generated
+
+
+app = Flask(__name__, template_folder="templates", static_folder="static")
+app.secret_key = _portal_secret_key()
 
 _DIAGNOSTICS_COOKIES = CookieManager()
 _DIAGNOSTICS_METRICS = PlaybackMetrics()
