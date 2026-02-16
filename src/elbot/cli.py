@@ -14,7 +14,7 @@ from typing import Iterable, Optional
 
 from collections.abc import Mapping
 
-from .core import docker_tasks, env_tools, network, prerequisites, runtime, service_manager
+from .core import ops
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 INFRA_DIR = PROJECT_ROOT / "infra"
@@ -78,7 +78,7 @@ def _build_port_conflict_state(env_pairs: Mapping[str, str]) -> tuple[dict[int, 
 
 
 def _current_port_conflict_state() -> tuple[dict[int, tuple[str, ...]], tuple[int, ...]]:
-    hints, ports = _build_port_conflict_state(env_tools.read_env(ENV_FILE))
+    hints, ports = _build_port_conflict_state(ops.read_env(ENV_FILE))
     global PORT_CONFLICT_HINTS, PORT_CONFLICT_PORTS
     PORT_CONFLICT_HINTS = hints
     PORT_CONFLICT_PORTS = ports
@@ -87,7 +87,7 @@ def _current_port_conflict_state() -> tuple[dict[int, tuple[str, ...]], tuple[in
 
 PORT_CONFLICT_HINTS: dict[int, tuple[str, ...]]
 PORT_CONFLICT_PORTS: tuple[int, ...]
-PORT_CONFLICT_HINTS, PORT_CONFLICT_PORTS = _build_port_conflict_state(env_tools.read_env(ENV_FILE))
+PORT_CONFLICT_HINTS, PORT_CONFLICT_PORTS = _build_port_conflict_state(ops.read_env(ENV_FILE))
 
 
 class CommandError(RuntimeError):
@@ -110,7 +110,7 @@ def _ensure_command(name: str) -> bool:
 
 def _warn_port_conflicts() -> None:
     hints, ports = _current_port_conflict_state()
-    conflicts = network.detect_port_conflicts(ports)
+    conflicts = ops.detect_port_conflicts(ports)
     if not conflicts:
         return
 
@@ -143,7 +143,7 @@ def _warn_port_conflicts() -> None:
 
 
 def _run_in_venv(args: Iterable[str]) -> subprocess.CompletedProcess:
-    return runtime.run_in_venv(
+    return ops.run_in_venv(
         args,
         venv_dir=VENV_DIR,
         is_windows=IS_WINDOWS,
@@ -153,7 +153,7 @@ def _run_in_venv(args: Iterable[str]) -> subprocess.CompletedProcess:
 
 
 def _pip_install(args: Iterable[str]) -> None:
-    runtime.pip_install(
+    ops.pip_install(
         args,
         venv_dir=VENV_DIR,
         is_windows=IS_WINDOWS,
@@ -167,7 +167,7 @@ def _pip_install(args: Iterable[str]) -> None:
 def command_install(args: argparse.Namespace) -> None:
     overrides: dict[str, str] = {}
     if args.env_file:
-        overrides.update(env_tools.read_env(args.env_file))
+        overrides.update(ops.read_env(args.env_file))
 
     env_overrides = {
         target: os.environ[source]
@@ -177,7 +177,7 @@ def command_install(args: argparse.Namespace) -> None:
     overrides.update(env_overrides)
 
     _warn_port_conflicts()
-    prerequisites.ensure_prerequisites(
+    ops.ensure_prerequisites(
         install_packages=args.install_system_packages,
         non_interactive=args.non_interactive,
         platform_name=platform.system(),
@@ -186,7 +186,7 @@ def command_install(args: argparse.Namespace) -> None:
         run=_run,
         echo=_echo,
     )
-    runtime.create_venv(
+    ops.create_venv(
         VENV_DIR,
         force=args.recreate,
         run=_run,
@@ -198,7 +198,7 @@ def command_install(args: argparse.Namespace) -> None:
     _pip_install(["install", "-e", str(PROJECT_ROOT)])
     _pip_install(["install", "textblob"])  # ensure corpora command available
     _run_in_venv(["-m", "textblob.download_corpora"])
-    env_tools.prompt_env(
+    ops.prompt_env(
         ENV_FILE,
         ENV_EXAMPLE,
         non_interactive=args.non_interactive,
@@ -210,7 +210,7 @@ def command_install(args: argparse.Namespace) -> None:
 
     if not args.no_service:
         try:
-            service_manager.install_service(
+            ops.install_service(
                 _run_in_venv,
                 require_lavalink=args.require_lavalink,
             )
@@ -225,13 +225,13 @@ def command_install(args: argparse.Namespace) -> None:
 
 
 def command_env_set(args: argparse.Namespace) -> None:
-    env_tools.ensure_env_file(ENV_FILE, ENV_EXAMPLE)
-    env_tools.update_env_var(ENV_FILE, args.key, args.value)
+    ops.ensure_env_file(ENV_FILE, ENV_EXAMPLE)
+    ops.update_env_var(ENV_FILE, args.key, args.value)
     _echo(f"Set {args.key}")
 
 
 def command_env_get(args: argparse.Namespace) -> None:
-    env = env_tools.read_env(ENV_FILE)
+    env = ops.read_env(ENV_FILE)
     if args.key in env:
         _echo(env[args.key])
     else:
@@ -239,24 +239,24 @@ def command_env_get(args: argparse.Namespace) -> None:
 
 
 def command_env_list(_: argparse.Namespace) -> None:
-    env = env_tools.read_env(ENV_FILE)
+    env = ops.read_env(ENV_FILE)
     for key in sorted(env):
         _echo(f"{key}={env[key]}")
 
 
 def command_env_import(args: argparse.Namespace) -> None:
-    values = env_tools.read_env(args.file)
+    values = ops.read_env(args.file)
     if not values:
         raise CommandError("No key=value pairs found in provided file")
-    env_tools.ensure_env_file(ENV_FILE, ENV_EXAMPLE)
+    ops.ensure_env_file(ENV_FILE, ENV_EXAMPLE)
     for key, value in values.items():
-        env_tools.update_env_var(ENV_FILE, key, value)
+        ops.update_env_var(ENV_FILE, key, value)
     _echo(f"Imported {len(values)} values into {ENV_FILE}")
 
 
 
 def command_service_install(args: argparse.Namespace) -> None:
-    service_manager.install_service(
+    ops.install_service(
         _run_in_venv,
         require_lavalink=args.require_lavalink,
         force=args.force,
@@ -264,11 +264,11 @@ def command_service_install(args: argparse.Namespace) -> None:
 
 
 def command_service_remove(_: argparse.Namespace) -> None:
-    service_manager.remove_service(_run_in_venv)
+    ops.remove_service(_run_in_venv)
 
 
 def command_service_start(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    ops.control_service(
         "start",
         is_windows=IS_WINDOWS,
         run=_run,
@@ -278,7 +278,7 @@ def command_service_start(_: argparse.Namespace) -> None:
 
 
 def command_service_stop(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    ops.control_service(
         "stop",
         is_windows=IS_WINDOWS,
         run=_run,
@@ -288,7 +288,7 @@ def command_service_stop(_: argparse.Namespace) -> None:
 
 
 def command_service_restart(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    ops.control_service(
         "restart",
         is_windows=IS_WINDOWS,
         run=_run,
@@ -298,7 +298,7 @@ def command_service_restart(_: argparse.Namespace) -> None:
 
 
 def command_service_status(_: argparse.Namespace) -> None:
-    service_manager.control_service(
+    ops.control_service(
         "status",
         is_windows=IS_WINDOWS,
         run=_run,
@@ -317,7 +317,7 @@ def command_update(args: argparse.Namespace) -> None:
         _pip_install(["install", "-e", str(PROJECT_ROOT)])
     if not args.skip_service:
         try:
-            service_manager.control_service(
+            ops.control_service(
                 "restart",
                 is_windows=IS_WINDOWS,
                 run=_run,
@@ -357,7 +357,7 @@ def command_doctor(_: argparse.Namespace) -> None:
     _echo("=== Elbot Health Check ===")
     _echo("")
     _echo("Checking env...")
-    env_data = env_tools.read_env(ENV_FILE)
+    env_data = ops.read_env(ENV_FILE)
     if env_data.get("DISCORD_TOKEN"):
         _echo("✅ Discord token detected")
     else:
@@ -393,7 +393,7 @@ def command_logs(args: argparse.Namespace) -> None:
 
 
 def command_docker(args: argparse.Namespace) -> None:
-    docker_tasks.run_compose_action(
+    ops.run_compose_action(
         args.action,
         docker_dir=DOCKER_DIR,
         run=_run,
