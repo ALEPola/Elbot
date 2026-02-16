@@ -225,6 +225,8 @@ GitHub Actions automates testing and deployment:
 
 2. Push to `main` branch to trigger deployment
 
+CI also runs `./scripts/check_no_private_data.sh` to catch accidentally committed private keys/tokens.
+
 ## 🎵 Music Playback Details
 
 Elbot uses a resilient dual-mode system:
