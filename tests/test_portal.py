@@ -194,3 +194,48 @@ def test_auto_update_enable_cron(monkeypatch):
     resp = client.post('/auto-update', data={'action': 'enable'})
     assert resp.status_code == 302
     assert 'enable' in called
+
+
+def test_setup_hides_sensitive_values(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "DISCORD_TOKEN=secret\nOPENAI_API_KEY=sk-test\nLAVALINK_PASSWORD=pw\n",
+        encoding="utf-8",
+    )
+    client = make_client(monkeypatch, root_dir=tmp_path, env_file=env_path)
+
+    resp = client.get("/setup")
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8")
+    assert 'type="password" name="discord_token"' in body
+    assert "secret" not in body
+    assert "sk-test" not in body
+    assert "pw" not in body
+
+
+def test_settings_preserves_secrets_when_blank(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "DISCORD_TOKEN=secret\nOPENAI_API_KEY=sk-test\nLAVALINK_PASSWORD=pw\n",
+        encoding="utf-8",
+    )
+    client = make_client(monkeypatch, root_dir=tmp_path, env_file=env_path)
+
+    resp = client.post(
+        "/settings",
+        data={
+            "DISCORD_TOKEN": "",
+            "OPENAI_API_KEY": "",
+            "AUTO_UPDATE_WEBHOOK": "",
+            "AUTO_LAVALINK": "1",
+            "LAVALINK_HOST": "localhost",
+            "LAVALINK_PORT": "2333",
+            "LAVALINK_PASSWORD": "",
+        },
+    )
+    assert resp.status_code == 302
+
+    updated = env_path.read_text(encoding="utf-8")
+    assert "DISCORD_TOKEN=secret" in updated
+    assert "OPENAI_API_KEY=sk-test" in updated
+    assert "LAVALINK_PASSWORD=pw" in updated

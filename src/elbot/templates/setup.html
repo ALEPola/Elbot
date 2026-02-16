@@ -13,13 +13,13 @@
 {% endwith %}
 <form method="post" class="card">
   <label>Discord Bot Token
-    <input type="text" name="discord_token" value="{{ values.get('DISCORD_TOKEN', '') }}" required>
+    <input type="password" name="discord_token" value="{{ values.get('DISCORD_TOKEN', '') }}" autocomplete="new-password" required>
   </label>
   <label>OpenAI API Key (optional)
-    <input type="text" name="openai_api_key" value="{{ values.get('OPENAI_API_KEY', '') }}">
+    <input type="password" name="openai_api_key" value="{{ values.get('OPENAI_API_KEY', '') }}" autocomplete="new-password">
   </label>
   <label>Auto-update failure webhook (optional)
-    <input type="text" name="auto_update_webhook" value="{{ values.get('AUTO_UPDATE_WEBHOOK', '') }}">
+    <input type="password" name="auto_update_webhook" value="{{ values.get('AUTO_UPDATE_WEBHOOK', '') }}" autocomplete="new-password">
   </label>
   <label class="checkbox">
     <input type="checkbox" name="auto_lavalink" {% if values.get('AUTO_LAVALINK', '1') != '0' %}checked{% endif %}>
@@ -33,7 +33,7 @@
       <input type="text" name="lavalink_port" value="{{ values.get('LAVALINK_PORT', '0') }}">
     </label>
     <label>Lavalink Password
-      <input type="text" name="lavalink_password" value="{{ values.get('LAVALINK_PASSWORD', 'youshallnotpass') }}">
+      <input type="password" name="lavalink_password" value="{{ values.get('LAVALINK_PASSWORD', '') }}" placeholder="youshallnotpass" autocomplete="new-password">
     </label>
   </div>
   <button type="submit">Save & Install</button>

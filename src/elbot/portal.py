@@ -47,6 +47,12 @@ OPTIONAL_KEYS = [
     "AUTO_LAVALINK",
     "AUTO_UPDATE_WEBHOOK",
 ]
+SENSITIVE_KEYS = {
+    "DISCORD_TOKEN",
+    "OPENAI_API_KEY",
+    "LAVALINK_PASSWORD",
+    "AUTO_UPDATE_WEBHOOK",
+}
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = os.environ.get("ELBOT_PORTAL_SECRET", "change-me")
@@ -78,6 +84,14 @@ def _write_env(path: Path, values: Dict[str, str]) -> None:
 
 def _env_values() -> Dict[str, str]:
     return _read_env(ENV_FILE)
+
+
+def _public_env_values(values: Dict[str, str] | None = None) -> Dict[str, str]:
+    source = dict(values if values is not None else _env_values())
+    for key in SENSITIVE_KEYS:
+        if key in source:
+            source[key] = ""
+    return source
 
 
 def _env_snapshot() -> Dict[str, str]:
@@ -208,7 +222,7 @@ def index():
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
-    values = _env_values()
+    values = _public_env_values()
     if request.method == "POST":
         discord_token = request.form.get("discord_token", "").strip()
         openai_key = request.form.get("openai_api_key", "").strip()
@@ -245,18 +259,22 @@ def setup():
                 return redirect(url_for("index"))
             else:
                 flash(getattr(result, "stdout", "") or "Installation failed.", "error")
-        values = _env_values()
+        values = _public_env_values(_env_values())
     return render_template("setup.html", values=values)
 
 
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
-    values = _env_values()
+    values = _public_env_values()
     if request.method == "POST":
+        current_values = _env_values()
         updates = {}
         for key in REQUIRED_KEYS + OPTIONAL_KEYS:
             if key in request.form:
-                updates[key] = request.form.get(key, "").strip()
+                value = request.form.get(key, "").strip()
+                if key in SENSITIVE_KEYS and not value:
+                    value = current_values.get(key, "")
+                updates[key] = value
         _write_env(ENV_FILE, updates)
         flash("Settings updated.", "success")
         return redirect(url_for("settings"))
