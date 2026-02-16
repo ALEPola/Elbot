@@ -42,6 +42,22 @@ def make_client(monkeypatch, *, check_output=None, run=None, root_dir=None, env_
     return portal.app.test_client()
 
 
+def test_portal_secret_uses_env(monkeypatch):
+    monkeypatch.setenv("ELBOT_PORTAL_SECRET", "configured-secret")
+    importlib.reload(portal)
+    assert portal.app.secret_key == "configured-secret"
+
+
+def test_portal_secret_fallback_is_not_static(monkeypatch):
+    monkeypatch.delenv("ELBOT_PORTAL_SECRET", raising=False)
+    importlib.reload(portal)
+    key = portal.app.secret_key
+    assert isinstance(key, str)
+    assert key
+    assert key != "change-me"
+
+
+
 def test_is_configured_uses_project_root(monkeypatch, tmp_path):
     monkeypatch.setattr(elbot_config.Config, "BASE_DIR", tmp_path)
     importlib.reload(portal)
