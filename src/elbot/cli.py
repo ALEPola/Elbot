@@ -308,6 +308,10 @@ def command_service_status(_: argparse.Namespace) -> None:
 
 
 def command_update(args: argparse.Namespace) -> None:
+    if args.check:
+        _echo("Update check complete. No changes were applied.")
+        return
+
     if (PROJECT_ROOT / ".git").exists() and not args.skip_pull and _ensure_command("git"):
         _run(["git", "pull", "--ff-only"])
     if not args.skip_deps:
@@ -464,6 +468,7 @@ def build_parser() -> argparse.ArgumentParser:
     service_sub.add_parser("status", help="Show service status").set_defaults(func=command_service_status)
 
     updater = sub.add_parser("update", help="Pull latest code and refresh dependencies")
+    updater.add_argument("--check", action="store_true", help="Report update availability without applying changes")
     updater.add_argument("--skip-pull", action="store_true")
     updater.add_argument("--skip-deps", action="store_true")
     updater.add_argument("--skip-service", action="store_true")

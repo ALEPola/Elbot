@@ -62,3 +62,16 @@ def test_warn_port_conflicts_uses_env_file(monkeypatch: pytest.MonkeyPatch, tmp_
     output = capsys.readouterr().out
     assert "4545" in output
     assert "LAVALINK_PORT" in output
+
+
+def test_command_update_check_skips_side_effects(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    called: list[str] = []
+    monkeypatch.setattr(cli, "_run", lambda *_, **__: called.append("run"))
+    monkeypatch.setattr(cli, "_pip_install", lambda *_, **__: called.append("pip"))
+    monkeypatch.setattr(cli.ops, "control_service", lambda *_, **__: called.append("service"))
+
+    args = argparse.Namespace(check=True, skip_pull=False, skip_deps=False, skip_service=False)
+    cli.command_update(args)
+
+    assert called == []
+    assert "Update check complete" in capsys.readouterr().out
