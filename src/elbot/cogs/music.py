@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from dataclasses import dataclass, field
 from typing import Dict, Optional, TYPE_CHECKING
@@ -149,6 +150,18 @@ class Music(commands.Cog):
             self._states[guild_id] = GuildState()
         return self._states[guild_id]
 
+    def _resolve_mafic(self):
+        global mafic
+        if mafic is None:
+            os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
+            os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
+            try:
+                import mafic as _mafic
+            except Exception as exc:
+                raise RuntimeError("mafic library is required for music playback") from exc
+            mafic = _mafic
+        return mafic
+
     async def _disconnect(self, guild_id: int, state: GuildState) -> None:
         if state.player:
             try:
@@ -171,9 +184,11 @@ class Music(commands.Cog):
         if not await self.backend.wait_ready():
             return None, "Lavalink node is not ready."
 
+        mafic_lib = self._resolve_mafic()
+
         state = self._get_state(guild.id)
         voice = guild.voice_client
-        if voice and not isinstance(voice, mafic.Player):
+        if voice and not isinstance(voice, mafic_lib.Player):
             try:
                 await voice.disconnect(force=True)
             except Exception:
@@ -192,7 +207,7 @@ class Music(commands.Cog):
 
         if voice is None:
             try:
-                voice = await target_channel.connect(cls=mafic.Player)
+                voice = await target_channel.connect(cls=mafic_lib.Player)
             except Exception as exc:
                 self.logger.error("Voice connection failed", exc_info=exc)
                 return None, "Could not join your voice channel."
