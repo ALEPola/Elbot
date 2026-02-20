@@ -24,9 +24,6 @@ from flask import (
     url_for,
 )
 
-from openai import OpenAI
-
-
 from .core import auto_update
 from .config import Config
 from .music import CookieManager, DiagnosticsReport, DiagnosticsService, PlaybackMetrics
@@ -326,6 +323,8 @@ def api_ytcheck():
 
 def _summarize_logs_with_ai(log_text: str, *, api_key: str) -> str:
     """Summarize log text using the configured OpenAI model."""
+
+    from openai import OpenAI
 
     trimmed = log_text[-8000:]
     client = OpenAI(api_key=api_key)
