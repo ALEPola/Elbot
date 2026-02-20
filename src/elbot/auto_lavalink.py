@@ -422,6 +422,8 @@ def start() -> tuple[int, str]:
 
     global _proc, _port
     if _proc and _proc.poll() is None:
+        if _port is None:
+            raise RuntimeError("Lavalink process is running but no port was recorded")
         return _port, os.environ["LAVALINK_PASSWORD"]
 
     java_bin = _get_java_bin()
