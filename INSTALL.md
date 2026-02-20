@@ -151,7 +151,7 @@ Whenever you change `.env`, restart the bot.
 
 ## 6. Keep the YouTube stack current
 
-- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin (pinned to `1.16.1` by default). Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release, and keep `lavalink.server.sources.youtube` set to `false` in `application.yml` to avoid loading the deprecated source manager.
+- The bundled Lavalink launcher disables the legacy YouTube source and enables the actively maintained `dev.lavalink.youtube` plugin (pinned to `1.13.5` by default). Override the plugin version with `LAVALINK_YOUTUBE_PLUGIN_VERSION` if you need to pin or test a release, and keep `lavalink.server.sources.youtube` set to `false` in `application.yml` to avoid loading the deprecated source manager.
 - Leave `LAVALINK_PORT` unset or set it to `0` to let auto-lavalink choose the first available local port. Provide a concrete value only if you
   need to expose Lavalink on a fixed port (for remote nodes or firewall rules).
 - `yt-dlp` is used as a fallback resolver. Keep it at `2025.9.4` or newer (`pip install --upgrade yt-dlp`) whenever YouTube changes break playback; the installer enforces this minimum.
@@ -177,4 +177,3 @@ By default the portal listens on http://localhost:8000. Set the `PORT` environme
 - **Frequent YouTube 429 errors on long sessions** – export fresh cookies from a logged-in browser profile and set `YT_COOKIES_FILE` so Lavalink and yt-dlp reuse an authenticated session instead of anonymous scraping.
 
 If you run into platform-specific issues, open an issue with details about your OS, Python version and any error logs.
-
