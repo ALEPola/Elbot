@@ -1,6 +1,8 @@
 import importlib
 import sys
 
+import pytest
+
 
 def _reload_auto_lavalink():
     sys.modules.pop("elbot.auto_lavalink", None)
@@ -78,3 +80,18 @@ def test_port_range_env_overrides(monkeypatch):
     monkeypatch.delenv("AUTO_LAVALINK_PORT_START", raising=False)
     monkeypatch.delenv("AUTO_LAVALINK_PORT_TRIES", raising=False)
     _reload_auto_lavalink()
+
+
+def test_start_raises_if_running_without_recorded_port(monkeypatch):
+    module = _reload_auto_lavalink()
+
+    class DummyProc:
+        def poll(self):
+            return None
+
+    monkeypatch.setenv("LAVALINK_PASSWORD", "secret")
+    monkeypatch.setattr(module, "_proc", DummyProc())
+    monkeypatch.setattr(module, "_port", None)
+
+    with pytest.raises(RuntimeError, match="no port was recorded"):
+        module.start()
