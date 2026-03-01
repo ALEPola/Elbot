@@ -33,7 +33,7 @@ class ElbotService(win32serviceutil.ServiceFramework):  # type: ignore[misc]
         "Elbot runs a Nextcord-based Discord bot with optional Lavalink auto-launch."
     )
 
-    def __init__(self, args):  # pragma: no cover - service entry
+    def __init__(self, args: list[str]) -> None:  # pragma: no cover - service entry
         super().__init__(args)
         self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
         self.proc: subprocess.Popen[str] | None = None
@@ -47,8 +47,8 @@ class ElbotService(win32serviceutil.ServiceFramework):  # type: ignore[misc]
         try:
             if self.workdir:
                 os.chdir(self.workdir)
-        except Exception:
-            pass
+        except Exception as exc:
+            servicemanager.LogWarningMsg(f"Elbot: failed to chdir to {self.workdir!r}: {exc}")
 
         py = sys.executable
         cmd = [py, "-m", "elbot.main"]
