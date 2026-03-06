@@ -314,8 +314,6 @@ def _ensure_jar() -> None:
 
 
 def _write_conf(port: int, password: str) -> None:
-
-
     CONF.write_text(
         f"""
 lavalink:
@@ -427,7 +425,7 @@ def start() -> tuple[int, str]:
     if _proc and _proc.poll() is None:
         if _port is None:
             raise RuntimeError("Lavalink process is running but no port was recorded")
-        return _port, os.environ["LAVALINK_PASSWORD"]
+        return _port, os.environ.get("LAVALINK_PASSWORD", DEFAULT_PW)
 
     java_bin = _get_java_bin()
     _ensure_jar()

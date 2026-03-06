@@ -28,7 +28,7 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Run unit tests
-        run: pytest tests/test_music_queue_utils.py tests/test_music_fallback.py tests/test_music_cookies.py
+        run: pytest tests/test_music_queue_utils.py tests/test_music_fallback.py tests/test_music_cookies.py tests/test_auto_lavalink.py
       - name: Launch Lavalink
         run: docker compose -f infra/docker/docker-compose.yml up -d lavalink
         env:
