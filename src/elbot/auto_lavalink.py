@@ -249,8 +249,11 @@ def _check_java_version(java_bin: str) -> bool:
         if match:
             major = int(match.group(1))
             return major >= 17
-    except Exception:
-        pass
+    except Exception as exc:
+        print(
+            f"[auto-lavalink] WARNING: Failed to check Java version for {java_bin!r}: {exc}",
+            file=sys.stderr,
+        )
     return False
 
 
@@ -300,19 +303,17 @@ def _ensure_jar() -> None:
         if JAR.exists():
             try:
                 JAR.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                print(f"[auto-lavalink] WARNING: Failed to remove stale Lavalink.jar: {exc}", file=sys.stderr)
         print("[auto-lavalink] Downloading Lavalink.jar ...")
         urllib.request.urlretrieve(LAVALINK_URL, JAR)
         try:
             LAVALINK_URL_FILE.write_text(LAVALINK_URL, encoding="utf-8")
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"[auto-lavalink] WARNING: Failed to write Lavalink URL cache: {exc}", file=sys.stderr)
 
 
 def _write_conf(port: int, password: str) -> None:
-
-
     CONF.write_text(
         f"""
 lavalink:
@@ -424,7 +425,7 @@ def start() -> tuple[int, str]:
     if _proc and _proc.poll() is None:
         if _port is None:
             raise RuntimeError("Lavalink process is running but no port was recorded")
-        return _port, os.environ["LAVALINK_PASSWORD"]
+        return _port, os.environ.get("LAVALINK_PASSWORD", DEFAULT_PW)
 
     java_bin = _get_java_bin()
     _ensure_jar()

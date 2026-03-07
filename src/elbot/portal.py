@@ -517,7 +517,9 @@ def validate_lavalink():
 def branch():
     if request.method == "POST":
         branch_name = request.form.get("branch")
-        if branch_name:
+        known = _run("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads"])
+        known_branches = known.splitlines() if known else []
+        if branch_name and branch_name in known_branches:
             subprocess.run(["git", "checkout", branch_name], cwd=ROOT_DIR, check=False)
         return redirect(url_for("branch"))
 
