@@ -4,12 +4,13 @@ Nextcord assumes websocket objects expose poll_event, which was removed in webso
 This guard mirrors discord.py's fix for similar issues (see nextcord/nextcord#1262
 and Rapptz/discord.py#10207).
 """
+
 import asyncio
 
 from nextcord.voice_client import (
-    VoiceClient,
-    ExponentialBackoff,
     ConnectionClosed,
+    ExponentialBackoff,
+    VoiceClient,
     _log,
 )
 
@@ -17,10 +18,22 @@ from nextcord.voice_client import (
 def apply_patch() -> None:
     async def patched_poll_voice_ws(self: VoiceClient, reconnect: bool) -> None:
         backoff = ExponentialBackoff()
+        missing_poll_event_logged = False
         while True:
             try:
                 if self.ws and hasattr(self.ws, "poll_event"):
                     await self.ws.poll_event()
+                    missing_poll_event_logged = False
+                else:
+                    # Prevent a tight no-await loop if the websocket implementation
+                    # lacks poll_event (seen with newer websocket stacks).
+                    if self.ws and not missing_poll_event_logged:
+                        _log.warning(
+                            "Voice websocket has no poll_event; waiting for reconnect path."
+                        )
+                        missing_poll_event_logged = True
+                    await asyncio.sleep(0.1)
+                    continue
             except (ConnectionClosed, asyncio.TimeoutError) as exc:
                 if isinstance(exc, ConnectionClosed):
                     # The following close codes are undocumented so I will document them here.

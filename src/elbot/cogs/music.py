@@ -270,6 +270,111 @@ class Music(commands.Cog):
 
         return context
 
+    @staticmethod
+    def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        return max(minimum, value)
+
+    @staticmethod
+    def _env_float(name: str, default: float, *, minimum: float = 0.0) -> float:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return default
+        try:
+            value = float(raw)
+        except ValueError:
+            return default
+        return max(minimum, value)
+
+    def _player_is_connected(self, player: object) -> bool:
+        for attr_name in ("is_connected", "connected"):
+            value = getattr(player, attr_name, None)
+            if callable(value):
+                try:
+                    value = value()
+                except Exception:
+                    value = None
+            if isinstance(value, bool):
+                if value:
+                    return True
+            elif hasattr(value, "is_set"):
+                try:
+                    if value.is_set():
+                        return True
+                except Exception:
+                    pass
+        return False
+
+    def _player_connection_context(self, player: object) -> dict[str, object]:
+        channel = getattr(player, "channel", None)
+        guild = getattr(player, "guild", None)
+        return {
+            "player_type": type(player).__name__,
+            "player_connected": self._player_is_connected(player),
+            "voice_channel_id": getattr(channel, "id", None),
+            "guild_id": getattr(guild, "id", None),
+        }
+
+    async def _wait_for_player_connection(self, player: object, timeout_s: float) -> bool:
+        timeout_s = max(0.0, timeout_s)
+        if self._player_is_connected(player):
+            return True
+        if timeout_s == 0:
+            return False
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        while loop.time() < deadline:
+            if self._player_is_connected(player):
+                return True
+            await asyncio.sleep(0.1)
+        return self._player_is_connected(player)
+
+    async def _reconnect_player(
+        self,
+        guild_id: int,
+        state: GuildState,
+        player: object,
+        mafic_lib,
+    ) -> Optional[object]:
+        channel = getattr(player, "channel", None)
+        if channel is None:
+            self.logger.warning(
+                "Reconnect skipped: player has no bound channel",
+                extra={"guild_id": guild_id},
+            )
+            return None
+        try:
+            await player.disconnect(force=True)
+        except Exception:
+            pass
+        try:
+            new_player = await channel.connect(cls=mafic_lib.Player)
+        except Exception as exc:
+            self.logger.warning(
+                "Voice reconnect attempt failed",
+                extra={
+                    "guild_id": guild_id,
+                    "voice_channel_id": getattr(channel, "id", None),
+                },
+                exc_info=exc,
+            )
+            return None
+        state.player = new_player
+        self.logger.info(
+            "Reconnected player to voice channel",
+            extra={
+                "guild_id": guild_id,
+                "voice_channel_id": getattr(channel, "id", None),
+            },
+        )
+        return new_player
+
     async def _begin_playback(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         player = state.player
@@ -282,7 +387,25 @@ class Music(commands.Cog):
             return
         state.now_playing = next_track
         mafic_lib = self._resolve_mafic()
-        for attempt in range(10):
+        max_attempts = self._env_int("ELBOT_PLAYER_CONNECT_RETRIES", 20, minimum=1)
+        retry_delay = self._env_float(
+            "ELBOT_PLAYER_CONNECT_RETRY_DELAY", 0.75, minimum=0.1
+        )
+        connect_timeout = self._env_float(
+            "ELBOT_PLAYER_CONNECT_TIMEOUT", 8.0, minimum=0.0
+        )
+        reconnect_attempt = min(
+            self._env_int("ELBOT_PLAYER_RECONNECT_ATTEMPT", 6, minimum=1),
+            max_attempts,
+        )
+        if not await self._wait_for_player_connection(player, connect_timeout):
+            context = self._player_connection_context(player)
+            context["timeout_s"] = connect_timeout
+            context["guild_id"] = guild_id
+            self.logger.warning(
+                "Player still not connected after warmup window", extra=context
+            )
+        for attempt in range(max_attempts):
             try:
                 await player.play(next_track.handle.track)
                 context = self._track_log_context(guild_id, next_track)
@@ -296,14 +419,32 @@ class Music(commands.Cog):
                 await self._announce_now_playing(guild_id)
                 return
             except mafic_lib.PlayerNotConnected:
-                if attempt < 9:
-                    self.logger.debug(
-                        "Player not connected (attempt %d/10), retrying in 0.5s", attempt + 1
+                if attempt < max_attempts - 1:
+                    context = self._player_connection_context(player)
+                    context["attempt"] = attempt + 1
+                    context["max_attempts"] = max_attempts
+                    context["guild_id"] = guild_id
+                    self.logger.warning(
+                        "Player not connected, retrying playback", extra=context
                     )
-                    await asyncio.sleep(0.5)
+                    if attempt + 1 == reconnect_attempt:
+                        reconnected = await self._reconnect_player(
+                            guild_id, state, player, mafic_lib
+                        )
+                        if reconnected is not None:
+                            player = reconnected
+                    await asyncio.sleep(retry_delay)
                     continue
                 self.metrics.incr_failed()
-                self.logger.error("Player failed to connect after 10 retries, giving up")
+                context = self._player_connection_context(player)
+                context["max_attempts"] = max_attempts
+                context["guild_id"] = guild_id
+                self.logger.error(
+                    "Player failed to connect after %d retries, giving up",
+                    max_attempts,
+                    extra=context,
+                )
+                state.queue.add_next(next_track)
                 state.now_playing = None
                 return
             except Exception as exc:  # pragma: no cover - network errors
@@ -856,3 +997,4 @@ class Music(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(Music(bot))
+
