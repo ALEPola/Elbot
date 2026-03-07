@@ -208,10 +208,6 @@ class Music(commands.Cog):
         if voice is None:
             try:
                 voice = await target_channel.connect(cls=mafic_lib.Player)
-                for _ in range(20):
-                    if getattr(voice, "connected", True):
-                        break
-                    await asyncio.sleep(0.1)
             except Exception as exc:
                 self.logger.error("Voice connection failed", exc_info=exc)
                 return None, "Could not join your voice channel."
@@ -279,31 +275,43 @@ class Music(commands.Cog):
         player = state.player
         if player is None:
             return
-        if not getattr(player, "connected", True):
-            self.logger.warning("Player not connected to voice channel, skipping playback")
-            return
         if state.now_playing is not None:
             return
         next_track = state.queue.pop_next()
         if not next_track:
             return
         state.now_playing = next_track
-        try:
-            await player.play(next_track.handle.track)
-            context = self._track_log_context(guild_id, next_track)
-            self.logger.info(
-                "Playback started: %s (%s)",
-                next_track.handle.title,
-                next_track.handle.source,
-                extra=context,
-            )
-            self.metrics.incr_started()
-            await self._announce_now_playing(guild_id)
-        except Exception as exc:  # pragma: no cover - network errors
-            self.metrics.incr_failed()
-            self.logger.error("Failed to start playback", exc_info=exc)
-            state.now_playing = None
-            await self._begin_playback(guild_id)
+        mafic_lib = self._resolve_mafic()
+        for attempt in range(10):
+            try:
+                await player.play(next_track.handle.track)
+                context = self._track_log_context(guild_id, next_track)
+                self.logger.info(
+                    "Playback started: %s (%s)",
+                    next_track.handle.title,
+                    next_track.handle.source,
+                    extra=context,
+                )
+                self.metrics.incr_started()
+                await self._announce_now_playing(guild_id)
+                return
+            except mafic_lib.PlayerNotConnected:
+                if attempt < 9:
+                    self.logger.debug(
+                        "Player not connected (attempt %d/10), retrying in 0.5s", attempt + 1
+                    )
+                    await asyncio.sleep(0.5)
+                    continue
+                self.metrics.incr_failed()
+                self.logger.error("Player failed to connect after 10 retries, giving up")
+                state.now_playing = None
+                return
+            except Exception as exc:  # pragma: no cover - network errors
+                self.metrics.incr_failed()
+                self.logger.error("Failed to start playback", exc_info=exc)
+                state.now_playing = None
+                await self._begin_playback(guild_id)
+                return
 
     async def _announce_now_playing(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
