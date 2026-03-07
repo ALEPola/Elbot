@@ -275,6 +275,9 @@ class Music(commands.Cog):
         player = state.player
         if player is None:
             return
+        if not getattr(player, "connected", True):
+            self.logger.warning("Player not connected to voice channel, skipping playback")
+            return
         if state.now_playing is not None:
             return
         next_track = state.queue.pop_next()
