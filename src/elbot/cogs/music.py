@@ -208,6 +208,10 @@ class Music(commands.Cog):
         if voice is None:
             try:
                 voice = await target_channel.connect(cls=mafic_lib.Player)
+                for _ in range(20):
+                    if getattr(voice, "connected", True):
+                        break
+                    await asyncio.sleep(0.1)
             except Exception as exc:
                 self.logger.error("Voice connection failed", exc_info=exc)
                 return None, "Could not join your voice channel."
