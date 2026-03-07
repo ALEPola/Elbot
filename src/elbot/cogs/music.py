@@ -51,6 +51,7 @@ def _lavalink_config() -> tuple[str, int, str, bool]:
 class GuildState:
     queue: MusicQueue = field(default_factory=MusicQueue)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    playback_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     now_playing: Optional[QueuedTrack] = None
     player: Optional[object] = None
     last_channel_id: Optional[int] = None
@@ -341,6 +342,7 @@ class Music(commands.Cog):
         state: GuildState,
         player: object,
         mafic_lib,
+        connect_timeout: float,
     ) -> Optional[object]:
         channel = getattr(player, "channel", None)
         if channel is None:
@@ -354,7 +356,11 @@ class Music(commands.Cog):
         except Exception:
             pass
         try:
-            new_player = await channel.connect(cls=mafic_lib.Player)
+            new_player = await channel.connect(
+                cls=mafic_lib.Player,
+                timeout=connect_timeout,
+                reconnect=True,
+            )
         except Exception as exc:
             self.logger.warning(
                 "Voice reconnect attempt failed",
@@ -398,6 +404,9 @@ class Music(commands.Cog):
             self._env_int("ELBOT_PLAYER_RECONNECT_ATTEMPT", 6, minimum=1),
             max_attempts,
         )
+        reconnect_interval = self._env_int(
+            "ELBOT_PLAYER_RECONNECT_INTERVAL", 4, minimum=1
+        )
         if not await self._wait_for_player_connection(player, connect_timeout):
             context = self._player_connection_context(player)
             context["timeout_s"] = connect_timeout
@@ -406,8 +415,21 @@ class Music(commands.Cog):
                 "Player still not connected after warmup window", extra=context
             )
         for attempt in range(max_attempts):
+            latest_player = state.player
+            if latest_player is None:
+                self.metrics.incr_failed()
+                self.logger.error(
+                    "Playback aborted: no active player in state",
+                    extra={"guild_id": guild_id},
+                )
+                state.queue.add_next(next_track)
+                state.now_playing = None
+                return
+            if latest_player is not player:
+                player = latest_player
             try:
                 await player.play(next_track.handle.track)
+                state.player = player
                 context = self._track_log_context(guild_id, next_track)
                 self.logger.info(
                     "Playback started: %s (%s)",
@@ -427,12 +449,28 @@ class Music(commands.Cog):
                     self.logger.warning(
                         "Player not connected, retrying playback", extra=context
                     )
-                    if attempt + 1 == reconnect_attempt:
+                    should_reconnect = (
+                        attempt + 1 >= reconnect_attempt
+                        and (attempt + 1 - reconnect_attempt) % reconnect_interval == 0
+                    )
+                    if should_reconnect:
                         reconnected = await self._reconnect_player(
-                            guild_id, state, player, mafic_lib
+                            guild_id, state, player, mafic_lib, connect_timeout
                         )
                         if reconnected is not None:
                             player = reconnected
+                            if not await self._wait_for_player_connection(
+                                player, connect_timeout
+                            ):
+                                reconnect_context = self._player_connection_context(
+                                    player
+                                )
+                                reconnect_context["guild_id"] = guild_id
+                                reconnect_context["timeout_s"] = connect_timeout
+                                self.logger.warning(
+                                    "Reconnected player still not connected after warmup window",
+                                    extra=reconnect_context,
+                                )
                     await asyncio.sleep(retry_delay)
                     continue
                 self.metrics.incr_failed()
@@ -444,6 +482,15 @@ class Music(commands.Cog):
                     max_attempts,
                     extra=context,
                 )
+                failed_player = state.player
+                if failed_player is not None and not self._player_is_connected(
+                    failed_player
+                ):
+                    try:
+                        await failed_player.disconnect(force=True)
+                    except Exception:
+                        pass
+                    state.player = None
                 state.queue.add_next(next_track)
                 state.now_playing = None
                 return
@@ -502,9 +549,10 @@ class Music(commands.Cog):
 
     async def _ensure_playing(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
-        if state.now_playing is None:
-            await self._begin_playback(guild_id)
-        await self._cleanup_idle(state)
+        async with state.playback_lock:
+            if state.now_playing is None:
+                await self._begin_playback(guild_id)
+            await self._cleanup_idle(state)
 
     async def _stop(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
@@ -665,9 +713,40 @@ class Music(commands.Cog):
                 ephemeral=True,
             )
             return
-        await state.player.stop()
+        mafic_lib = self._resolve_mafic()
+        skipped_disconnected = False
+        try:
+            await state.player.stop()
+        except mafic_lib.PlayerNotConnected:
+            skipped_disconnected = True
+            self.logger.warning(
+                "Skip requested while player was disconnected",
+                extra={
+                    "guild_id": guild.id,
+                    **self._player_connection_context(state.player),
+                },
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "Skip failed while stopping player",
+                extra={"guild_id": guild.id},
+                exc_info=exc,
+            )
+            await safe_reply(
+                interaction,
+                "Could not skip the current track right now.",
+                ephemeral=True,
+            )
+            return
         state.now_playing = None
-        await safe_reply(interaction, "Skipped the current track.")
+        if skipped_disconnected:
+            await safe_reply(
+                interaction,
+                "Player was disconnected, advancing to the next track.",
+                ephemeral=True,
+            )
+        else:
+            await safe_reply(interaction, "Skipped the current track.")
         await self._ensure_playing(guild.id)
 
     @nextcord.slash_command(
