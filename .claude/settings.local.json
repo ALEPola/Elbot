@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(py -m pytest tests/ -x -q)",
+      "Bash(.venv/Scripts/pytest tests/ -x -q)",
+      "Bash(python3 -m pytest tests/ -x -q --ignore=tests/test_cli_install.py --ignore=tests/test_service_install.py)",
+      "Bash(\"/c/Users/alepo/AppData/Local/Microsoft/WindowsApps/python3.exe\" -c \"import ast; ast.parse\\(open\\(''src/elbot/cogs/music.py''\\).read\\(\\)\\); print\\(''syntax OK''\\)\")"
+    ]
+  }
+}

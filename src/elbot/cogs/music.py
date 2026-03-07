@@ -186,10 +186,29 @@ class Music(commands.Cog):
             return None, "Lavalink node is not ready."
 
         mafic_lib = self._resolve_mafic()
+        connect_timeout = self._env_float(
+            "ELBOT_PLAYER_CONNECT_TIMEOUT", 8.0, minimum=0.0
+        )
+        connect_timeout = max(connect_timeout, 1.0)
 
         state = self._get_state(guild.id)
         voice = guild.voice_client
         if voice and not isinstance(voice, mafic_lib.Player):
+            try:
+                await voice.disconnect(force=True)
+            except Exception:
+                pass
+            voice = None
+            state.player = None
+
+        if voice and not self._player_is_connected(voice):
+            self.logger.warning(
+                "Existing guild voice client is disconnected; forcing reconnect",
+                extra={
+                    "guild_id": guild.id,
+                    **self._player_connect_diagnostics(voice),
+                },
+            )
             try:
                 await voice.disconnect(force=True)
             except Exception:
@@ -208,13 +227,40 @@ class Music(commands.Cog):
 
         if voice is None:
             try:
-                voice = await target_channel.connect(cls=mafic_lib.Player)
+                voice = await target_channel.connect(
+                    cls=mafic_lib.Player,
+                    timeout=connect_timeout,
+                    reconnect=True,
+                )
             except Exception as exc:
-                self.logger.error("Voice connection failed", exc_info=exc)
+                self.logger.error(
+                    "Voice connection failed",
+                    extra={"guild_id": guild.id, "voice_channel_id": target_channel.id},
+                    exc_info=exc,
+                )
                 return None, "Could not join your voice channel."
 
         state.player = voice
         state.last_channel_id = interaction.channel_id
+        if not await self._wait_for_player_connection(voice, connect_timeout):
+            self.logger.warning(
+                "Voice connect returned but player is still not connected",
+                extra={
+                    "guild_id": guild.id,
+                    "voice_channel_id": target_channel.id,
+                    "timeout_s": connect_timeout,
+                    **self._player_connect_diagnostics(voice),
+                },
+            )
+            try:
+                await voice.disconnect(force=True)
+            except Exception:
+                pass
+            state.player = None
+            return (
+                None,
+                "Could not establish voice connection. Please reconnect to voice and try again.",
+            )
         return voice, None
 
     def _calculate_eta_ms(self, guild_id: int) -> int:
@@ -322,6 +368,38 @@ class Music(commands.Cog):
             "guild_id": getattr(guild, "id", None),
         }
 
+    @staticmethod
+    def _event_is_set(value: object) -> Optional[bool]:
+        if value is None:
+            return None
+        checker = getattr(value, "is_set", None)
+        if not callable(checker):
+            return None
+        try:
+            return bool(checker())
+        except Exception:
+            return None
+
+    def _player_connect_diagnostics(self, player: object) -> dict[str, object]:
+        context = self._player_connection_context(player)
+        context.update(
+            {
+                "mafic_session_id": getattr(player, "_session_id", None),
+                "mafic_endpoint": getattr(player, "_endpoint", None)
+                or getattr(player, "endpoint", None),
+                "voice_state_event_set": self._event_is_set(
+                    getattr(player, "_voice_state_update_event", None)
+                ),
+                "voice_server_event_set": self._event_is_set(
+                    getattr(player, "_voice_server_update_event", None)
+                ),
+                "node_player_ready_event_set": self._event_is_set(
+                    getattr(player, "_node_player_ready_event", None)
+                ),
+            }
+        )
+        return context
+
     async def _wait_for_player_connection(self, player: object, timeout_s: float) -> bool:
         timeout_s = max(0.0, timeout_s)
         if self._player_is_connected(player):
@@ -367,6 +445,7 @@ class Music(commands.Cog):
                 extra={
                     "guild_id": guild_id,
                     "voice_channel_id": getattr(channel, "id", None),
+                    **self._player_connect_diagnostics(player),
                 },
                 exc_info=exc,
             )
