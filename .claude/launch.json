@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "elbot",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "elbot.main"],
+      "port": 0
+    },
+    {
+      "name": "elbot-portal",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "elbot.portal"],
+      "port": 8000
+    }
+  ]
+}
