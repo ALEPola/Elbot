@@ -381,6 +381,27 @@ class Music(commands.Cog):
         )
         return new_player
 
+    async def _notify_playback_failure(self, guild_id: int, track: QueuedTrack) -> None:
+        state = self._get_state(guild_id)
+        channel_id = track.channel_id or state.last_channel_id
+        if not channel_id:
+            return
+        channel = self.bot.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)
+            except Exception:
+                return
+        if isinstance(channel, nextcord.abc.Messageable):
+            try:
+                await channel.send(
+                    embed=self.embed_factory.failure(
+                        f"Could not play **{track.handle.title}**: failed to connect to voice channel."
+                    )
+                )
+            except Exception:
+                pass
+
     async def _begin_playback(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         player = state.player
@@ -404,9 +425,6 @@ class Music(commands.Cog):
             self._env_int("ELBOT_PLAYER_RECONNECT_ATTEMPT", 6, minimum=1),
             max_attempts,
         )
-        reconnect_interval = self._env_int(
-            "ELBOT_PLAYER_RECONNECT_INTERVAL", 4, minimum=1
-        )
         if not await self._wait_for_player_connection(player, connect_timeout):
             context = self._player_connection_context(player)
             context["timeout_s"] = connect_timeout
@@ -414,6 +432,7 @@ class Music(commands.Cog):
             self.logger.warning(
                 "Player still not connected after warmup window", extra=context
             )
+        reconnect_done = False
         for attempt in range(max_attempts):
             latest_player = state.player
             if latest_player is None:
@@ -441,65 +460,61 @@ class Music(commands.Cog):
                 await self._announce_now_playing(guild_id)
                 return
             except mafic_lib.PlayerNotConnected:
-                if attempt < max_attempts - 1:
-                    context = self._player_connection_context(player)
-                    context["attempt"] = attempt + 1
-                    context["max_attempts"] = max_attempts
-                    context["guild_id"] = guild_id
-                    self.logger.warning(
-                        "Player not connected, retrying playback", extra=context
-                    )
-                    should_reconnect = (
-                        attempt + 1 >= reconnect_attempt
-                        and (attempt + 1 - reconnect_attempt) % reconnect_interval == 0
-                    )
-                    if should_reconnect:
-                        reconnected = await self._reconnect_player(
-                            guild_id, state, player, mafic_lib, connect_timeout
-                        )
-                        if reconnected is not None:
-                            player = reconnected
-                            if not await self._wait_for_player_connection(
-                                player, connect_timeout
-                            ):
-                                reconnect_context = self._player_connection_context(
-                                    player
-                                )
-                                reconnect_context["guild_id"] = guild_id
-                                reconnect_context["timeout_s"] = connect_timeout
-                                self.logger.warning(
-                                    "Reconnected player still not connected after warmup window",
-                                    extra=reconnect_context,
-                                )
-                    await asyncio.sleep(retry_delay)
-                    continue
-                self.metrics.incr_failed()
+                if attempt >= max_attempts - 1:
+                    break
                 context = self._player_connection_context(player)
+                context["attempt"] = attempt + 1
                 context["max_attempts"] = max_attempts
                 context["guild_id"] = guild_id
-                self.logger.error(
-                    "Player failed to connect after %d retries, giving up",
-                    max_attempts,
-                    extra=context,
+                self.logger.warning(
+                    "Player not connected, retrying playback", extra=context
                 )
-                failed_player = state.player
-                if failed_player is not None and not self._player_is_connected(
-                    failed_player
-                ):
-                    try:
-                        await failed_player.disconnect(force=True)
-                    except Exception:
-                        pass
-                    state.player = None
-                state.queue.add_next(next_track)
-                state.now_playing = None
-                return
+                if not reconnect_done and attempt + 1 >= reconnect_attempt:
+                    reconnect_done = True
+                    reconnected = await self._reconnect_player(
+                        guild_id, state, player, mafic_lib, connect_timeout
+                    )
+                    if reconnected is None:
+                        break
+                    player = reconnected
+                    if not await self._wait_for_player_connection(
+                        player, connect_timeout
+                    ):
+                        reconnect_context = self._player_connection_context(player)
+                        reconnect_context["guild_id"] = guild_id
+                        reconnect_context["timeout_s"] = connect_timeout
+                        self.logger.warning(
+                            "Reconnected player still not connected after warmup window",
+                            extra=reconnect_context,
+                        )
+                        break
+                await asyncio.sleep(retry_delay)
             except Exception as exc:  # pragma: no cover - network errors
                 self.metrics.incr_failed()
                 self.logger.error("Failed to start playback", exc_info=exc)
                 state.now_playing = None
                 await self._begin_playback(guild_id)
                 return
+        # All retry attempts exhausted or early abort due to reconnect failure
+        self.metrics.incr_failed()
+        context = self._player_connection_context(player)
+        context["max_attempts"] = max_attempts
+        context["guild_id"] = guild_id
+        self.logger.error(
+            "Player failed to connect after %d retries, giving up",
+            max_attempts,
+            extra=context,
+        )
+        failed_player = state.player
+        if failed_player is not None and not self._player_is_connected(failed_player):
+            try:
+                await failed_player.disconnect(force=True)
+            except Exception:
+                pass
+            state.player = None
+        state.queue.add_next(next_track)
+        state.now_playing = None
+        await self._notify_playback_failure(guild_id, next_track)
 
     async def _announce_now_playing(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
