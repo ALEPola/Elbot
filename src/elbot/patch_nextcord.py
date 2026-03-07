@@ -1,11 +1,12 @@
 """
-Patch nextcord to avoid AttributeError in VoiceClient.poll_voice_ws.
-Nextcord assumes websocket objects expose poll_event, which was removed in websockets>=12.
-This guard mirrors discord.py's fix for similar issues (see nextcord/nextcord#1262
-and Rapptz/discord.py#10207).
+Patch nextcord voice client compatibility issues.
+
+- Guard poll loop when websocket implementations do not expose poll_event.
+- Preserve Discord voice endpoint ports (e.g. :8443) during server update handling.
 """
 
 import asyncio
+import socket
 
 from nextcord.voice_client import (
     ConnectionClosed,
@@ -13,9 +14,39 @@ from nextcord.voice_client import (
     VoiceClient,
     _log,
 )
+from nextcord.utils import MISSING
 
 
 def apply_patch() -> None:
+    async def patched_on_voice_server_update(self: VoiceClient, data) -> None:
+        # Mirrors upstream fix: keep endpoint port instead of stripping with
+        # rpartition(":"), which breaks modern Discord voice endpoints.
+        if self._voice_server_complete.is_set():
+            _log.info(msg="Ignoring extraneous voice server update.")
+            return
+
+        self.token = data.get("token")
+        self.server_id = int(data["guild_id"])
+        endpoint = data.get("endpoint")
+
+        if endpoint is None or self.token is None or self.token is MISSING:
+            _log.warning(
+                "Awaiting endpoint... This requires waiting. "
+                "If timeout occurred considering raising the timeout and reconnecting."
+            )
+            return
+
+        self.endpoint = endpoint.removeprefix("wss://")
+        self.endpoint_ip = MISSING
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.setblocking(False)
+
+        if not self._handshaking:
+            await self.ws.close(4000)
+            return
+
+        self._voice_server_complete.set()
+
     async def patched_poll_voice_ws(self: VoiceClient, reconnect: bool) -> None:
         backoff = ExponentialBackoff()
         missing_poll_event_logged = False
@@ -78,4 +109,5 @@ def apply_patch() -> None:
                     _log.warning("Could not connect to voice... Retrying...")
                     continue
 
+    VoiceClient.on_voice_server_update = patched_on_voice_server_update
     VoiceClient.poll_voice_ws = patched_poll_voice_ws
