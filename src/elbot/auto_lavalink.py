@@ -29,9 +29,9 @@ LOG = BASE / "lavalink.log"
 LAVALINK_URL_FILE = BASE / "lavalink.url"
 BASE.mkdir(parents=True, exist_ok=True)
 
-# Lavalink 4.2.2 with mafic 2.10.1.  The youtube-source plugin now requires
-# TVHTML5_SIMPLY instead of the removed TVHTML5EMBEDDED client.
-DEFAULT_LAVALINK_VERSION = "4.2.2"
+# Lavalink 4.0.8 is the latest 4.0.x release compatible with mafic 2.10.1.
+# 4.2.x requires channelId in the voice state payload which mafic doesn't send.
+DEFAULT_LAVALINK_VERSION = "4.0.8"
 DEFAULT_LAVALINK_URL = (
     "https://github.com/lavalink-devs/Lavalink/releases/download/"
     f"{DEFAULT_LAVALINK_VERSION}/Lavalink.jar"
@@ -341,9 +341,14 @@ plugins:
       - TVHTML5_SIMPLY
       - WEB
 
+server:
+  address: "0.0.0.0"
 logging:
   file:
     path: "{LOG.as_posix()}"
+  level:
+    moe.kyokobot.koe.internal.gateway: TRACE
+    moe.kyokobot.koe.internal.dave: TRACE
 """
     )
 
@@ -472,6 +477,7 @@ def start() -> tuple[int, str]:
             java_bin,
             "-Xms128m",
             "-Xmx512m",
+            "-Djava.net.preferIPv4Stack=true",
             f"-Dspring.config.location={spring_loc}",
             f"-Dserver.port={port}",
             "-Dspring.cloud.config.enabled=false",
@@ -534,3 +540,5 @@ def stop() -> None:
         except subprocess.TimeoutExpired:
             _proc.kill()
     _proc = None
+
+

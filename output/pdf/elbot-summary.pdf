@@ -1,0 +1,70 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 2903 >>
+stream
+BT /F2 16 Tf 1 0 0 1 54 738 Tm (Elbot App Summary) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 716 Tm (What It Is) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 700 Tm (A modular, self-hosted Discord bot with music playback, AI chat/image tools,) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 688 Tm (F1 utilities, and a web management portal.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 670 Tm (Who It's For) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 654 Tm (Discord server owners/admins who run a self-hosted bot with music, AI,) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 642 Tm (and F1 features plus a local management portal.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 624 Tm (What It Does) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 608 Tm (- Plays music in voice channels with queues, skipping, moving, shuffling,) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 596 Tm (  and replay.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 584 Tm (- Uses Lavalink for streaming with a yt-dlp fallback when needed.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 572 Tm (- Offers /ai chat, chat summaries, and DALL-E 3 image generation) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 560 Tm (  via the OpenAI API.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 548 Tm (- Provides F1 schedule, countdowns, results, and reminder DMs) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 536 Tm (  from an ICS feed.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 524 Tm (- Runs a Flask management portal for setup, settings, logs, and updates.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 512 Tm (- Includes CLI helpers for install, service control, updates,) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 500 Tm (  and Docker workflows.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 482 Tm (How It Works) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 466 Tm (- Nextcord bot \\(elbot.main\\) loads cogs from src/elbot/cogs) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 454 Tm (  for music, AI, F1, and admin commands.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 442 Tm (- Config reads .env via dotenv; logs to logs/elbot.log; state in) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 430 Tm (  chat_history/ and subscribers.json.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 418 Tm (- Music uses mafic -> Lavalink nodes with yt-dlp extraction fallback;) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 406 Tm (  optional cookies improve YouTube reliability.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 394 Tm (- Flask portal \\(elbot.portal\\) edits .env, calls elbotctl, and shows) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 382 Tm (  logs, updates, and Lavalink diagnostics.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 364 Tm (How To Run) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 348 Tm (- Clone repo, then run ./infra/scripts/install.sh \\(Linux/macOS\\) or) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 336 Tm (  .\\\\\\\\infra\\\\\\\\scripts\\\\\\\\install.ps1 \\(Windows\\).) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 324 Tm (- Set DISCORD_TOKEN \\(and optional OpenAI/Lavalink values\\) in .env) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 312 Tm (  when prompted.) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 72 300 Tm (- Start the bot: elbotctl run \\(portal: elbot-portal on) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 90 288 Tm (  http://localhost:8000\\).) Tj ET
+
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3351
+%%EOF
