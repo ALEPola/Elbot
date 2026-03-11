@@ -8,12 +8,18 @@ lavalink:
       youtube: false
       http: true
     playerUpdateInterval: 5
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
+      repository: "https://maven.lavalink.dev/releases"
 plugins:
-  - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.5" # youtube-source plugin pinned for Lavalink v4
-    repository: "https://maven.lavalink.dev/releases"
-    config:
-      providers:
-        - youtube
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - TVHTML5_SIMPLY
+      - WEB
 spring:
   main:
     banner-mode: off

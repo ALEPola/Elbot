@@ -29,10 +29,9 @@ LOG = BASE / "lavalink.log"
 LAVALINK_URL_FILE = BASE / "lavalink.url"
 BASE.mkdir(parents=True, exist_ok=True)
 
-# Lavalink 4.0.6 is the latest build that Mafic 2.x has been exercised with.
-# We pin to that version by default and allow overrides via environment vars so
-# operators can explicitly opt into newer releases once Mafic adds support.
-DEFAULT_LAVALINK_VERSION = "4.0.6"
+# Lavalink 4.2.2 with mafic 2.10.1.  The youtube-source plugin now requires
+# TVHTML5_SIMPLY instead of the removed TVHTML5EMBEDDED client.
+DEFAULT_LAVALINK_VERSION = "4.2.2"
 DEFAULT_LAVALINK_URL = (
     "https://github.com/lavalink-devs/Lavalink/releases/download/"
     f"{DEFAULT_LAVALINK_VERSION}/Lavalink.jar"
@@ -44,7 +43,7 @@ MAFIC_MAX_SUPPORTED_LAVALINK_VERSION = os.getenv(
 )
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
-MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.13.5"
+MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.18.0"
 DEFAULT_YOUTUBE_PLUGIN_VERSION = os.getenv(
     "LAVALINK_DEFAULT_YOUTUBE_PLUGIN_VERSION",
     MINIMUM_YOUTUBE_PLUGIN_VERSION,
@@ -319,7 +318,7 @@ def _write_conf(port: int, password: str) -> None:
 lavalink:
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:{YOUTUBE_PLUGIN_VERSION}"
-      snapshot: false
+      repository: "https://maven.lavalink.dev/releases"
   server:
     password: "{password}"
     sources:
@@ -331,6 +330,16 @@ lavalink:
       http: true
     bufferDurationMs: 400
     resamplingQuality: LOW
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - TVHTML5_SIMPLY
+      - WEB
 
 logging:
   file:
