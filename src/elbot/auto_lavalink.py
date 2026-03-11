@@ -56,6 +56,23 @@ AUTO_LAVALINK_PORT_START = int(os.getenv("AUTO_LAVALINK_PORT_START", "2333"))
 AUTO_LAVALINK_PORT_TRIES = max(1, int(os.getenv("AUTO_LAVALINK_PORT_TRIES", "40")))
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(
+            f"[auto-lavalink] WARNING: {name}={raw!r} is not an int; using {default}.",
+            file=sys.stderr,
+        )
+        return default
+
+
+LAVALINK_BUFFER_DURATION_MS = _env_int("LAVALINK_BUFFER_DURATION_MS", 400)
+
+
 def _version_tuple(value: str) -> tuple[int, ...]:
     parts: list[int] = []
     for raw in re.split(r"[._-]", value):
@@ -328,7 +345,7 @@ lavalink:
       twitch: true
       vimeo: true
       http: true
-    bufferDurationMs: 400
+    bufferDurationMs: {LAVALINK_BUFFER_DURATION_MS}
     resamplingQuality: LOW
 
 plugins:
