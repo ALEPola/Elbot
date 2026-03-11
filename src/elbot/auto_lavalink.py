@@ -479,6 +479,8 @@ def start() -> tuple[int, str]:
             "-Xmx512m",
             "-Djava.net.preferIPv4Stack=true",
             "-Djava.net.preferIPv6Addresses=false",
+            "-Dlogging.level.moe.kyokobot.koe.internal.gateway=TRACE",
+            "-Dlogging.level.moe.kyokobot.koe.internal.dave=TRACE",
             f"-Dspring.config.location={spring_loc}",
             f"-Dserver.port={port}",
             "-Dspring.cloud.config.enabled=false",
@@ -541,6 +543,7 @@ def stop() -> None:
         except subprocess.TimeoutExpired:
             _proc.kill()
     _proc = None
+
 
 
 
