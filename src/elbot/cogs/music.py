@@ -56,6 +56,9 @@ class GuildState:
     player: Optional[object] = None
     last_channel_id: Optional[int] = None
     now_playing_message: Optional[nextcord.Message] = None
+    # Set by on_track_exception to prevent on_track_end from advancing
+    # while a fallback is being resolved (race condition fix).
+    _fallback_pending: bool = False
 
 
 class Music(commands.Cog):
@@ -1046,6 +1049,13 @@ class Music(commands.Cog):
         reason = event.reason or "UNKNOWN"
         context["end_reason"] = reason
         title = context.get("track_title") or "unknown track"
+        # If on_track_exception is resolving a fallback, don't advance the
+        # queue — the exception handler will do it once the fallback is ready.
+        if state._fallback_pending:
+            self.logger.info(
+                "Track end ignored (fallback pending): %s", title, extra=context,
+            )
+            return
         state.now_playing = None
         if reason != "FINISHED":
             self.logger.warning(
@@ -1087,6 +1097,8 @@ class Music(commands.Cog):
         self.logger.error("Track exception [%s]: %s", severity, message, extra=context)
 
         if current_entry and not current_entry.is_fallback:
+            # Signal on_track_end to not advance the queue while we resolve.
+            state._fallback_pending = True
             base_error = TrackLoadFailure(
                 message, cause=exception if isinstance(exception, Exception) else None
             )
@@ -1114,6 +1126,7 @@ class Music(commands.Cog):
             except TrackLoadFailure as fallback_exc:
                 context["fallback_error"] = str(fallback_exc)
                 self.logger.error("Fallback resolution failed", extra=context)
+                state._fallback_pending = False
                 state.now_playing = None
                 await self._ensure_playing(guild_id)
                 return
@@ -1121,6 +1134,7 @@ class Music(commands.Cog):
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
                 context_fallback["fallback_trigger"] = "track_exception"
                 self.logger.info("Switching to fallback stream", extra=context_fallback)
+                state._fallback_pending = False
                 state.now_playing = None
                 state.queue.add_next(fallback_entry)
                 await self._ensure_playing(guild_id)
