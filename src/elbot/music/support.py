@@ -92,7 +92,7 @@ class CookieManager:
             "quiet": True,
             "format": "bestaudio/best",
             "noplaylist": True,
-            "js_runtimes": "node,deno",
+            "js_runtimes": {"node": {}, "deno": {}},
         }
         if self._path and self._path.exists():
             options["cookiefile"] = str(self._path)
