@@ -198,3 +198,7 @@ sfx/
 infra/docker/lavalink/*
 !infra/docker/lavalink/application.yml
 chat_history/
+
+# Claude Code (local settings contain machine-specific SSH commands, paths, etc.)
+.claude/settings.local.json
+.claude/worktrees/
