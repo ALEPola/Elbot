@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block secrets and sensitive data from being committed.
+# This runs automatically before every git commit.
+
+set -e
+
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Get list of staged files (excluding deleted files)
+STAGED=$(git diff --cached --name-only --diff-filter=d 2>/dev/null || true)
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+BLOCKED=0
+
+# --- 1. Block files that should never be committed ---
+BLOCKED_FILES=".env .env.local .env.production secrets.json credentials.json youtube_cookies.txt cookies.txt"
+for file in $BLOCKED_FILES; do
+    if echo "$STAGED" | grep -qxF "$file"; then
+        echo -e "${RED}BLOCKED:${NC} '$file' should not be committed (contains secrets)"
+        BLOCKED=1
+    fi
+done
+
+# --- 2. Scan staged content for secret patterns ---
+PATTERNS=(
+    # Discord tokens (Bot tokens are base64-encoded, ~59+ chars)
+    '[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}'
+    # OpenAI API keys
+    'sk-proj-[A-Za-z0-9]{20,}'
+    'sk-[A-Za-z0-9]{48}'
+    # Generic long hex secrets (40+ chars, likely tokens)
+    # Spotify client secrets are 32 hex chars - catch those too
+    'clientSecret.*[0-9a-f]{32}'
+    # Private IP + username combos (SSH connections)
+    'ssh [a-z]+@192\.168\.'
+    'ssh [a-z]+@10\.'
+    'ssh [a-z]+@172\.(1[6-9]|2[0-9]|3[01])\.'
+    # AWS keys
+    'AKIA[0-9A-Z]{16}'
+    # Private keys
+    '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
+)
+
+for file in $STAGED; do
+    # Skip binary files and .gitignore itself
+    if [[ "$file" == *.png ]] || [[ "$file" == *.jpg ]] || [[ "$file" == *.jar ]] || [[ "$file" == *.whl ]]; then
+        continue
+    fi
+
+    # Get the staged content of the file
+    CONTENT=$(git show ":$file" 2>/dev/null || true)
+    if [ -z "$CONTENT" ]; then
+        continue
+    fi
+
+    for pattern in "${PATTERNS[@]}"; do
+        MATCH=$(echo "$CONTENT" | grep -nE "$pattern" 2>/dev/null | head -3 || true)
+        if [ -n "$MATCH" ]; then
+            # Allow patterns in .env.example only if the value is empty (placeholder)
+            if [[ "$file" == ".env.example" ]]; then
+                # Check if the match is just a key= with empty value
+                if echo "$MATCH" | grep -qE '=$' 2>/dev/null; then
+                    continue
+                fi
+            fi
+            echo -e "${RED}BLOCKED:${NC} Potential secret in '$file':"
+            echo "$MATCH" | while read -r line; do
+                echo "  $line"
+            done
+            BLOCKED=1
+        fi
+    done
+done
+
+if [ "$BLOCKED" -ne 0 ]; then
+    echo ""
+    echo "Commit blocked to prevent secret leaks."
+    echo "If this is a false positive, use: git commit --no-verify"
+    exit 1
+fi
+
+exit 0
