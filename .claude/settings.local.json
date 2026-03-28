@@ -59,7 +59,19 @@
       "Bash(ssh alex@192.168.1.5 'curl -L -o /home/alex/.local/share/Elbot/Lavalink.jar \"\"https://github.com/lavalink-devs/Lavalink/releases/download/4.0.8/Lavalink.jar\"\" && echo -n \"\"https://github.com/lavalink-devs/Lavalink/releases/download/4.0.8/Lavalink.jar\"\" > /home/alex/.local/share/Elbot/lavalink.url && echo \"\"Downloaded 4.0.8\"\"')",
       "Bash(ssh alex@192.168.1.5 'journalctl -u elbot.service --no-pager -n 30 --since \"\"1 minute ago\"\"')",
       "Bash(ssh alex@192.168.1.5 'tail -20 /home/alex/.local/share/Elbot/lavalink.log | grep -iE \"\"voice|session|PATCH|player|error|warn|Version\"\"')",
-      "Bash(ssh alex@192.168.1.5 'curl -L -o /home/alex/.local/share/Elbot/Lavalink.jar \"\"https://github.com/lavalink-devs/Lavalink/releases/download/4.0.6/Lavalink.jar\"\" && echo -n \"\"https://github.com/lavalink-devs/Lavalink/releases/download/4.0.6/Lavalink.jar\"\" > /home/alex/.local/share/Elbot/lavalink.url && rm -f /home/alex/.local/share/Elbot/plugins/*.jar && sudo systemctl restart elbot.service && echo \"\"Reverted to 4.0.6\"\"')"
+      "Bash(ssh alex@192.168.1.5 'curl -L -o /home/alex/.local/share/Elbot/Lavalink.jar \"\"https://github.com/lavalink-devs/Lavalink/releases/download/4.0.6/Lavalink.jar\"\" && echo -n \"\"https://github.com/lavalink-devs/Lavalink/releases/download/4.0.6/Lavalink.jar\"\" > /home/alex/.local/share/Elbot/lavalink.url && rm -f /home/alex/.local/share/Elbot/plugins/*.jar && sudo systemctl restart elbot.service && echo \"\"Reverted to 4.0.6\"\"')",
+      "WebSearch",
+      "Bash(python -c \"import mafic; import inspect; print\\(inspect.getfile\\(mafic\\)\\)\")",
+      "Bash(ssh alex@192.168.1.5 \"tail -4 /home/alex/Elbot/.env\")",
+      "Bash(powershell.exe -Command \"Get-Item ''C:\\\\Users\\\\alepo\\\\OneDrive\\\\Documents\\\\GitHub\\\\Elbot\\\\.git\\\\index.lock'' -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime\")",
+      "Bash(ssh alex@192.168.1.5 \"grep ''2026-03-28T13:49'' /home/alex/.local/share/Elbot/lavalink.log\")",
+      "Bash(grep -n \"load_all_cogs\\\\|patch_nextcord\\\\|apply_patch\" src/elbot/*.py)",
+      "Bash(ssh alex@192.168.1.5 \"grep ''2026-03-28T13:49:46'' /home/alex/.local/share/Elbot/lavalink.log\")",
+      "Bash(ssh alex@192.168.1.5 \"grep ''2026-03-28T13:49:4[6-9]\\\\|2026-03-28T13:49:5'' /home/alex/.local/share/Elbot/lavalink.log\")",
+      "Bash(ssh alex@192.168.1.5 \"ps aux | grep -i lavalink | grep -v grep\")",
+      "Bash(ssh alex@192.168.1.5 \"grep ''2026-03-28T13:59'' /home/alex/.local/share/Elbot/lavalink.log | head -30\")",
+      "Bash(ssh alex@192.168.1.5 \"journalctl -u elbot.service --no-pager -n 30 --since ''3 minutes ago''\")",
+      "Bash(ssh alex@192.168.1.5 \"journalctl -u elbot.service --no-pager -n 20 --since ''1 minute ago''\")"
     ]
   }
 }
