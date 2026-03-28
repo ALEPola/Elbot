@@ -29,9 +29,9 @@ LOG = BASE / "lavalink.log"
 LAVALINK_URL_FILE = BASE / "lavalink.url"
 BASE.mkdir(parents=True, exist_ok=True)
 
-# Lavalink 4.0.8 is the latest 4.0.x release compatible with mafic 2.10.1.
-# 4.2.x requires channelId in the voice state payload which mafic doesn't send.
-DEFAULT_LAVALINK_VERSION = "4.0.8"
+# Lavalink 4.2.2 requires channelId in the voice state payload.
+# mafic 2.11.0+ includes channelId, so 4.2.x is now supported.
+DEFAULT_LAVALINK_VERSION = "4.2.2"
 DEFAULT_LAVALINK_URL = (
     "https://github.com/lavalink-devs/Lavalink/releases/download/"
     f"{DEFAULT_LAVALINK_VERSION}/Lavalink.jar"
