@@ -752,44 +752,83 @@ class Music(commands.Cog):
     ) -> list:
         """Provide track suggestions for the `query` option.
 
-        Uses the Lavalink resolver to fetch search results and returns a
-        compact list of choices containing title and duration. Failures
-        are swallowed so autocomplete remains responsive.
+        Tries Lavalink search first, then falls back to yt-dlp search
+        if Lavalink returns no results (e.g. YouTube blocking).
+        Failures are swallowed so autocomplete remains responsive.
         """
         try:
             if not value:
                 return []
-            # Try to resolve via the Lavalink backend. If the node is not
-            # ready or resolution fails, return an empty list instead of
-            # raising so the autocomplete UI stays responsive.
+
+            tracks = []
+            # Try Lavalink search first.
             try:
-                # Ensure backend is available (this will initialize lazily)
                 await self.backend.wait_ready()
                 tracks = await self.backend.resolve_tracks(value, prefer_search=True)
             except Exception:
-                return []
+                pass
+
+            # Fall back to yt-dlp search if Lavalink returned nothing.
+            if not tracks:
+                try:
+                    tracks = await self._ytdlp_search(value)
+                except Exception:
+                    return []
 
             choices = []
             for t in tracks[:7]:
+                title = getattr(t, "title", None) or ""
                 dur = int(getattr(t, "duration", 0) or 0)
                 mm = dur // 60
                 ss = dur % 60
                 label = (
-                    f"{t.title} - {mm:02d}:{ss:02d}"
-                    if getattr(t, "title", None)
+                    f"{title} - {mm:02d}:{ss:02d}"
+                    if title
                     else f"{value}"
                 )
-                val = t.uri or t.title or value
+                val = getattr(t, "uri", None) or title or value
                 try:
                     choices.append(
                         nextcord.SlashOptionChoice(name=label[:100], value=str(val))
                     )
                 except Exception:
-                    # If the choice object fails for any reason, skip it.
                     continue
             return choices
         except Exception:
             return []
+
+    async def _ytdlp_search(self, query: str, count: int = 7) -> list:
+        """Search YouTube via yt-dlp and return lightweight result objects."""
+        import yt_dlp
+        from types import SimpleNamespace
+
+        options = self.cookies.yt_dlp_options()
+        options.update({
+            "skip_download": True,
+            "extract_flat": True,
+            "quiet": True,
+        })
+
+        search_query = f"ytsearch{count}:{query}"
+
+        def _do_search() -> list:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                result = ydl.extract_info(search_query, download=False)
+                entries = result.get("entries", []) if result else []
+                return [
+                    SimpleNamespace(
+                        title=e.get("title", ""),
+                        duration=int(e.get("duration") or 0),
+                        uri=e.get("url") or f"https://www.youtube.com/watch?v={e['id']}" if e.get("id") else "",
+                    )
+                    for e in entries
+                    if e
+                ]
+
+        return await asyncio.wait_for(
+            asyncio.to_thread(_do_search),
+            timeout=2.5,  # Autocomplete must respond within 3s
+        )
 
     @nextcord.slash_command(name="skip", description="Skip the current track")
     async def skip(self, interaction: nextcord.Interaction) -> None:
