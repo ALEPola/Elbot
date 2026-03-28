@@ -775,7 +775,7 @@ class Music(commands.Cog):
                 self.logger.warning("Autocomplete yt-dlp search failed: %s", exc)
                 return []
 
-        choices = []
+        choices: Dict[str, str] = {}
         for t in tracks[:7]:
             title = getattr(t, "title", None) or ""
             dur = int(getattr(t, "duration", 0) or 0)
@@ -787,9 +787,7 @@ class Music(commands.Cog):
                 else f"{value}"
             )
             val = getattr(t, "uri", None) or title or value
-            choices.append(
-                nextcord.SlashOptionChoice(name=label[:100], value=str(val)[:100])
-            )
+            choices[label[:100]] = str(val)[:100]
         return choices
 
     async def _ytdlp_search(self, query: str, count: int = 7) -> list:
