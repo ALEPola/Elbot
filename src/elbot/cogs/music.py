@@ -1090,9 +1090,22 @@ class Music(commands.Cog):
             base_error = TrackLoadFailure(
                 message, cause=exception if isinstance(exception, Exception) else None
             )
+            # If the original query is a non-YouTube URL (e.g. Spotify),
+            # yt-dlp won't know how to handle it. Use the resolved
+            # title + author as a search query instead.
+            fallback_query = current_entry.query
+            if fallback_query.startswith("http") and "youtube.com" not in fallback_query and "youtu.be" not in fallback_query:
+                title = getattr(current_entry.handle, "title", "")
+                author = getattr(current_entry.handle, "author", "")
+                if title:
+                    fallback_query = f"{title} {author}".strip()
+                    self.logger.info(
+                        "Rewrote non-YouTube URL to search query for fallback",
+                        extra={"original": current_entry.query, "rewritten": fallback_query},
+                    )
             try:
                 fallback_entry = await self.fallback.build_fallback_entry(
-                    current_entry.query,
+                    fallback_query,
                     requested_by=current_entry.requested_by,
                     requester_display=current_entry.requester_display,
                     channel_id=current_entry.channel_id,
