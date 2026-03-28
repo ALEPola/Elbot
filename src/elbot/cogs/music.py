@@ -779,6 +779,10 @@ class Music(commands.Cog):
         for t in tracks[:7]:
             title = getattr(t, "title", None) or ""
             dur = int(getattr(t, "duration", 0) or 0)
+            # Lavalink returns ms, yt-dlp returns seconds.
+            # If duration > 10 hours in "seconds", it's likely ms.
+            if dur > 36000:
+                dur = dur // 1000
             mm = dur // 60
             ss = dur % 60
             label = (
