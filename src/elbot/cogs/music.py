@@ -756,46 +756,41 @@ class Music(commands.Cog):
         if Lavalink returns no results (e.g. YouTube blocking).
         Failures are swallowed so autocomplete remains responsive.
         """
+        if not value:
+            return []
+
+        tracks = []
+        # Try Lavalink search first.
         try:
-            if not value:
+            await self.backend.wait_ready()
+            tracks = await self.backend.resolve_tracks(value, prefer_search=True)
+        except Exception as exc:
+            self.logger.debug("Autocomplete Lavalink search failed: %s", exc)
+
+        # Fall back to yt-dlp search if Lavalink returned nothing.
+        if not tracks:
+            try:
+                tracks = await self._ytdlp_search(value)
+            except Exception as exc:
+                self.logger.warning("Autocomplete yt-dlp search failed: %s", exc)
                 return []
 
-            tracks = []
-            # Try Lavalink search first.
-            try:
-                await self.backend.wait_ready()
-                tracks = await self.backend.resolve_tracks(value, prefer_search=True)
-            except Exception:
-                pass
-
-            # Fall back to yt-dlp search if Lavalink returned nothing.
-            if not tracks:
-                try:
-                    tracks = await self._ytdlp_search(value)
-                except Exception:
-                    return []
-
-            choices = []
-            for t in tracks[:7]:
-                title = getattr(t, "title", None) or ""
-                dur = int(getattr(t, "duration", 0) or 0)
-                mm = dur // 60
-                ss = dur % 60
-                label = (
-                    f"{title} - {mm:02d}:{ss:02d}"
-                    if title
-                    else f"{value}"
-                )
-                val = getattr(t, "uri", None) or title or value
-                try:
-                    choices.append(
-                        nextcord.SlashOptionChoice(name=label[:100], value=str(val))
-                    )
-                except Exception:
-                    continue
-            return choices
-        except Exception:
-            return []
+        choices = []
+        for t in tracks[:7]:
+            title = getattr(t, "title", None) or ""
+            dur = int(getattr(t, "duration", 0) or 0)
+            mm = dur // 60
+            ss = dur % 60
+            label = (
+                f"{title} - {mm:02d}:{ss:02d}"
+                if title
+                else f"{value}"
+            )
+            val = getattr(t, "uri", None) or title or value
+            choices.append(
+                nextcord.SlashOptionChoice(name=label[:100], value=str(val)[:100])
+            )
+        return choices
 
     async def _ytdlp_search(self, query: str, count: int = 7) -> list:
         """Search YouTube via yt-dlp and return lightweight result objects."""
@@ -807,6 +802,7 @@ class Music(commands.Cog):
             "skip_download": True,
             "extract_flat": True,
             "quiet": True,
+            "no_warnings": True,
         })
 
         search_query = f"ytsearch{count}:{query}"
@@ -815,15 +811,21 @@ class Music(commands.Cog):
             with yt_dlp.YoutubeDL(options) as ydl:
                 result = ydl.extract_info(search_query, download=False)
                 entries = result.get("entries", []) if result else []
-                return [
-                    SimpleNamespace(
+                items = []
+                for e in entries:
+                    if not e:
+                        continue
+                    vid_id = e.get("id", "")
+                    uri = e.get("url") or (
+                        f"https://www.youtube.com/watch?v={vid_id}"
+                        if vid_id else ""
+                    )
+                    items.append(SimpleNamespace(
                         title=e.get("title", ""),
                         duration=int(e.get("duration") or 0),
-                        uri=e.get("url") or f"https://www.youtube.com/watch?v={e['id']}" if e.get("id") else "",
-                    )
-                    for e in entries
-                    if e
-                ]
+                        uri=uri,
+                    ))
+                return items
 
         return await asyncio.wait_for(
             asyncio.to_thread(_do_search),
