@@ -43,6 +43,12 @@ MAFIC_MAX_SUPPORTED_LAVALINK_VERSION = os.getenv(
 )
 
 DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
+
+# LavaSrc plugin (Spotify, Apple Music, Deezer support)
+DEFAULT_LAVASRC_PLUGIN_VERSION = os.getenv(
+    "LAVALINK_LAVASRC_PLUGIN_VERSION", "4.3.0"
+)
+
 MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.18.0"
 DEFAULT_YOUTUBE_PLUGIN_VERSION = os.getenv(
     "LAVALINK_DEFAULT_YOUTUBE_PLUGIN_VERSION",
@@ -330,12 +336,41 @@ def _ensure_jar() -> None:
 
 
 def _write_conf(port: int, password: str) -> None:
+    spotify_client_id = os.getenv("SPOTIFY_CLIENT_ID", "")
+    spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+    spotify_country = os.getenv("SPOTIFY_COUNTRY_CODE", "US")
+
+    lavasrc_block = ""
+    lavasrc_plugin = ""
+    if spotify_client_id and spotify_client_secret:
+        lavasrc_plugin = (
+            f'\n    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:{DEFAULT_LAVASRC_PLUGIN_VERSION}"'
+            f'\n      repository: "https://maven.lavalink.dev/releases"'
+        )
+        lavasrc_block = f"""
+  lavasrc:
+    providers:
+      - "ytsearch:\\"%ISRC%\\""
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
+      vkmusic: false
+    spotify:
+      clientId: "{spotify_client_id}"
+      clientSecret: "{spotify_client_secret}"
+      countryCode: "{spotify_country}"
+"""
+
     CONF.write_text(
         f"""
 lavalink:
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:{YOUTUBE_PLUGIN_VERSION}"
-      repository: "https://maven.lavalink.dev/releases"
+      repository: "https://maven.lavalink.dev/releases"{lavasrc_plugin}
   server:
     password: "{password}"
     sources:
@@ -356,7 +391,7 @@ plugins:
     allowDirectPlaylistIds: true
     clients:
       - TVHTML5_SIMPLY
-      - WEB
+      - WEB{lavasrc_block}
 
 server:
   address: "0.0.0.0"

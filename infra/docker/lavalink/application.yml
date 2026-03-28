@@ -11,6 +11,8 @@ lavalink:
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
       repository: "https://maven.lavalink.dev/releases"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.3.0"
+      repository: "https://maven.lavalink.dev/releases"
 plugins:
   youtube:
     enabled: true
@@ -20,6 +22,21 @@ plugins:
     clients:
       - TVHTML5_SIMPLY
       - WEB
+  lavasrc:
+    providers:
+      - 'ytsearch:"%ISRC%"'
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
+      vkmusic: false
+    spotify:
+      clientId: ${SPOTIFY_CLIENT_ID:-}
+      clientSecret: ${SPOTIFY_CLIENT_SECRET:-}
+      countryCode: ${SPOTIFY_COUNTRY_CODE:-US}
 spring:
   main:
     banner-mode: off

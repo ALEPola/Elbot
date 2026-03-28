@@ -86,6 +86,9 @@ class Config:
 
     AUTO_LAVALINK = os.getenv("AUTO_LAVALINK", "0") == "1"
 
+    SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
+    SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+
     if _gid_str:
         try:
             GUILD_ID = int(_gid_str)

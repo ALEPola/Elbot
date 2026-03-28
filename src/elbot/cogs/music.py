@@ -662,12 +662,12 @@ class Music(commands.Cog):
     # ------------------------------------------------------------------
     # Slash commands
     # ------------------------------------------------------------------
-    @nextcord.slash_command(name="play", description="Play a YouTube track")
+    @nextcord.slash_command(name="play", description="Play a track from YouTube, Spotify, or a URL")
     async def play(
         self,
         interaction: nextcord.Interaction,
         query: str = nextcord.SlashOption(
-            description="Type music name, link, playlist, radio and media link.",
+            description="Song name, YouTube/Spotify link, or playlist URL.",
             autocomplete=True,
         ),
         play_next: bool = nextcord.SlashOption(
