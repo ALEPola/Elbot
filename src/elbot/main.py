@@ -16,10 +16,10 @@ os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 # mafic is optional at import time; import lazily where needed to avoid
 # breaking test collection when the package isn't installed.
 mafic = None
-from nextcord.ext import commands
+from nextcord.ext import commands  # noqa: E402
 
-from .config import Config, log_cookie_status
-from .utils import load_all_cogs, safe_reply
+from .config import Config, log_cookie_status  # noqa: E402
+from .utils import load_all_cogs, safe_reply  # noqa: E402
 
 
 def _setup_logging() -> logging.Logger:

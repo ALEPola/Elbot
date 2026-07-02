@@ -42,7 +42,7 @@ except Exception:
                         return DT(dt)
                     return val
 
-            lines = [l.strip() for l in text.splitlines()]
+            lines = [line.strip() for line in text.splitlines()]
             comps = []
             cur = {}
             in_event = False

@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, Optional
 
 import nextcord
 from cachetools import TTLCache

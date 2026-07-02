@@ -1,5 +1,3 @@
-﻿import pytest
-
 from elbot.core import ops
 
 

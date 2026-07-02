@@ -8,7 +8,6 @@ import os
 import platform
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -214,7 +213,7 @@ def command_install(args: argparse.Namespace) -> None:
                 _run_in_venv,
                 require_lavalink=args.require_lavalink,
             )
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError:
             _echo("Service installation failed (likely missing permissions).")
             if IS_WINDOWS:
                 _echo("Run `elbotctl service install` from an elevated PowerShell prompt to register the service.")
