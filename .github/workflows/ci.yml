@@ -28,20 +28,22 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Run unit tests
-        run: pytest tests/test_music_queue_utils.py tests/test_music_fallback.py tests/test_music_cookies.py tests/test_auto_lavalink.py
+        run: pytest
       - name: Launch Lavalink
         run: docker compose -f infra/docker/docker-compose.yml up -d lavalink
         env:
           LAVALINK_PASSWORD: youshallnotpass
       - name: Wait for Lavalink
+        # Cold JVM start on a fresh runner regularly exceeds 30s; allow up to 150s.
         run: |
-          for i in {1..10}; do
+          for i in {1..30}; do
             if curl -sf http://localhost:2333/version > /dev/null; then
               exit 0
             fi
-            sleep 3
+            sleep 5
           done
           echo "Lavalink did not become ready" >&2
+          docker logs lavalink --tail 50 >&2 || true
           exit 1
       - name: Canary playback
         env:
