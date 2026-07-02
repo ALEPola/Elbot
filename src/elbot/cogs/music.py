@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
@@ -60,6 +61,11 @@ class GuildState:
     # Set by on_track_exception to prevent on_track_end from advancing
     # while a fallback is being resolved (race condition fix).
     _fallback_pending: bool = False
+    # Lavalink can emit track_end *before* track_exception for the same
+    # failure; keep the just-ended entry briefly so the exception handler
+    # can still resolve a fallback for it.
+    last_ended: Optional[QueuedTrack] = None
+    last_ended_at: float = 0.0
 
 
 class Music(commands.Cog):
@@ -1125,6 +1131,9 @@ class Music(commands.Cog):
                 "Track end ignored (fallback pending): %s", title, extra=context,
             )
             return
+        if current_entry is not None:
+            state.last_ended = current_entry
+            state.last_ended_at = time.monotonic()
         state.now_playing = None
         if reason != "FINISHED":
             self.logger.warning(
@@ -1150,6 +1159,16 @@ class Music(commands.Cog):
         if not state:
             return
         current_entry = state.now_playing
+        if current_entry is None and state.last_ended is not None:
+            # track_end for this failure arrived first and already cleared
+            # now_playing; recover the entry so the fallback still runs.
+            if time.monotonic() - state.last_ended_at < 5.0:
+                current_entry = state.last_ended
+                self.logger.info(
+                    "Track exception after track_end; recovering just-ended entry",
+                    extra={"guild_id": guild_id, "track_query": current_entry.query},
+                )
+            state.last_ended = None
         track_obj = getattr(event, "track", None) or getattr(
             event.player, "current", None
         )
