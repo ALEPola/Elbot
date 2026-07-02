@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, TYPE_CHECKING
 
 import nextcord
+from cachetools import TTLCache
 
 try:
     import mafic
@@ -76,6 +77,9 @@ class Music(commands.Cog):
         self.metrics = PlaybackMetrics()
         self.cookies = CookieManager()
         self.search_cache = SearchCache()
+        self._autocomplete_cache: "TTLCache[str, Dict[str, str]]" = TTLCache(
+            maxsize=256, ttl=300
+        )
         self.fallback = None
         self.embed_factory = EmbedFactory()
         host, port, password, secure = _lavalink_config()
@@ -754,23 +758,45 @@ class Music(commands.Cog):
 
         Tries Lavalink search first, then falls back to yt-dlp search
         if Lavalink returns no results (e.g. YouTube blocking).
-        Failures are swallowed so autocomplete remains responsive.
+        Discord requires a response within ~3s, so the whole handler
+        runs under a strict time budget; failures are swallowed so
+        autocomplete remains responsive.
         """
         if not value:
             return []
 
+        cache_key = " ".join(value.lower().split())
+        cached = self._autocomplete_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        budget = self._env_float("ELBOT_AUTOCOMPLETE_BUDGET", 2.7, minimum=1.0)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + budget
+
         tracks = []
-        # Try Lavalink search first.
+        # Try Lavalink search first, but cap it so the yt-dlp fallback
+        # still has time to run within the budget.
+        lavalink_timeout = min(1.5, budget)
+
+        async def _lavalink_search() -> list:
+            await self.backend.wait_ready(timeout=lavalink_timeout)
+            return await self.backend.resolve_tracks(value, prefer_search=True)
+
         try:
-            await self.backend.wait_ready()
-            tracks = await self.backend.resolve_tracks(value, prefer_search=True)
+            tracks = await asyncio.wait_for(
+                _lavalink_search(), timeout=lavalink_timeout
+            )
         except Exception as exc:
             self.logger.debug("Autocomplete Lavalink search failed: %s", exc)
 
         # Fall back to yt-dlp search if Lavalink returned nothing.
         if not tracks:
+            remaining = deadline - loop.time()
+            if remaining < 0.3:
+                return []
             try:
-                tracks = await self._ytdlp_search(value)
+                tracks = await self._ytdlp_search(value, timeout=remaining)
             except Exception as exc:
                 self.logger.warning("Autocomplete yt-dlp search failed: %s", exc)
                 return []
@@ -778,13 +804,8 @@ class Music(commands.Cog):
         choices: Dict[str, str] = {}
         for t in tracks[:7]:
             title = getattr(t, "title", None) or ""
-            dur = int(getattr(t, "duration", 0) or 0)
-            # Lavalink returns ms, yt-dlp returns seconds.
-            # If duration > 10 hours in "seconds", it's likely ms.
-            if dur > 36000:
-                dur = dur // 1000
-            mm = dur // 60
-            ss = dur % 60
+            dur_ms = int(getattr(t, "duration", 0) or 0)
+            mm, ss = divmod(dur_ms // 1000, 60)
             label = (
                 f"{title} - {mm:02d}:{ss:02d}"
                 if title
@@ -792,9 +813,13 @@ class Music(commands.Cog):
             )
             val = getattr(t, "uri", None) or title or value
             choices[label[:100]] = str(val)[:100]
+        if choices:
+            self._autocomplete_cache[cache_key] = choices
         return choices
 
-    async def _ytdlp_search(self, query: str, count: int = 7) -> list:
+    async def _ytdlp_search(
+        self, query: str, count: int = 7, timeout: float = 2.5
+    ) -> list:
         """Search YouTube via yt-dlp and return lightweight result objects."""
         import yt_dlp
         from types import SimpleNamespace
@@ -824,14 +849,15 @@ class Music(commands.Cog):
                     )
                     items.append(SimpleNamespace(
                         title=e.get("title", ""),
-                        duration=int(e.get("duration") or 0),
+                        # yt-dlp reports seconds; normalize to ms like Lavalink.
+                        duration=int(e.get("duration") or 0) * 1000,
                         uri=uri,
                     ))
                 return items
 
         return await asyncio.wait_for(
             asyncio.to_thread(_do_search),
-            timeout=2.5,  # Autocomplete must respond within 3s
+            timeout=timeout,
         )
 
     @nextcord.slash_command(name="skip", description="Skip the current track")
@@ -1158,6 +1184,7 @@ class Music(commands.Cog):
                         "Rewrote non-YouTube URL to search query for fallback",
                         extra={"original": current_entry.query, "rewritten": fallback_query},
                     )
+            fallback_entry = None
             try:
                 fallback_entry = await self.fallback.build_fallback_entry(
                     fallback_query,
@@ -1166,22 +1193,25 @@ class Music(commands.Cog):
                     channel_id=current_entry.channel_id,
                     base_error=base_error,
                 )
-            except TrackLoadFailure as fallback_exc:
+            except Exception as fallback_exc:
                 context["fallback_error"] = str(fallback_exc)
-                self.logger.error("Fallback resolution failed", extra=context)
+                self.logger.error(
+                    "Fallback resolution failed",
+                    extra=context,
+                    exc_info=not isinstance(fallback_exc, TrackLoadFailure),
+                )
+            finally:
+                # Always clear the flag: leaving it set would make
+                # on_track_end ignore every future event for this guild.
                 state._fallback_pending = False
-                state.now_playing = None
-                await self._ensure_playing(guild_id)
-                return
-            else:
+            state.now_playing = None
+            if fallback_entry is not None:
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
                 context_fallback["fallback_trigger"] = "track_exception"
                 self.logger.info("Switching to fallback stream", extra=context_fallback)
-                state._fallback_pending = False
-                state.now_playing = None
                 state.queue.add_next(fallback_entry)
-                await self._ensure_playing(guild_id)
-                return
+            await self._ensure_playing(guild_id)
+            return
 
         state.now_playing = None
         await self._ensure_playing(guild_id)
@@ -1206,9 +1236,13 @@ class Music(commands.Cog):
         self.logger.warning("Track stuck at %s ms: %s", threshold, title, extra=context)
 
         if current_entry and not current_entry.is_fallback:
+            # Same race guard as on_track_exception: a stuck track may still
+            # emit track_end while the fallback is being resolved.
+            state._fallback_pending = True
             base_error = TrackLoadFailure(
                 f"Track stuck after {threshold} ms", cause=None
             )
+            fallback_entry = None
             try:
                 fallback_entry = await self.fallback.build_fallback_entry(
                     current_entry.query,
@@ -1217,22 +1251,23 @@ class Music(commands.Cog):
                     channel_id=current_entry.channel_id,
                     base_error=base_error,
                 )
-            except TrackLoadFailure as fallback_exc:
+            except Exception as fallback_exc:
                 context["fallback_error"] = str(fallback_exc)
                 self.logger.error(
-                    "Fallback resolution failed after track stuck", extra=context
+                    "Fallback resolution failed after track stuck",
+                    extra=context,
+                    exc_info=not isinstance(fallback_exc, TrackLoadFailure),
                 )
-                state.now_playing = None
-                await self._ensure_playing(guild_id)
-                return
-            else:
+            finally:
+                state._fallback_pending = False
+            state.now_playing = None
+            if fallback_entry is not None:
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
                 context_fallback["fallback_trigger"] = "track_stuck"
                 self.logger.info("Switching to fallback stream", extra=context_fallback)
-                state.now_playing = None
                 state.queue.add_next(fallback_entry)
-                await self._ensure_playing(guild_id)
-                return
+            await self._ensure_playing(guild_id)
+            return
 
         state.now_playing = None
         await self._ensure_playing(guild_id)
