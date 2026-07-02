@@ -35,9 +35,12 @@ jobs:
           LAVALINK_PASSWORD: youshallnotpass
       - name: Wait for Lavalink
         # Cold JVM start on a fresh runner regularly exceeds 30s; allow up to 150s.
+        # Lavalink v4 requires the Authorization header even on /version.
+        env:
+          LAVALINK_PASSWORD: youshallnotpass
         run: |
           for i in {1..30}; do
-            if curl -sf http://localhost:2333/version > /dev/null; then
+            if curl -sf -H "Authorization: $LAVALINK_PASSWORD" http://localhost:2333/version > /dev/null; then
               exit 0
             fi
             sleep 5
