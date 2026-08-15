@@ -50,6 +50,7 @@ class DummyBackend:
 
 @pytest.mark.asyncio
 async def test_fallback_player_prefers_lavalink(monkeypatch):
+    monkeypatch.setenv("ELBOT_PRIMARY_BACKEND", "lavalink")
     backend = DummyBackend()
     backend.responses["test"] = [make_handle("test")]
     player = FallbackPlayer(
@@ -68,6 +69,7 @@ async def test_fallback_player_prefers_lavalink(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fallback_player_uses_yt_dlp(monkeypatch):
+    monkeypatch.setenv("ELBOT_PRIMARY_BACKEND", "fallback")
     backend = DummyBackend()
 
     error = TrackLoadFailure("failure", cause=Exception("429"))
@@ -124,6 +126,7 @@ async def test_fallback_player_uses_yt_dlp(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fallback_player_reuses_cache(monkeypatch):
+    monkeypatch.setenv("ELBOT_PRIMARY_BACKEND", "fallback")
     backend = DummyBackend()
 
     error = TrackLoadFailure("failure", cause=Exception("signature"))

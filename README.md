@@ -82,7 +82,8 @@ For full options, see [`.env.example`](.env.example).
 ### Music
 
 - `/play <query> [play_next]`
-- `/skip`, `/stop`, `/queue`
+- `/skip`, `/stop`, `/pause`, `/resume`, `/seek`, `/volume`, `/nowplaying`
+- `/loop`, `/clear`, `/disconnect`, `/queue`
 - `/remove <index|start-end>`, `/move <source> <destination>`, `/shuffle`, `/replay`
 
 ### AI

@@ -9,6 +9,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional
+from urllib.parse import urlsplit
 
 import nextcord
 from cachetools import TTLCache
@@ -24,12 +25,13 @@ from elbot.music import (
     CookieManager,
     DiagnosticsService,
     EmbedFactory,
-    SearchCache,
     FallbackPlayer,
     LavalinkAudioBackend,
     MusicQueue,
     PlaybackMetrics,
     QueuedTrack,
+    QueuePaginator,
+    SearchCache,
     TrackLoadFailure,
     configure_json_logging,
 )
@@ -66,6 +68,12 @@ class GuildState:
     # can still resolve a fallback for it.
     last_ended: Optional[QueuedTrack] = None
     last_ended_at: float = 0.0
+    loop_mode: str = "off"
+    volume: int = 100
+    idle_task: Optional[asyncio.Task] = None
+    pending_end_task: Optional[asyncio.Task] = None
+    suppressed_track_keys: set[str] = field(default_factory=set)
+    playback_started_at: float = 0.0
 
 
 class Music(commands.Cog):
@@ -177,6 +185,15 @@ class Music(commands.Cog):
         return mafic
 
     async def _disconnect(self, guild_id: int, state: GuildState) -> None:
+        current_task = asyncio.current_task()
+        for task in (state.idle_task, state.pending_end_task):
+            if task is not None and task is not current_task and not task.done():
+                task.cancel()
+        state.idle_task = None
+        state.pending_end_task = None
+        state.queue.clear()
+        state.now_playing = None
+        state.playback_started_at = 0.0
         if state.player:
             try:
                 await state.player.disconnect(force=True)
@@ -231,6 +248,9 @@ class Music(commands.Cog):
 
         target_channel = user.voice.channel
         if voice and voice.channel != target_channel:
+            if state.now_playing is not None or len(state.queue) > 0:
+                channel_mention = getattr(voice.channel, "mention", "another channel")
+                return None, f"I'm already playing music in {channel_mention}."
             try:
                 await voice.move_to(target_channel)
             except Exception:
@@ -298,8 +318,8 @@ class Music(commands.Cog):
         if entry is not None:
             context["is_fallback"] = entry.is_fallback
             if entry.fallback_source:
-                context["fallback_source"] = entry.fallback_source
-            context["track_query"] = entry.query
+                context["fallback_source"] = self._safe_log_value(entry.fallback_source)
+            context["track_query"] = self._safe_log_value(entry.query)
 
         if handle is not None:
             context.update(
@@ -308,14 +328,15 @@ class Music(commands.Cog):
                     "track_author": handle.author,
                     "track_source": handle.source,
                     "track_duration": handle.duration,
-                    "track_uri": handle.uri,
+                    "track_uri": self._safe_log_value(handle.uri),
                 }
             )
             try:
-                context.setdefault(
-                    "track_identifier", getattr(handle.track, "identifier", None)
-                )
-                context.setdefault("track_id", getattr(handle.track, "id", None))
+                identifier = getattr(handle.track, "identifier", None)
+                if identifier:
+                    context.setdefault(
+                        "track_identifier", self._safe_log_value(identifier)
+                    )
             except AttributeError:
                 pass
 
@@ -324,11 +345,102 @@ class Music(commands.Cog):
             context.setdefault("track_author", getattr(track, "author", None))
             context.setdefault("track_source", getattr(track, "source", None))
             context.setdefault("track_duration", getattr(track, "length", None))
-            context.setdefault("track_uri", getattr(track, "uri", None))
-            context.setdefault("track_identifier", getattr(track, "identifier", None))
-            context.setdefault("track_id", getattr(track, "id", None))
+            context.setdefault(
+                "track_uri", self._safe_log_value(getattr(track, "uri", None))
+            )
+            identifier = getattr(track, "identifier", None)
+            if identifier:
+                context.setdefault(
+                    "track_identifier", self._safe_log_value(identifier)
+                )
 
         return context
+
+    @staticmethod
+    def _safe_log_value(value: object, *, limit: int = 160) -> object:
+        """Keep useful source context without logging signed media URLs."""
+
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if not text:
+            return text
+        if "://" in text:
+            parsed = urlsplit(text)
+            if parsed.hostname:
+                return f"{parsed.scheme}://{parsed.hostname}"
+        if len(text) > limit:
+            return f"{text[:limit]}..."
+        return text
+
+    @staticmethod
+    def _track_key(track: object) -> Optional[str]:
+        if track is None:
+            return None
+        for name in ("encoded", "id", "identifier"):
+            value = getattr(track, name, None)
+            if isinstance(value, str) and value:
+                return f"{name}:{value}"
+        info = getattr(track, "info", None)
+        if isinstance(info, dict):
+            value = info.get("identifier")
+            if value:
+                return f"identifier:{value}"
+        return f"object:{id(track)}"
+
+    def _suppress_next_track_end(self, state: GuildState, track: object) -> None:
+        key = self._track_key(track)
+        if not key:
+            return
+        state.suppressed_track_keys.add(key)
+        self.bot.loop.call_later(5.0, state.suppressed_track_keys.discard, key)
+
+    @staticmethod
+    def _normalise_end_reason(reason: object) -> str:
+        value = getattr(reason, "name", None) or getattr(reason, "value", None) or reason
+        text = str(value or "UNKNOWN").upper()
+        return text.rsplit(".", 1)[-1]
+
+    def _control_error(
+        self, interaction: nextcord.Interaction, state: GuildState
+    ) -> Optional[str]:
+        """Require listeners to control the player from its voice channel."""
+
+        player_channel = getattr(state.player, "channel", None)
+        if player_channel is None:
+            return None
+        user = interaction.user
+        if not isinstance(user, nextcord.Member):
+            return "This command can only be used in a server voice channel."
+        permissions = getattr(user, "guild_permissions", None)
+        if permissions and (
+            getattr(permissions, "administrator", False)
+            or getattr(permissions, "manage_guild", False)
+        ):
+            return None
+        user_channel = getattr(getattr(user, "voice", None), "channel", None)
+        if user_channel != player_channel:
+            mention = getattr(player_channel, "mention", "the bot's voice channel")
+            return f"Join {mention} to control playback."
+        return None
+
+    @staticmethod
+    def _parse_seek_position(value: str) -> Optional[int]:
+        parts = value.strip().split(":")
+        if not parts or len(parts) > 3:
+            return None
+        try:
+            numbers = [int(part) for part in parts]
+        except ValueError:
+            return None
+        if any(number < 0 for number in numbers):
+            return None
+        if len(numbers) > 1 and any(number >= 60 for number in numbers[1:]):
+            return None
+        seconds = 0
+        for number in numbers:
+            seconds = seconds * 60 + number
+        return seconds * 1000
 
     @staticmethod
     def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
@@ -496,6 +608,7 @@ class Music(commands.Cog):
 
     async def _begin_playback(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
+        self._cancel_idle_disconnect(state)
         player = state.player
         if player is None:
             return
@@ -535,12 +648,14 @@ class Music(commands.Cog):
                 )
                 state.queue.add_next(next_track)
                 state.now_playing = None
+                state.playback_started_at = 0.0
                 return
             if latest_player is not player:
                 player = latest_player
             try:
-                await player.play(next_track.handle.track)
+                await player.play(next_track.handle.track, volume=state.volume)
                 state.player = player
+                state.playback_started_at = time.monotonic()
                 context = self._track_log_context(guild_id, next_track)
                 self.logger.info(
                     "Playback started: %s (%s)",
@@ -585,6 +700,7 @@ class Music(commands.Cog):
                 self.metrics.incr_failed()
                 self.logger.error("Failed to start playback", exc_info=exc)
                 state.now_playing = None
+                state.playback_started_at = 0.0
                 await self._begin_playback(guild_id)
                 return
         # All retry attempts exhausted or early abort due to reconnect failure
@@ -606,6 +722,7 @@ class Music(commands.Cog):
             state.player = None
         state.queue.add_next(next_track)
         state.now_playing = None
+        state.playback_started_at = 0.0
         await self._notify_playback_failure(guild_id, next_track)
 
     async def _announce_now_playing(self, guild_id: int) -> None:
@@ -650,9 +767,44 @@ class Music(commands.Cog):
         except Exception:
             pass
 
+    @staticmethod
+    def _cancel_idle_disconnect(state: GuildState) -> None:
+        task = state.idle_task
+        state.idle_task = None
+        if task is not None and not task.done():
+            task.cancel()
+
+    def _schedule_idle_disconnect(self, guild_id: int, state: GuildState) -> None:
+        self._cancel_idle_disconnect(state)
+        timeout = self._env_float("ELBOT_MUSIC_IDLE_TIMEOUT", 180.0, minimum=0.0)
+        if timeout <= 0:
+            return
+
+        async def disconnect_when_idle() -> None:
+            try:
+                await asyncio.sleep(timeout)
+                current = self._states.get(guild_id)
+                if current is not state:
+                    return
+                if state.now_playing is None and len(state.queue) == 0:
+                    self.logger.info(
+                        "Disconnecting idle music player",
+                        extra={"guild_id": guild_id, "idle_timeout_s": timeout},
+                    )
+                    await self._disconnect(guild_id, state)
+            except asyncio.CancelledError:
+                return
+
+        state.idle_task = self.bot.loop.create_task(disconnect_when_idle())
+
     async def _cleanup_idle(self, state: GuildState) -> None:
         if state.now_playing is None and len(state.queue) == 0:
             await self._clear_now_playing_message(state)
+            player = state.player
+            guild = getattr(player, "guild", None) if player is not None else None
+            guild_id = getattr(guild, "id", None)
+            if guild_id is not None:
+                self._schedule_idle_disconnect(guild_id, state)
 
     async def _ensure_playing(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
@@ -664,13 +816,66 @@ class Music(commands.Cog):
     async def _stop(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         state.queue.clear()
+        current = state.now_playing
+        if current is not None:
+            self._suppress_next_track_end(state, current.handle.track)
         state.now_playing = None
+        state.playback_started_at = 0.0
         if state.player:
             try:
                 await state.player.stop()
             except Exception:
                 pass
         await self._clear_now_playing_message(state)
+        self._schedule_idle_disconnect(guild_id, state)
+
+    @staticmethod
+    def _cancel_pending_end(state: GuildState) -> None:
+        task = state.pending_end_task
+        state.pending_end_task = None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+
+    async def _finalize_track_end(
+        self,
+        guild_id: int,
+        entry: QueuedTrack,
+        reason: str,
+    ) -> None:
+        state = self._states.get(guild_id)
+        if state is None:
+            return
+        current = state.now_playing
+        if current is None or current.id != entry.id:
+            return
+        state.pending_end_task = None
+        state.now_playing = None
+        state.playback_started_at = 0.0
+        if reason == "FINISHED":
+            if state.loop_mode == "track":
+                state.queue.add_next(entry.clone())
+            elif state.loop_mode == "queue":
+                state.queue.add(entry.clone())
+        await self._ensure_playing(guild_id)
+
+    def _schedule_track_end_grace(
+        self,
+        guild_id: int,
+        state: GuildState,
+        entry: QueuedTrack,
+        reason: str,
+    ) -> None:
+        self._cancel_pending_end(state)
+        delay = self._env_float("ELBOT_TRACK_END_GRACE", 0.75, minimum=0.1)
+
+        async def finish_after_grace() -> None:
+            try:
+                await asyncio.sleep(delay)
+                await self._finalize_track_end(guild_id, entry, reason)
+            except asyncio.CancelledError:
+                return
+
+        state.pending_end_task = self.bot.loop.create_task(finish_after_grace())
 
     # ------------------------------------------------------------------
     # Slash commands
@@ -727,9 +932,15 @@ class Music(commands.Cog):
                 )
             except TrackLoadFailure as exc:
                 self.metrics.incr_failed()
-                self.logger.error("Track load failure", exc_info=exc)
+                self.logger.error(
+                    "Track load failure: %s",
+                    self._safe_log_value(str(exc), limit=1200),
+                )
                 if getattr(exc, "cause", None):
-                    self.logger.error("Underlying cause: %s", exc.cause)
+                    self.logger.error(
+                        "Underlying cause: %s",
+                        self._safe_log_value(str(exc.cause), limit=1200),
+                    )
                 await safe_reply(
                     interaction,
                     embed=self.embed_factory.failure(str(exc)),
@@ -796,8 +1007,12 @@ class Music(commands.Cog):
         except Exception as exc:
             self.logger.debug("Autocomplete Lavalink search failed: %s", exc)
 
-        # Fall back to yt-dlp search if Lavalink returned nothing.
-        if not tracks:
+        # yt-dlp searches run in worker threads that cannot be cancelled once
+        # Discord's autocomplete deadline expires. Keep this opt-in on small
+        # hosts such as the Raspberry Pi to avoid accumulating extraction work
+        # while a user types.
+        ytdlp_autocomplete = os.getenv("ELBOT_AUTOCOMPLETE_YTDLP", "0") == "1"
+        if not tracks and ytdlp_autocomplete:
             remaining = deadline - loop.time()
             if remaining < 0.3:
                 return []
@@ -806,6 +1021,8 @@ class Music(commands.Cog):
             except Exception as exc:
                 self.logger.warning("Autocomplete yt-dlp search failed: %s", exc)
                 return []
+        if not tracks:
+            return []
 
         choices: Dict[str, str] = {}
         for t in tracks[:7]:
@@ -827,8 +1044,9 @@ class Music(commands.Cog):
         self, query: str, count: int = 7, timeout: float = 2.5
     ) -> list:
         """Search YouTube via yt-dlp and return lightweight result objects."""
-        import yt_dlp
         from types import SimpleNamespace
+
+        import yt_dlp
 
         options = self.cookies.yt_dlp_options()
         options.update({
@@ -885,8 +1103,14 @@ class Music(commands.Cog):
                 ephemeral=True,
             )
             return
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
         mafic_lib = self._resolve_mafic()
         skipped_disconnected = False
+        current = state.now_playing
+        self._suppress_next_track_end(state, current.handle.track)
         try:
             await state.player.stop()
         except mafic_lib.PlayerNotConnected:
@@ -921,6 +1145,177 @@ class Music(commands.Cog):
             await safe_reply(interaction, "Skipped the current track.")
         await self._ensure_playing(guild.id)
 
+    @nextcord.slash_command(name="pause", description="Pause the current track")
+    async def pause(self, interaction: nextcord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        if not state.player or not state.now_playing:
+            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
+            return
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        if getattr(state.player, "paused", False):
+            await safe_reply(interaction, "Playback is already paused.", ephemeral=True)
+            return
+        await state.player.pause()
+        await safe_reply(interaction, "Playback paused.")
+
+    @nextcord.slash_command(name="resume", description="Resume the paused track")
+    async def resume(self, interaction: nextcord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        if not state.player or not state.now_playing:
+            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
+            return
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        if not getattr(state.player, "paused", False):
+            await safe_reply(interaction, "Playback is not paused.", ephemeral=True)
+            return
+        await state.player.resume()
+        await safe_reply(interaction, "Playback resumed.")
+
+    @nextcord.slash_command(name="volume", description="Set playback volume")
+    async def volume(
+        self,
+        interaction: nextcord.Interaction,
+        level: int = nextcord.SlashOption(
+            description="Volume from 0 to 200 percent.", min_value=0, max_value=200
+        ),
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        if not state.player:
+            await safe_reply(interaction, "I'm not connected to voice.", ephemeral=True)
+            return
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        state.volume = level
+        await state.player.set_volume(level)
+        await safe_reply(interaction, f"Volume set to **{level}%**.")
+
+    @nextcord.slash_command(name="seek", description="Seek within the current track")
+    async def seek(
+        self,
+        interaction: nextcord.Interaction,
+        position: str = nextcord.SlashOption(
+            description="Position in seconds, mm:ss, or hh:mm:ss."
+        ),
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        if not state.player or not state.now_playing:
+            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
+            return
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        position_ms = self._parse_seek_position(position)
+        if position_ms is None:
+            await safe_reply(interaction, "Use seconds, `mm:ss`, or `hh:mm:ss`.", ephemeral=True)
+            return
+        duration = state.now_playing.handle.duration
+        if duration > 0 and position_ms >= duration:
+            await safe_reply(interaction, "That position is past the end of the track.", ephemeral=True)
+            return
+        await state.player.seek(position_ms)
+        await safe_reply(interaction, f"Seeked to **{position}**.")
+
+    @nextcord.slash_command(name="nowplaying", description="Show the current track")
+    async def nowplaying(self, interaction: nextcord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        if not state.now_playing:
+            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
+            return
+        position = int(getattr(state.player, "position", 0) or 0)
+        embed = self.embed_factory.now_playing(state.now_playing, position=position)
+        await safe_reply(interaction, embed=embed)
+
+    @nextcord.slash_command(name="loop", description="Set the repeat mode")
+    async def set_loop(
+        self,
+        interaction: nextcord.Interaction,
+        mode: str = nextcord.SlashOption(
+            description="Choose what should repeat.",
+            choices={"Off": "off", "Current track": "track", "Whole queue": "queue"},
+        ),
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        state.loop_mode = mode
+        labels = {"off": "off", "track": "current track", "queue": "whole queue"}
+        await safe_reply(interaction, f"Repeat mode set to **{labels[mode]}**.")
+
+    @nextcord.slash_command(name="clear", description="Clear the queued tracks")
+    async def clear(self, interaction: nextcord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        count = len(state.queue)
+        state.queue.clear()
+        await safe_reply(interaction, f"Cleared **{count}** queued track(s).")
+
+    @nextcord.slash_command(name="disconnect", description="Stop music and leave voice")
+    async def disconnect(self, interaction: nextcord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+            return
+        state = self._states.get(guild.id)
+        if state is None or state.player is None:
+            await safe_reply(interaction, "I'm not connected to voice.", ephemeral=True)
+            return
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        await self._disconnect(guild.id, state)
+        await safe_reply(interaction, "Disconnected and cleared the queue.")
+
     @nextcord.slash_command(
         name="stop", description="Stop playback and clear the queue"
     )
@@ -933,6 +1328,11 @@ class Music(commands.Cog):
                 "This command can only be used in guilds.",
                 ephemeral=True,
             )
+            return
+        state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
             return
         await self._stop(guild.id)
         await safe_reply(interaction, "Playback stopped and queue cleared.")
@@ -960,8 +1360,6 @@ class Music(commands.Cog):
             )
             await safe_reply(interaction, embed=embed)
             return
-        from elbot.music.embeds import QueuePaginator  # lazy import to avoid circular
-
         paginator = QueuePaginator(
             self.embed_factory,
             tracks,
@@ -982,6 +1380,10 @@ class Music(commands.Cog):
             )
             return
         state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
         removed: Optional[QueuedTrack] = None
         removed_many = []
         if "-" in target:
@@ -1029,6 +1431,10 @@ class Music(commands.Cog):
             )
             return
         state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
         success = state.queue.move(source - 1, destination - 1)
         if success:
             await safe_reply(interaction, "Track moved.")
@@ -1047,6 +1453,10 @@ class Music(commands.Cog):
             )
             return
         state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
         state.queue.shuffle()
         await safe_reply(interaction, "Queue shuffled.")
 
@@ -1062,6 +1472,10 @@ class Music(commands.Cog):
             )
             return
         state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
         replayed = state.queue.replay_last()
         if not replayed:
             await safe_reply(interaction, "Nothing to replay.", ephemeral=True)
@@ -1116,12 +1530,28 @@ class Music(commands.Cog):
         state = self._states.get(guild_id)
         if not state:
             return
+        event_track = getattr(event, "track", None)
+        event_key = self._track_key(event_track)
+        if event_key and event_key in state.suppressed_track_keys:
+            state.suppressed_track_keys.discard(event_key)
+            self.logger.info(
+                "Ignoring expected track-end event after a control action",
+                extra={"guild_id": guild_id},
+            )
+            return
         current_entry = state.now_playing
-        track_obj = getattr(event, "track", None) or getattr(
-            event.player, "current", None
-        )
+        if current_entry is None:
+            return
+        current_key = self._track_key(current_entry.handle.track)
+        if event_key and current_key and event_key != current_key:
+            self.logger.info(
+                "Ignoring stale track-end event",
+                extra={"guild_id": guild_id},
+            )
+            return
+        track_obj = event_track or getattr(event.player, "current", None)
         context = self._track_log_context(guild_id, current_entry, track_obj)
-        reason = event.reason or "UNKNOWN"
+        reason = self._normalise_end_reason(event.reason)
         context["end_reason"] = reason
         title = context.get("track_title") or "unknown track"
         # If on_track_exception is resolving a fallback, don't advance the
@@ -1131,11 +1561,17 @@ class Music(commands.Cog):
                 "Track end ignored (fallback pending): %s", title, extra=context,
             )
             return
-        if current_entry is not None:
-            state.last_ended = current_entry
-            state.last_ended_at = time.monotonic()
-        state.now_playing = None
-        if reason != "FINISHED":
+        now = time.monotonic()
+        state.last_ended = current_entry
+        state.last_ended_at = now
+        position = int(getattr(event.player, "position", 0) or 0)
+        elapsed_ms = int(max(0.0, now - state.playback_started_at) * 1000)
+        duration = current_entry.handle.duration
+        progress = max(position, elapsed_ms)
+        ended_early = duration > 10_000 and progress + 5_000 < duration
+        context["position_ms"] = position
+        context["elapsed_ms"] = elapsed_ms
+        if reason != "FINISHED" or ended_early:
             self.logger.warning(
                 "Track ended early (%s): %s",
                 reason,
@@ -1148,7 +1584,15 @@ class Music(commands.Cog):
                 title,
                 extra=context,
             )
-        await self._ensure_playing(guild_id)
+        if ended_early:
+            # youtube-source can emit FINISHED just before TrackExceptionEvent.
+            # Keep the current entry briefly so the exception can replace it
+            # without advancing and then clobbering the next queued track.
+            self._schedule_track_end_grace(
+                guild_id, state, current_entry, reason
+            )
+            return
+        await self._finalize_track_end(guild_id, current_entry, reason)
 
     @commands.Cog.listener()
     async def on_track_exception(
@@ -1158,7 +1602,17 @@ class Music(commands.Cog):
         state = self._states.get(guild_id)
         if not state:
             return
+        event_track = getattr(event, "track", None)
+        event_key = self._track_key(event_track)
         current_entry = state.now_playing
+        if current_entry is not None:
+            current_key = self._track_key(current_entry.handle.track)
+            if event_key and current_key and event_key != current_key:
+                self.logger.info(
+                    "Ignoring stale track-exception event",
+                    extra={"guild_id": guild_id},
+                )
+                return
         if current_entry is None and state.last_ended is not None:
             # track_end for this failure arrived first and already cleared
             # now_playing; recover the entry so the fallback still runs.
@@ -1166,21 +1620,28 @@ class Music(commands.Cog):
                 current_entry = state.last_ended
                 self.logger.info(
                     "Track exception after track_end; recovering just-ended entry",
-                    extra={"guild_id": guild_id, "track_query": current_entry.query},
+                    extra={
+                        "guild_id": guild_id,
+                        "track_query": self._safe_log_value(current_entry.query),
+                    },
                 )
             state.last_ended = None
-        track_obj = getattr(event, "track", None) or getattr(
-            event.player, "current", None
-        )
+        if current_entry is None:
+            return
+        self._cancel_pending_end(state)
+        track_obj = event_track or getattr(event.player, "current", None)
         context = self._track_log_context(guild_id, current_entry, track_obj)
         exception = event.exception
-        message = getattr(exception, "message", None) or str(exception)
+        raw_message = getattr(exception, "message", None) or str(exception)
+        message = str(self._safe_log_value(raw_message, limit=1200))
         severity = getattr(exception, "severity", None) or "unknown"
         cause = getattr(exception, "cause", None)
         context["exception_message"] = message
         context["exception_severity"] = getattr(exception, "severity", None)
         if cause is not None:
-            context["exception_cause"] = str(cause)
+            context["exception_cause"] = self._safe_log_value(
+                str(cause), limit=1200
+            )
         self.metrics.incr_failed()
         self.logger.error("Track exception [%s]: %s", severity, message, extra=context)
 
@@ -1201,7 +1662,10 @@ class Music(commands.Cog):
                     fallback_query = f"{title} {author}".strip()
                     self.logger.info(
                         "Rewrote non-YouTube URL to search query for fallback",
-                        extra={"original": current_entry.query, "rewritten": fallback_query},
+                        extra={
+                            "original": self._safe_log_value(current_entry.query),
+                            "rewritten": self._safe_log_value(fallback_query),
+                        },
                     )
             fallback_entry = None
             try:
@@ -1213,7 +1677,9 @@ class Music(commands.Cog):
                     base_error=base_error,
                 )
             except Exception as fallback_exc:
-                context["fallback_error"] = str(fallback_exc)
+                context["fallback_error"] = self._safe_log_value(
+                    str(fallback_exc), limit=1200
+                )
                 self.logger.error(
                     "Fallback resolution failed",
                     extra=context,
@@ -1223,7 +1689,9 @@ class Music(commands.Cog):
                 # Always clear the flag: leaving it set would make
                 # on_track_end ignore every future event for this guild.
                 state._fallback_pending = False
-            state.now_playing = None
+            if state.now_playing and state.now_playing.id == current_entry.id:
+                state.now_playing = None
+                state.playback_started_at = 0.0
             if fallback_entry is not None:
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
                 context_fallback["fallback_trigger"] = "track_exception"
@@ -1232,7 +1700,9 @@ class Music(commands.Cog):
             await self._ensure_playing(guild_id)
             return
 
-        state.now_playing = None
+        if state.now_playing and state.now_playing.id == current_entry.id:
+            state.now_playing = None
+            state.playback_started_at = 0.0
         await self._ensure_playing(guild_id)
 
     @commands.Cog.listener()
@@ -1244,9 +1714,19 @@ class Music(commands.Cog):
         if not state:
             return
         current_entry = state.now_playing
-        track_obj = getattr(event, "track", None) or getattr(
-            event.player, "current", None
-        )
+        if current_entry is None:
+            return
+        event_track = getattr(event, "track", None)
+        event_key = self._track_key(event_track)
+        current_key = self._track_key(current_entry.handle.track)
+        if event_key and current_key and event_key != current_key:
+            self.logger.info(
+                "Ignoring stale track-stuck event",
+                extra={"guild_id": guild_id},
+            )
+            return
+        self._cancel_pending_end(state)
+        track_obj = event_track or getattr(event.player, "current", None)
         context = self._track_log_context(guild_id, current_entry, track_obj)
         threshold = getattr(event, "threshold", None)
         context["threshold_ms"] = threshold
@@ -1271,7 +1751,9 @@ class Music(commands.Cog):
                     base_error=base_error,
                 )
             except Exception as fallback_exc:
-                context["fallback_error"] = str(fallback_exc)
+                context["fallback_error"] = self._safe_log_value(
+                    str(fallback_exc), limit=1200
+                )
                 self.logger.error(
                     "Fallback resolution failed after track stuck",
                     extra=context,
@@ -1279,7 +1761,9 @@ class Music(commands.Cog):
                 )
             finally:
                 state._fallback_pending = False
-            state.now_playing = None
+            if state.now_playing and state.now_playing.id == current_entry.id:
+                state.now_playing = None
+                state.playback_started_at = 0.0
             if fallback_entry is not None:
                 context_fallback = self._track_log_context(guild_id, fallback_entry)
                 context_fallback["fallback_trigger"] = "track_stuck"
@@ -1288,7 +1772,9 @@ class Music(commands.Cog):
             await self._ensure_playing(guild_id)
             return
 
-        state.now_playing = None
+        if state.now_playing and state.now_playing.id == current_entry.id:
+            state.now_playing = None
+            state.playback_started_at = 0.0
         await self._ensure_playing(guild_id)
 
 

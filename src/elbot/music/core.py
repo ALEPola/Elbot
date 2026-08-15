@@ -14,6 +14,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, replace
 from typing import Any, Deque, Dict, Iterable, List, Optional
+from urllib.parse import urlsplit
 
 import yt_dlp
 
@@ -39,6 +40,21 @@ __all__ = [
 
 def _default_logger() -> logging.Logger:
     return logging.getLogger("elbot.music.lavalink")
+
+
+def _safe_log_value(value: object, *, limit: int = 240) -> object:
+    """Redact signed media URLs and bound large extractor errors."""
+
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if "://" in text:
+        parsed = urlsplit(text)
+        if parsed.hostname:
+            return f"{parsed.scheme}://{parsed.hostname}"
+    if len(text) > limit:
+        return f"{text[:limit]}..."
+    return text
 
 
 @dataclass(slots=True)
@@ -438,7 +454,9 @@ class FallbackPlayer:
             primary = "fallback"
         self._primary_backend = primary
         self._fallback_hedge_delay = max(0.0, float(os.getenv("ELBOT_FALLBACK_HEDGE_DELAY", "1.5")))
-        self._lavalink_hedge_delay = max(0.0, float(os.getenv("ELBOT_LAVALINK_HEDGE_DELAY", "0.0")))
+        self._lavalink_hedge_delay = max(
+            0.0, float(os.getenv("ELBOT_LAVALINK_HEDGE_DELAY", "5.0"))
+        )
 
     async def build_queue_entry(
         self,
@@ -495,7 +513,11 @@ class FallbackPlayer:
 
             return asyncio.create_task(runner())
 
-        if primary_is_fallback:
+        query_lower = query.strip().lower()
+        is_non_youtube_url = query_lower.startswith(("http://", "https://")) and not any(
+            host in query_lower for host in ("youtube.com", "youtu.be")
+        )
+        if primary_is_fallback and not is_non_youtube_url:
             fallback_delay = 0.0
             lavalink_delay = self._lavalink_hedge_delay
         else:
@@ -521,12 +543,18 @@ class FallbackPlayer:
                             fallback_cause[0] = exc
                             self.logger.warning(
                                 "Lavalink resolution failed, waiting for yt-dlp fallback",
-                                extra={"query": query, "error": str(exc)},
+                                extra={
+                                    "query": _safe_log_value(query),
+                                    "error": _safe_log_value(str(exc)),
+                                },
                             )
                         else:
                             self.logger.warning(
                                 "yt-dlp fallback failed, waiting for Lavalink",
-                                extra={"query": query, "error": str(exc)},
+                                extra={
+                                    "query": _safe_log_value(query),
+                                    "error": _safe_log_value(str(exc)),
+                                },
                             )
                         tasks = pending
                     else:
@@ -582,7 +610,7 @@ class FallbackPlayer:
 
         self.logger.info(
             "Attempting direct fallback resolution",
-            extra={"query": query, "requested_by": requested_by},
+            extra={"query": _safe_log_value(query), "requested_by": requested_by},
         )
         return await self._resolve_fallback(
             query,
@@ -618,16 +646,19 @@ class FallbackPlayer:
                 self.logger.debug(
                     "Cached candidate failed",
                     extra={
-                        "query": query,
-                        "candidate": candidate,
-                        "error": str(exc),
+                        "query": _safe_log_value(query),
+                        "candidate": _safe_log_value(candidate),
+                        "error": _safe_log_value(str(exc)),
                     },
                 )
                 continue
             if not handles:
                 self.logger.debug(
                     "Cached candidate yielded no tracks",
-                    extra={"query": query, "candidate": candidate},
+                    extra={
+                        "query": _safe_log_value(query),
+                        "candidate": _safe_log_value(candidate),
+                    },
                 )
                 continue
             track_handle = handles[0]
@@ -641,12 +672,12 @@ class FallbackPlayer:
                 fallback_source=candidate,
             )
             self.metrics.incr_fallback()
-            self.metrics.record_fallback_source(candidate)
+            self.metrics.record_fallback_source(str(_safe_log_value(candidate)))
             self.logger.info(
                 "Resolved stream from cache",
                 extra={
-                    "query": query,
-                    "candidate": candidate,
+                    "query": _safe_log_value(query),
+                    "candidate": _safe_log_value(candidate),
                     "identifier": cached.identifier,
                     "requested_by": requested_by,
                 },
@@ -657,9 +688,9 @@ class FallbackPlayer:
         self.logger.warning(
             "Cached entry invalidated",
             extra={
-                "query": query,
+                "query": _safe_log_value(query),
                 "identifier": cached.identifier,
-                "error": str(last_error) if last_error else None,
+                "error": _safe_log_value(str(last_error)) if last_error else None,
             },
         )
         return None
@@ -722,13 +753,16 @@ class FallbackPlayer:
                 last_error = exc
                 self.logger.warning(
                     "Fallback candidate failed",
-                    extra={"candidate": candidate, "error": str(exc)},
+                    extra={
+                        "candidate": _safe_log_value(candidate),
+                        "error": _safe_log_value(str(exc)),
+                    },
                 )
                 continue
             if not handle:
                 self.logger.warning(
                     "Fallback candidate produced no tracks",
-                    extra={"candidate": candidate},
+                    extra={"candidate": _safe_log_value(candidate)},
                 )
                 continue
             selected_source = candidate
@@ -771,14 +805,18 @@ class FallbackPlayer:
             except Exception as exc:
                 self.logger.debug(
                     "Failed to update search cache",
-                    extra={"query": query, "error": str(exc)},
+                    extra={
+                        "query": _safe_log_value(query),
+                        "error": _safe_log_value(str(exc)),
+                    },
                 )
-        self.metrics.record_fallback_source(selected_source)
+        safe_selected_source = str(_safe_log_value(selected_source))
+        self.metrics.record_fallback_source(safe_selected_source)
         self.logger.info(
             "Resolved fallback stream",
             extra={
-                "query": query,
-                "selected_source": selected_source,
+                "query": _safe_log_value(query),
+                "selected_source": safe_selected_source,
                 "requested_by": requested_by,
             },
         )
@@ -808,7 +846,7 @@ class FallbackPlayer:
                 self.logger.error(
                     "YouTube rejected unauthenticated request; configure YT_COOKIES_FILE with fresh export",
                     extra={
-                        "query": query,
+                        "query": _safe_log_value(query),
                         "cookie_configured": bool(cookie_path and cookie_path.exists()),
                         "cookie_path": str(cookie_path) if cookie_path else None,
                     },
@@ -890,12 +928,16 @@ class FallbackPlayer:
                 duration = int(numeric * 1000)
             break
 
-        uri = handle.uri
-        for key in ("webpage_url", "original_url", "url"):
+        # Discord embeds should link to the public track page. Lavalink's HTTP
+        # track URI can be a short-lived signed media URL and must not be sent
+        # back to Discord or persisted in message history.
+        uri = None
+        for key in ("webpage_url", "original_url"):
             candidate = info.get(key)
             if isinstance(candidate, str) and candidate:
-                uri = uri or candidate
+                uri = candidate
                 break
+        uri = uri or handle.uri
 
         source = handle.source
         if source in ("unknown", "http") and fallback_source:

@@ -3,16 +3,16 @@ from __future__ import annotations
 import atexit
 import json
 import os
-import sys
 import platform
 import re
 import signal
 import socket
 import subprocess
+import sys
+import tarfile
 import time
 import urllib.request
 import zipfile
-import tarfile
 from pathlib import Path
 
 from platformdirs import user_data_dir
@@ -49,7 +49,7 @@ DEFAULT_LAVASRC_PLUGIN_VERSION = os.getenv(
     "LAVALINK_LAVASRC_PLUGIN_VERSION", "4.3.0"
 )
 
-MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.18.0"
+MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.18.2"
 DEFAULT_YOUTUBE_PLUGIN_VERSION = os.getenv(
     "LAVALINK_DEFAULT_YOUTUBE_PLUGIN_VERSION",
     MINIMUM_YOUTUBE_PLUGIN_VERSION,
@@ -390,8 +390,10 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
-      - TVHTML5_SIMPLY
-      - WEB{lavasrc_block}
+      - MUSIC
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED{lavasrc_block}
 
 server:
   address: "0.0.0.0"
@@ -399,8 +401,8 @@ logging:
   file:
     path: "{LOG.as_posix()}"
   level:
-    moe.kyokobot.koe.internal.gateway: TRACE
-    moe.kyokobot.koe.internal.dave: TRACE
+    moe.kyokobot.koe.internal.gateway: INFO
+    moe.kyokobot.koe.internal.dave: INFO
 """
     )
 
@@ -531,8 +533,8 @@ def start() -> tuple[int, str]:
             "-Xmx512m",
             "-Djava.net.preferIPv4Stack=true",
             "-Djava.net.preferIPv6Addresses=false",
-            "-Dlogging.level.moe.kyokobot.koe.internal.gateway=TRACE",
-            "-Dlogging.level.moe.kyokobot.koe.internal.dave=TRACE",
+            "-Dlogging.level.moe.kyokobot.koe.internal.gateway=INFO",
+            "-Dlogging.level.moe.kyokobot.koe.internal.dave=INFO",
             f"-Dspring.config.location={spring_loc}",
             f"-Dserver.port={port}",
             "-Dspring.cloud.config.enabled=false",

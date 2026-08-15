@@ -9,7 +9,7 @@ ExecStart=/usr/bin/java -jar Lavalink.jar
 Environment=LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
 Environment=SERVER_PORT=2333
 Restart=on-failure
-# youtube-source plugin v1.4.4 is configured via application.yml
+# youtube-source is configured via application.yml
 
 [Install]
 WantedBy=multi-user.target

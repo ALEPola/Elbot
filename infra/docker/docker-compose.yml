@@ -13,11 +13,11 @@ services:
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${LAVALINK_PORT:-2333}/version"]
+      test: ["CMD-SHELL", "curl -fsS -H 'Authorization: $${LAVALINK_SERVER_PASSWORD}' http://localhost:$${SERVER_PORT}/version >/dev/null"]
       interval: 30s
       timeout: 5s
       retries: 3
-    # youtube-source plugin v1.4.4 pairs with Lavalink v4.0.6
+    # youtube-source is pinned in lavalink/application.yml and tested in CI.
   bot:
     build:
       context: ../..

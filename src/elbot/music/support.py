@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import asyncio
+import datetime as dt
 import json
 import logging
 import os
@@ -473,8 +473,10 @@ class EmbedFactory:
             name="Duration", value=_format_duration(info.duration), inline=True
         )
         embed.add_field(name="Requested by", value=track.requester_display, inline=True)
-        embed.add_field(name="Queue position", value=str(position), inline=True)
-        embed.add_field(name="ETA", value=_format_eta(eta_ms), inline=True)
+        progress = _format_duration(position)
+        if info.duration > 0:
+            progress = f"{progress} / {_format_duration(info.duration)}"
+        embed.add_field(name="Position", value=progress, inline=True)
         embed.set_footer(text="Fallback" if track.is_fallback else "Lavalink")
         return embed
 
@@ -797,6 +799,10 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure_json_logging(level: int = logging.INFO) -> None:
+    # The main process owns logging configuration. Adding a root handler from
+    # the music cog would duplicate every elbot.music record in stdout/journald.
+    if logging.getLogger("elbot").handlers or logging.getLogger().handlers:
+        return
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_JsonFormatter())
     logging.basicConfig(level=level, handlers=[handler])
