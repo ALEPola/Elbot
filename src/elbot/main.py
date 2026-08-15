@@ -144,6 +144,27 @@ async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
 
                 if not load_ok:
                     handshake = False
+                elif yt_version == "unknown":
+                    # Plugin details live in /v4/info on Lavalink v4; /version
+                    # usually contains only the server version.
+                    for info_path in ("v4/info", "info"):
+                        try:
+                            async with session.get(
+                                f"{base_url}/{info_path}",
+                                headers={"Authorization": password},
+                            ) as info_response:
+                                if info_response.status != 200:
+                                    continue
+                                info_data = await info_response.json(
+                                    content_type=None
+                                )
+                                yt_version = await _fetch_lavalink_plugins(
+                                    info_data
+                                )
+                                if yt_version != "unknown":
+                                    break
+                        except Exception:
+                            continue
     except Exception as exc:  # pragma: no cover - network failures
         failure_reason = str(exc)
 

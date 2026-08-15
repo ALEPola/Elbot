@@ -42,3 +42,6 @@ plugins:
 spring:
   main:
     banner-mode: off
+logging:
+  level:
+    dev.lavalink.youtube.http.YoutubeAccessTokenTracker: WARN

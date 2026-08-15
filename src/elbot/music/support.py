@@ -707,9 +707,11 @@ class DiagnosticsService:
             if resp.status == 200:
                 version_data = await resp.json()
         latency_ms = (time.perf_counter() - start_time) * 1000
-        async with session.get(f"{self._base_url}/plugins") as resp:
-            if resp.status == 200:
-                plugin_data = await resp.json()
+        for path in ("/v4/info", "/plugins"):
+            async with session.get(f"{self._base_url}{path}") as resp:
+                if resp.status == 200:
+                    plugin_data = await resp.json(content_type=None)
+                    break
 
         plugin_version = None
         plugins = (
@@ -719,7 +721,7 @@ class DiagnosticsService:
         )
         for plugin in plugins:
             name = plugin.get("name") if isinstance(plugin, dict) else None
-            if name == "dev.lavalink.youtube":
+            if name and "youtube" in name.lower():
                 plugin_version = plugin.get("version")
                 break
 

@@ -93,3 +93,13 @@ def test_lavalink_health_check_returns_failure(monkeypatch):
 
     assert not success
     assert reason == "/loadtracks returned no tracks"
+
+
+def test_fetch_lavalink_plugins_reads_v4_info_shape():
+    version = asyncio.run(
+        main._fetch_lavalink_plugins(
+            {"plugins": [{"name": "youtube-plugin", "version": "1.18.2"}]}
+        )
+    )
+
+    assert version == "1.18.2"

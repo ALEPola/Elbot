@@ -403,6 +403,7 @@ logging:
   level:
     moe.kyokobot.koe.internal.gateway: INFO
     moe.kyokobot.koe.internal.dave: INFO
+    dev.lavalink.youtube.http.YoutubeAccessTokenTracker: WARN
 """
     )
 

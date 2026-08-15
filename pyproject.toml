@@ -20,7 +20,7 @@ dependencies = [
     "platformdirs>=4.2",
     "psutil",
     "mafic>=2.11.0",
-    "yt-dlp>=2026.3.3",
+    "yt-dlp>=2026.7.4",
     "Flask",
     "icalendar",
     "aiohttp",
