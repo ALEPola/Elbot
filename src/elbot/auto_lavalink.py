@@ -46,7 +46,7 @@ DEFAULT_PW = os.getenv("LAVALINK_PASSWORD", "changeme")
 
 # LavaSrc plugin (Spotify, Apple Music, Deezer support)
 DEFAULT_LAVASRC_PLUGIN_VERSION = os.getenv(
-    "LAVALINK_LAVASRC_PLUGIN_VERSION", "4.3.0"
+    "LAVALINK_LAVASRC_PLUGIN_VERSION", "4.8.3"
 )
 
 MINIMUM_YOUTUBE_PLUGIN_VERSION = "1.18.2"
