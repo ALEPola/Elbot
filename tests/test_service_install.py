@@ -76,3 +76,5 @@ def test_install_systemd_service_does_not_override_env_vars(
     content = (tmp_path / "elbot.service").read_text(encoding="utf-8")
     assert "Environment=AUTO_LAVALINK" not in content
     assert "Environment=FFMPEG_PATH" not in content
+    assert f"{Path.home() / '.local' / 'bin'}" in content
+    assert f"{tmp_path / '.venv' / 'bin'}" in content

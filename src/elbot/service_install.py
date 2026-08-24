@@ -35,6 +35,13 @@ def install_systemd_service(root_dir: Path, require_lavalink: bool = False) -> N
     python = sys.executable
     user = os.getenv("SUDO_USER") or os.getenv("USER", "root")
     env_file = root_dir / ".env"
+    try:
+        import pwd
+
+        user_home = Path(pwd.getpwnam(user).pw_dir)
+    except (ImportError, KeyError):
+        user_home = Path.home()
+    local_bin = user_home / ".local" / "bin"
     unit = """[Unit]
 Description=Elbot Discord Bot
 After=network-online.target
@@ -54,6 +61,7 @@ Wants=network-online.target"""
 User={user}
 WorkingDirectory={root_dir}
 EnvironmentFile={env_file}
+Environment=PATH={root_dir / '.venv' / 'bin'}:{local_bin}:/usr/local/bin:/usr/bin:/bin
 # Environment=LAVALINK_PASSWORD=changeme
 # Environment=LAVALINK_PORT=2333
 ExecStart={python} -m elbot.main
