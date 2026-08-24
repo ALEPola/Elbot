@@ -69,6 +69,7 @@ Key variables:
 | `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_PASSWORD` | Music backend config |
 | `AUTO_LAVALINK` | Auto-manage Lavalink lifecycle |
 | `YT_COOKIES_FILE` | Cookies for improved YouTube reliability |
+| `ELBOT_MUSIC_DASHBOARD_URL` | Optional public dashboard link on music controls |
 | `AUTO_UPDATE_WEBHOOK` | Discord webhook for update failures |
 | `ELBOT_PORTAL_SECRET` | Flask session secret |
 | `ICS_URL` / `LOCAL_TIMEZONE` | F1 schedule + timezone |
@@ -83,7 +84,7 @@ For full options, see [`.env.example`](.env.example).
 
 - `/play <query> [play_next]`
 - `/skip`, `/stop`, `/pause`, `/resume`, `/seek`, `/volume`, `/nowplaying`
-- `/loop`, `/clear`, `/disconnect`, `/queue`
+- `/loop`, `/autoplay`, `/clear`, `/disconnect`, `/queue`
 - `/remove <index|start-end>`, `/move <source> <destination>`, `/shuffle`, `/replay`
 
 ### AI

@@ -67,6 +67,7 @@ class TrackHandle:
     duration: int
     uri: Optional[str]
     source: str
+    artwork_url: Optional[str] = None
 
     @classmethod
     def from_mafic(cls, track: "mafic.Track") -> "TrackHandle":
@@ -84,6 +85,16 @@ class TrackHandle:
         )
         uri = getattr(track, "uri", None) or info.get("uri")
         source = getattr(track, "source", None) or info.get("sourceName") or "unknown"
+        artwork_url = (
+            getattr(track, "artwork_url", None)
+            or getattr(track, "artwork", None)
+            or info.get("artworkUrl")
+            or info.get("thumbnail")
+        )
+        if not artwork_url and str(source).lower() in {"youtube", "ytmusic"}:
+            identifier = getattr(track, "identifier", None) or info.get("identifier")
+            if identifier:
+                artwork_url = f"https://i.ytimg.com/vi/{identifier}/hqdefault.jpg"
 
         return cls(
             track=track,
@@ -92,6 +103,7 @@ class TrackHandle:
             duration=int(duration),
             uri=uri,
             source=str(source),
+            artwork_url=str(artwork_url) if artwork_url else None,
         )
 
 
@@ -943,12 +955,20 @@ class FallbackPlayer:
         if source in ("unknown", "http") and fallback_source:
             source = "http" if fallback_source.startswith("http") else source
 
+        artwork_url = handle.artwork_url
+        for key in ("thumbnail", "artwork_url", "artworkUrl"):
+            candidate = info.get(key)
+            if isinstance(candidate, str) and candidate.startswith(("http://", "https://")):
+                artwork_url = candidate
+                break
+
         if (
             title == handle.title
             and author == handle.author
             and duration == handle.duration
             and uri == handle.uri
             and source == handle.source
+            and artwork_url == handle.artwork_url
         ):
             return handle
 
@@ -959,6 +979,7 @@ class FallbackPlayer:
             duration=duration,
             uri=uri,
             source=source,
+            artwork_url=artwork_url,
         )
 
 

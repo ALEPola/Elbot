@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 import json
 import logging
 import os
@@ -442,7 +441,11 @@ class PlaybackMetrics:
 
 def _format_duration(ms: int) -> str:
     seconds = max(0, int(ms // 1000))
-    return str(dt.timedelta(seconds=seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
 
 
 def _format_eta(ms: int) -> str:
@@ -450,6 +453,23 @@ def _format_eta(ms: int) -> str:
         return "Ready"
     seconds = int(ms // 1000)
     return f"{seconds // 60}m {seconds % 60}s"
+
+
+def _progress_bar(position: int, duration: int, *, width: int = 14) -> str:
+    """Render a compact Discord-safe playback progress bar."""
+
+    if duration <= 0:
+        return "●" + "─" * width
+    ratio = max(0.0, min(float(position) / float(duration), 1.0))
+    completed = round(ratio * width)
+    return "━" * completed + "●" + "─" * (width - completed)
+
+
+def _track_link(title: str, uri: Optional[str]) -> str:
+    safe_title = nextcord.utils.escape_markdown(title or "Unknown title")
+    if uri and uri.startswith(("http://", "https://")):
+        return f"[{safe_title}]({uri})"
+    return f"**{safe_title}**"
 
 
 class EmbedFactory:
@@ -464,20 +484,62 @@ class EmbedFactory:
         *,
         position: int = 0,
         eta_ms: int = 0,
+        queue_size: int = 0,
+        volume: int = 100,
+        loop_mode: str = "off",
+        voice_channel: Optional[str] = None,
+        paused: bool = False,
+        autoplay: bool = False,
+        likes: int = 0,
     ) -> nextcord.Embed:
         info = track.handle
-        embed = nextcord.Embed(title="Now Playing", color=self.color)
-        embed.description = f"[{info.title}]({info.uri or track.query})"
-        embed.add_field(name="Channel", value=info.author or "Unknown", inline=True)
-        embed.add_field(
-            name="Duration", value=_format_duration(info.duration), inline=True
+        embed = nextcord.Embed(title="Now playing", color=self.color)
+        author = nextcord.utils.escape_markdown(info.author or "Unknown creator")
+        requester = (
+            "AutoPlay"
+            if track.requester_display == "AutoPlay"
+            else f"<@{track.requested_by}>"
         )
-        embed.add_field(name="Requested by", value=track.requester_display, inline=True)
-        progress = _format_duration(position)
-        if info.duration > 0:
-            progress = f"{progress} / {_format_duration(info.duration)}"
-        embed.add_field(name="Position", value=progress, inline=True)
-        embed.set_footer(text="Fallback" if track.is_fallback else "Lavalink")
+        details = [
+            f"### {_track_link(info.title, info.uri)}",
+            f"by **{author}**",
+            "",
+            f"• Added by {requester}",
+        ]
+        if voice_channel:
+            details.append(f"• 🔊 {voice_channel}")
+        embed.description = "\n".join(details)
+
+        loop_label = {"off": "Off", "track": "Track", "queue": "Queue"}.get(
+            loop_mode, loop_mode.title()
+        )
+        embed.add_field(
+            name="\u200b",
+            value=(
+                f"Queue: `{max(0, queue_size)}` · Volume: `{volume}%` · "
+                f"Loop: `{loop_label}`"
+            ),
+            inline=False,
+        )
+        current_time = _format_duration(position)
+        total_time = _format_duration(info.duration) if info.duration > 0 else "LIVE"
+        status = "⏸ Paused" if paused else "▶ Playing"
+        embed.add_field(
+            name=status,
+            value=(
+                f"`{current_time}`  {_progress_bar(position, info.duration)}  "
+                f"`{total_time}`"
+            ),
+            inline=False,
+        )
+
+        if info.artwork_url:
+            embed.set_thumbnail(url=info.artwork_url)
+        source = "Fallback" if track.is_fallback else "Lavalink"
+        footer_parts = [source, f"AutoPlay {'on' if autoplay else 'off'}"]
+        if likes:
+            footer_parts.append(f"{likes} like{'s' if likes != 1 else ''}")
+        embed.set_footer(text=" · ".join(footer_parts))
         return embed
 
     def queued(
@@ -489,7 +551,7 @@ class EmbedFactory:
     ) -> nextcord.Embed:
         info = track.handle
         embed = nextcord.Embed(title="Track queued", color=self.color)
-        embed.description = f"[{info.title}]({info.uri or track.query})"
+        embed.description = _track_link(info.title, info.uri)
         embed.add_field(name="Channel", value=info.author or "Unknown", inline=True)
         embed.add_field(
             name="Duration", value=_format_duration(info.duration), inline=True
@@ -499,6 +561,8 @@ class EmbedFactory:
         footer = f"Requested by {track.requester_display}"
         if track.is_fallback:
             footer += " (via yt-dlp)"
+        if info.artwork_url:
+            embed.set_thumbnail(url=info.artwork_url)
         embed.set_footer(text=footer)
         return embed
 
@@ -510,9 +574,11 @@ class EmbedFactory:
     ) -> nextcord.Embed:
         info = track.handle
         embed = nextcord.Embed(title="Preparing stream", color=self.color)
-        embed.description = f"[{info.title}]({info.uri or track.query})\n{message}"
+        embed.description = f"{_track_link(info.title, info.uri)}\n{message}"
         embed.add_field(name="Channel", value=info.author or "Unknown", inline=True)
         embed.add_field(name="Duration", value=_format_duration(info.duration), inline=True)
+        if info.artwork_url:
+            embed.set_thumbnail(url=info.artwork_url)
         embed.set_footer(text="Fallback" if track.is_fallback else "Lavalink")
         return embed
 

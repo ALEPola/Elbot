@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 from urllib.parse import urlsplit
@@ -60,6 +61,8 @@ class GuildState:
     player: Optional[object] = None
     last_channel_id: Optional[int] = None
     now_playing_message: Optional[nextcord.Message] = None
+    now_playing_view: Optional[nextcord.ui.View] = None
+    controller_task: Optional[asyncio.Task] = None
     # Set by on_track_exception to prevent on_track_end from advancing
     # while a fallback is being resolved (race condition fix).
     _fallback_pending: bool = False
@@ -69,11 +72,256 @@ class GuildState:
     last_ended: Optional[QueuedTrack] = None
     last_ended_at: float = 0.0
     loop_mode: str = "off"
+    autoplay: bool = False
+    autoplay_history: list[str] = field(default_factory=list)
     volume: int = 100
     idle_task: Optional[asyncio.Task] = None
     pending_end_task: Optional[asyncio.Task] = None
     suppressed_track_keys: set[str] = field(default_factory=set)
     playback_started_at: float = 0.0
+
+
+class MusicControls(nextcord.ui.View):
+    """Persistent controls attached to Elbot's now-playing message."""
+
+    def __init__(self, cog: "Music", guild_id: int) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.guild_id = guild_id
+
+        dashboard_url = os.getenv("ELBOT_MUSIC_DASHBOARD_URL", "").strip()
+        parsed = urlsplit(dashboard_url) if dashboard_url else None
+        if parsed and parsed.scheme in {"http", "https"} and parsed.netloc:
+            self.remove_item(self.queue_button)
+            self.add_item(
+                nextcord.ui.Button(
+                    label="Dashboard",
+                    emoji="📊",
+                    style=nextcord.ButtonStyle.link,
+                    url=dashboard_url,
+                    row=0,
+                )
+            )
+        self.sync_from_state()
+
+    async def on_error(
+        self,
+        error: Exception,
+        item: nextcord.ui.Item,
+        interaction: nextcord.Interaction,
+    ) -> None:
+        self.cog.logger.error(
+            "Music controller action failed",
+            extra={
+                "guild_id": self.guild_id,
+                "control": getattr(item, "custom_id", None),
+            },
+            exc_info=error,
+        )
+        try:
+            await safe_reply(
+                interaction,
+                "That control failed. Please try again.",
+                ephemeral=True,
+            )
+        except Exception:
+            pass
+
+    def sync_from_state(self) -> None:
+        state = self.cog._states.get(self.guild_id)
+        if state is None:
+            return
+        paused = bool(getattr(state.player, "paused", False))
+        self.pause_button.label = "Resume" if paused else "Pause"
+        self.autoplay_button.label = f"AutoPlay: {'On' if state.autoplay else 'Off'}"
+        self.autoplay_button.style = (
+            nextcord.ButtonStyle.success
+            if state.autoplay
+            else nextcord.ButtonStyle.secondary
+        )
+
+    async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
+        guild = interaction.guild
+        if guild is None or guild.id != self.guild_id:
+            await safe_reply(
+                interaction,
+                "These controls belong to another server.",
+                ephemeral=True,
+            )
+            return False
+        state = self.cog._states.get(self.guild_id)
+        if state is None or state.player is None or state.now_playing is None:
+            await safe_reply(
+                interaction,
+                "Nothing is playing right now.",
+                ephemeral=True,
+            )
+            return False
+        control_error = self.cog._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return False
+        return True
+
+    @nextcord.ui.button(
+        label="Pause",
+        emoji="⏯️",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:pause",
+        row=0,
+    )
+    async def pause_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = self.cog._states[self.guild_id]
+        if getattr(state.player, "paused", False):
+            await state.player.resume()
+            message = "Playback resumed."
+        else:
+            await state.player.pause()
+            message = "Playback paused."
+        await self.cog._refresh_now_playing(self.guild_id)
+        await safe_reply(interaction, message, ephemeral=True)
+
+    @nextcord.ui.button(
+        label="Skip",
+        emoji="⏭️",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:skip",
+        row=0,
+    )
+    async def skip_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = self.cog._states[self.guild_id]
+        _, message = await self.cog._skip_current(self.guild_id, state)
+        await safe_reply(interaction, message, ephemeral=True)
+
+    @nextcord.ui.button(
+        label="Stop",
+        emoji="⏹️",
+        style=nextcord.ButtonStyle.danger,
+        custom_id="elbot:music:stop",
+        row=0,
+    )
+    async def stop_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        await self.cog._stop(self.guild_id)
+        await safe_reply(
+            interaction,
+            "Playback stopped and queue cleared.",
+            ephemeral=True,
+        )
+
+    @nextcord.ui.button(
+        label="AutoPlay: Off",
+        emoji="🔄",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:autoplay",
+        row=0,
+    )
+    async def autoplay_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = self.cog._states[self.guild_id]
+        state.autoplay = not state.autoplay
+        await self.cog._refresh_now_playing(self.guild_id)
+        await safe_reply(
+            interaction,
+            f"AutoPlay turned **{'on' if state.autoplay else 'off'}**.",
+            ephemeral=True,
+        )
+
+    @nextcord.ui.button(
+        label="Queue",
+        emoji="📋",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:queue",
+        row=0,
+    )
+    async def queue_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        await self.cog._send_controller_queue(interaction, self.guild_id)
+
+    @nextcord.ui.button(
+        label="Love this",
+        emoji="👍",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:love",
+        row=1,
+    )
+    async def love_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = self.cog._states[self.guild_id]
+        likes, _ = self.cog._record_feedback(
+            state.now_playing, getattr(interaction.user, "id", 0), loved=True
+        )
+        await self.cog._refresh_now_playing(self.guild_id)
+        await safe_reply(
+            interaction,
+            f"Saved your vote · **{likes}** like{'s' if likes != 1 else ''}.",
+            ephemeral=True,
+        )
+
+    @nextcord.ui.button(
+        label="Not for me",
+        emoji="👎",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:dislike",
+        row=1,
+    )
+    async def dislike_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = self.cog._states[self.guild_id]
+        self.cog._record_feedback(
+            state.now_playing,
+            getattr(interaction.user, "id", 0),
+            loved=False,
+        )
+        _, message = await self.cog._skip_current(self.guild_id, state)
+        await safe_reply(interaction, message, ephemeral=True)
+
+    @nextcord.ui.button(
+        label="What's next?",
+        emoji="🔮",
+        style=nextcord.ButtonStyle.secondary,
+        custom_id="elbot:music:next",
+        row=1,
+    )
+    async def next_button(
+        self, _: nextcord.ui.Button, interaction: nextcord.Interaction
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = self.cog._states[self.guild_id]
+        next_track = state.queue.peek()
+        if next_track:
+            await safe_reply(
+                interaction,
+                embed=self.cog.embed_factory.queued(
+                    next_track,
+                    position=1,
+                    eta_ms=0,
+                ),
+                ephemeral=True,
+            )
+            return
+        message = (
+            "The queue is empty. AutoPlay will choose a related track."
+            if state.autoplay
+            else "The queue is empty."
+        )
+        await safe_reply(interaction, message, ephemeral=True)
 
 
 class Music(commands.Cog):
@@ -106,6 +354,7 @@ class Music(commands.Cog):
             metrics=self.metrics,
         )
         self._states: Dict[int, GuildState] = {}
+        self._track_feedback: Dict[str, Dict[str, set[int]]] = {}
 
     @property
     def backend(self) -> LavalinkAudioBackend:
@@ -171,6 +420,119 @@ class Music(commands.Cog):
         if guild_id not in self._states:
             self._states[guild_id] = GuildState()
         return self._states[guild_id]
+
+    @staticmethod
+    def _handle_identity(handle: object) -> str:
+        title = " ".join(str(getattr(handle, "title", "")).casefold().split())
+        author = " ".join(str(getattr(handle, "author", "")).casefold().split())
+        return f"{author}\0{title}"
+
+    @classmethod
+    def _track_identity(cls, track: QueuedTrack) -> str:
+        return cls._handle_identity(track.handle)
+
+    def _record_feedback(
+        self,
+        track: Optional[QueuedTrack],
+        user_id: int,
+        *,
+        loved: bool,
+    ) -> tuple[int, int]:
+        if track is None:
+            return 0, 0
+        feedback = self._track_feedback.setdefault(
+            self._track_identity(track),
+            {"likes": set(), "dislikes": set()},
+        )
+        selected = feedback["likes" if loved else "dislikes"]
+        opposite = feedback["dislikes" if loved else "likes"]
+        selected.add(user_id)
+        opposite.discard(user_id)
+        return len(feedback["likes"]), len(feedback["dislikes"])
+
+    def _feedback_counts(self, track: QueuedTrack) -> tuple[int, int]:
+        feedback = self._track_feedback.get(self._track_identity(track))
+        if not feedback:
+            return 0, 0
+        return len(feedback["likes"]), len(feedback["dislikes"])
+
+    def _now_playing_embed(self, guild_id: int) -> Optional[nextcord.Embed]:
+        state = self._states.get(guild_id)
+        if state is None or state.now_playing is None:
+            return None
+        player = state.player
+        position = int(getattr(player, "position", 0) or 0)
+        channel = getattr(player, "channel", None)
+        voice_channel = getattr(channel, "mention", None)
+        likes, _ = self._feedback_counts(state.now_playing)
+        return self.embed_factory.now_playing(
+            state.now_playing,
+            position=position,
+            queue_size=len(state.queue),
+            volume=state.volume,
+            loop_mode=state.loop_mode,
+            voice_channel=voice_channel,
+            paused=bool(getattr(player, "paused", False)),
+            autoplay=state.autoplay,
+            likes=likes,
+        )
+
+    async def _refresh_now_playing(self, guild_id: int) -> None:
+        state = self._states.get(guild_id)
+        if state is None or state.now_playing_message is None:
+            return
+        embed = self._now_playing_embed(guild_id)
+        if embed is None:
+            return
+        view = state.now_playing_view
+        if isinstance(view, MusicControls):
+            view.sync_from_state()
+        try:
+            await state.now_playing_message.edit(embed=embed, view=view)
+        except Exception as exc:
+            self.logger.debug(
+                "Could not refresh now-playing controller",
+                extra={"guild_id": guild_id, "error": self._safe_log_value(str(exc))},
+            )
+
+    def _start_controller_updates(self, guild_id: int, state: GuildState) -> None:
+        task = state.controller_task
+        if task is not None and not task.done():
+            task.cancel()
+        interval = self._env_float(
+            "ELBOT_NOW_PLAYING_UPDATE_INTERVAL", 15.0, minimum=5.0
+        )
+
+        async def update_progress() -> None:
+            try:
+                while self._states.get(guild_id) is state:
+                    await asyncio.sleep(interval)
+                    if state.now_playing is None or state.now_playing_message is None:
+                        return
+                    await self._refresh_now_playing(guild_id)
+            except asyncio.CancelledError:
+                return
+
+        state.controller_task = self.bot.loop.create_task(update_progress())
+
+    async def _send_controller_queue(
+        self,
+        interaction: nextcord.Interaction,
+        guild_id: int,
+    ) -> None:
+        state = self._states.get(guild_id)
+        if state is None:
+            await safe_reply(interaction, "The queue is empty.", ephemeral=True)
+            return
+        tracks = state.queue.snapshot()
+        embed = self.embed_factory.queue_page(
+            tracks[:8],
+            page=0,
+            per_page=8,
+            total=len(tracks),
+            now_playing=state.now_playing,
+        )
+        await safe_reply(interaction, embed=embed, ephemeral=True)
 
     def _resolve_mafic(self):
         global mafic
@@ -305,6 +667,58 @@ class Music(commands.Cog):
         for entry in state.queue.snapshot():
             eta += entry.handle.duration
         return eta
+
+    async def _enqueue_autoplay_track(
+        self,
+        guild_id: int,
+        state: GuildState,
+        previous: QueuedTrack,
+    ) -> bool:
+        """Find one related, recently-unplayed track when AutoPlay is enabled."""
+
+        query = f"{previous.handle.author} {previous.handle.title} mix"
+        try:
+            candidates = await asyncio.wait_for(
+                self.backend.resolve_tracks(query, prefer_search=True),
+                timeout=8.0,
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "AutoPlay could not load a related track",
+                extra={
+                    "guild_id": guild_id,
+                    "track_title": previous.handle.title,
+                    "error": self._safe_log_value(str(exc)),
+                },
+            )
+            return False
+
+        recent = set(state.autoplay_history)
+        selected = next(
+            (
+                candidate
+                for candidate in candidates
+                if self._handle_identity(candidate) not in recent
+            ),
+            None,
+        )
+        if selected is None:
+            return False
+        bot_user = self.bot.user
+        entry = QueuedTrack(
+            id=uuid.uuid4().hex,
+            handle=selected,
+            query=query,
+            channel_id=previous.channel_id,
+            requested_by=getattr(bot_user, "id", 0),
+            requester_display="AutoPlay",
+        )
+        state.queue.add(entry)
+        self.logger.info(
+            "AutoPlay queued a related track",
+            extra=self._track_log_context(guild_id, entry),
+        )
+        return True
 
     def _track_log_context(
         self,
@@ -656,6 +1070,10 @@ class Music(commands.Cog):
                 await player.play(next_track.handle.track, volume=state.volume)
                 state.player = player
                 state.playback_started_at = time.monotonic()
+                identity = self._track_identity(next_track)
+                if not state.autoplay_history or state.autoplay_history[-1] != identity:
+                    state.autoplay_history.append(identity)
+                    del state.autoplay_history[:-20]
                 context = self._track_log_context(guild_id, next_track)
                 self.logger.info(
                     "Playback started: %s (%s)",
@@ -745,19 +1163,34 @@ class Music(commands.Cog):
             if qm_id:
                 try:
                     queued_msg = await channel.fetch_message(qm_id)
-                    embed = self.embed_factory.now_playing(track, position=0, eta_ms=0)
-                    await queued_msg.edit(embed=embed)
+                    await self._clear_now_playing_message(state)
+                    view = MusicControls(self, guild_id)
+                    embed = self._now_playing_embed(guild_id)
+                    await queued_msg.edit(embed=embed, view=view)
                     state.now_playing_message = queued_msg
+                    state.now_playing_view = view
+                    self._start_controller_updates(guild_id, state)
                     return
                 except Exception:
                     # fetching/editing failed; fall back to sending a new message
                     pass
             await self._clear_now_playing_message(state)
-            embed = self.embed_factory.now_playing(track, position=0, eta_ms=0)
-            message = await channel.send(embed=embed)
+            view = MusicControls(self, guild_id)
+            embed = self._now_playing_embed(guild_id)
+            message = await channel.send(embed=embed, view=view)
             state.now_playing_message = message
+            state.now_playing_view = view
+            self._start_controller_updates(guild_id, state)
 
     async def _clear_now_playing_message(self, state: GuildState) -> None:
+        task = state.controller_task
+        state.controller_task = None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+        view = state.now_playing_view
+        state.now_playing_view = None
+        if view is not None:
+            view.stop()
         message = state.now_playing_message
         if not message:
             return
@@ -813,6 +1246,42 @@ class Music(commands.Cog):
                 await self._begin_playback(guild_id)
             await self._cleanup_idle(state)
 
+    async def _skip_current(
+        self,
+        guild_id: int,
+        state: GuildState,
+    ) -> tuple[bool, str]:
+        if state.player is None or state.now_playing is None:
+            return False, "Nothing is playing right now."
+        mafic_lib = self._resolve_mafic()
+        skipped_disconnected = False
+        current = state.now_playing
+        self._suppress_next_track_end(state, current.handle.track)
+        try:
+            await state.player.stop()
+        except mafic_lib.PlayerNotConnected:
+            skipped_disconnected = True
+            self.logger.warning(
+                "Skip requested while player was disconnected",
+                extra={
+                    "guild_id": guild_id,
+                    **self._player_connection_context(state.player),
+                },
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "Skip failed while stopping player",
+                extra={"guild_id": guild_id},
+                exc_info=exc,
+            )
+            return False, "Could not skip the current track right now."
+        state.now_playing = None
+        state.playback_started_at = 0.0
+        await self._ensure_playing(guild_id)
+        if skipped_disconnected:
+            return True, "Player was disconnected, advancing to the next track."
+        return True, "Skipped the current track."
+
     async def _stop(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         state.queue.clear()
@@ -856,6 +1325,8 @@ class Music(commands.Cog):
                 state.queue.add_next(entry.clone())
             elif state.loop_mode == "queue":
                 state.queue.add(entry.clone())
+            elif state.autoplay and len(state.queue) == 0:
+                await self._enqueue_autoplay_track(guild_id, state, entry)
         await self._ensure_playing(guild_id)
 
     def _schedule_track_end_grace(
@@ -966,6 +1437,7 @@ class Music(commands.Cog):
             except Exception:
                 queued_track.queued_message_id = None
             await self._ensure_playing(interaction.guild.id)
+            await self._refresh_now_playing(interaction.guild.id)
 
     @play.on_autocomplete("query")
     async def play_autocomplete(
@@ -1107,43 +1579,8 @@ class Music(commands.Cog):
         if control_error:
             await safe_reply(interaction, control_error, ephemeral=True)
             return
-        mafic_lib = self._resolve_mafic()
-        skipped_disconnected = False
-        current = state.now_playing
-        self._suppress_next_track_end(state, current.handle.track)
-        try:
-            await state.player.stop()
-        except mafic_lib.PlayerNotConnected:
-            skipped_disconnected = True
-            self.logger.warning(
-                "Skip requested while player was disconnected",
-                extra={
-                    "guild_id": guild.id,
-                    **self._player_connection_context(state.player),
-                },
-            )
-        except Exception as exc:
-            self.logger.warning(
-                "Skip failed while stopping player",
-                extra={"guild_id": guild.id},
-                exc_info=exc,
-            )
-            await safe_reply(
-                interaction,
-                "Could not skip the current track right now.",
-                ephemeral=True,
-            )
-            return
-        state.now_playing = None
-        if skipped_disconnected:
-            await safe_reply(
-                interaction,
-                "Player was disconnected, advancing to the next track.",
-                ephemeral=True,
-            )
-        else:
-            await safe_reply(interaction, "Skipped the current track.")
-        await self._ensure_playing(guild.id)
+        success, message = await self._skip_current(guild.id, state)
+        await safe_reply(interaction, message, ephemeral=not success)
 
     @nextcord.slash_command(name="pause", description="Pause the current track")
     async def pause(self, interaction: nextcord.Interaction) -> None:
@@ -1164,6 +1601,7 @@ class Music(commands.Cog):
             await safe_reply(interaction, "Playback is already paused.", ephemeral=True)
             return
         await state.player.pause()
+        await self._refresh_now_playing(guild.id)
         await safe_reply(interaction, "Playback paused.")
 
     @nextcord.slash_command(name="resume", description="Resume the paused track")
@@ -1185,6 +1623,7 @@ class Music(commands.Cog):
             await safe_reply(interaction, "Playback is not paused.", ephemeral=True)
             return
         await state.player.resume()
+        await self._refresh_now_playing(guild.id)
         await safe_reply(interaction, "Playback resumed.")
 
     @nextcord.slash_command(name="volume", description="Set playback volume")
@@ -1210,6 +1649,7 @@ class Music(commands.Cog):
             return
         state.volume = level
         await state.player.set_volume(level)
+        await self._refresh_now_playing(guild.id)
         await safe_reply(interaction, f"Volume set to **{level}%**.")
 
     @nextcord.slash_command(name="seek", description="Seek within the current track")
@@ -1242,6 +1682,7 @@ class Music(commands.Cog):
             await safe_reply(interaction, "That position is past the end of the track.", ephemeral=True)
             return
         await state.player.seek(position_ms)
+        await self._refresh_now_playing(guild.id)
         await safe_reply(interaction, f"Seeked to **{position}**.")
 
     @nextcord.slash_command(name="nowplaying", description="Show the current track")
@@ -1255,8 +1696,7 @@ class Music(commands.Cog):
         if not state.now_playing:
             await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
             return
-        position = int(getattr(state.player, "position", 0) or 0)
-        embed = self.embed_factory.now_playing(state.now_playing, position=position)
+        embed = self._now_playing_embed(guild.id)
         await safe_reply(interaction, embed=embed)
 
     @nextcord.slash_command(name="loop", description="Set the repeat mode")
@@ -1280,7 +1720,40 @@ class Music(commands.Cog):
             return
         state.loop_mode = mode
         labels = {"off": "off", "track": "current track", "queue": "whole queue"}
+        await self._refresh_now_playing(guild.id)
         await safe_reply(interaction, f"Repeat mode set to **{labels[mode]}**.")
+
+    @nextcord.slash_command(
+        name="autoplay",
+        description="Keep playing related tracks when the queue ends",
+    )
+    async def set_autoplay(
+        self,
+        interaction: nextcord.Interaction,
+        enabled: bool = nextcord.SlashOption(
+            description="Turn automatic related tracks on or off."
+        ),
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await safe_reply(
+                interaction,
+                "This command can only be used in guilds.",
+                ephemeral=True,
+            )
+            return
+        state = self._get_state(guild.id)
+        control_error = self._control_error(interaction, state)
+        if control_error:
+            await safe_reply(interaction, control_error, ephemeral=True)
+            return
+        state.autoplay = enabled
+        await self._refresh_now_playing(guild.id)
+        await safe_reply(
+            interaction,
+            f"AutoPlay turned **{'on' if enabled else 'off'}**.",
+        )
 
     @nextcord.slash_command(name="clear", description="Clear the queued tracks")
     async def clear(self, interaction: nextcord.Interaction) -> None:
@@ -1296,6 +1769,7 @@ class Music(commands.Cog):
             return
         count = len(state.queue)
         state.queue.clear()
+        await self._refresh_now_playing(guild.id)
         await safe_reply(interaction, f"Cleared **{count}** queued track(s).")
 
     @nextcord.slash_command(name="disconnect", description="Stop music and leave voice")
