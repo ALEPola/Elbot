@@ -1068,6 +1068,14 @@ class Music(commands.Cog):
                 player = latest_player
             try:
                 await player.play(next_track.handle.track, volume=state.volume)
+                # Lavalink v4 returns a canonical copy of the track it accepted.
+                # HTTP sources in particular can receive a different encoded ID
+                # from the one returned by the earlier load-tracks request.  End
+                # events contain that canonical copy, so retain it for reliable
+                # event matching and automatic queue advancement.
+                canonical_track = getattr(player, "current", None)
+                if canonical_track is not None:
+                    next_track.handle.track = canonical_track
                 state.player = player
                 state.playback_started_at = time.monotonic()
                 identity = self._track_identity(next_track)

@@ -1,6 +1,6 @@
 import logging
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -120,3 +120,32 @@ async def test_autoplay_skips_recent_tracks():
     assert queued is not None
     assert queued.handle.title == "Something New"
     assert queued.requester_display == "AutoPlay"
+
+
+@pytest.mark.asyncio
+async def test_playback_tracks_lavalinks_canonical_http_copy():
+    entry = make_entry("Direct Audio", "resolved-http-track")
+    canonical = DummyTrack("Direct Audio", "canonical-playing-track")
+    player = SimpleNamespace(
+        current=canonical,
+        play=AsyncMock(),
+    )
+    state = GuildState(player=player)
+    state.queue.add(entry)
+
+    music = Music.__new__(Music)
+    music._states = {7: state}
+    music.logger = logging.getLogger("test.music.controller")
+    music.metrics = SimpleNamespace(
+        incr_started=Mock(),
+        incr_failed=Mock(),
+    )
+    music._wait_for_player_connection = AsyncMock(return_value=True)
+    music._announce_now_playing = AsyncMock()
+    music._resolve_mafic = lambda: SimpleNamespace(PlayerNotConnected=RuntimeError)
+
+    await music._begin_playback(7)
+
+    assert state.now_playing is entry
+    assert state.now_playing.handle.track is canonical
+    assert music._track_key(state.now_playing.handle.track) == music._track_key(canonical)
