@@ -160,6 +160,29 @@ Portal highlights:
 - Validate Lavalink/yt-dlp health
 - Switch git branches
 
+### Running the panel as a non-root service
+
+The panel runs as the bot owner, never root. To let it toggle the update timer and
+control the bot service, install the administrator-managed units and a scoped sudoers
+rule (edit the user and paths in those files first):
+
+```bash
+sudo install -m 0644 infra/systemd/elbot-panel.service infra/systemd/elbot-update.service infra/systemd/elbot-update.timer /etc/systemd/system/
+sudo install -m 0440 infra/sudoers.d/elbot-panel /etc/sudoers.d/elbot-panel
+sudo visudo -c
+sudo systemctl daemon-reload
+sudo systemctl enable --now elbot-panel.service elbot-update.timer
+```
+
+Then set `ELBOT_PREINSTALLED_TIMER=1` and `ELBOT_SERVICE_SUDO=1` in `.env`. With those
+flags the panel uses noninteractive sudo for exactly the six `systemctl` commands in the
+sudoers rule and never writes units or runs `daemon-reload` itself. `elbot-update.service`
+must run as the bot owner, not root.
+
+Automatic Lavalink ports are resolved from the bot's fresh heartbeat by both panel
+diagnostics and CLI validation. A missing or stale heartbeat produces a clear error
+instead of connecting to port zero.
+
 ---
 
 ## Running Elbot
@@ -235,14 +258,3 @@ GitHub Actions workflows live in [`.github/workflows`](.github/workflows) and ru
 ## License
 
 [MIT](LICENSE)
-
-
-Panel services running without root privileges can use an administrator-installed
-`elbot-update.service` and `elbot-update.timer`. Set `ELBOT_PREINSTALLED_TIMER=1`
-to toggle that timer using noninteractive sudo, without writing units or running
-`daemon-reload` from the panel. Set `ELBOT_SERVICE_SUDO=1` for noninteractive sudo
-on bot service actions. Grant only the exact systemctl commands for those ELBOT
-units in sudoers; the update service must run as the bot owner, not root.
-Automatic Lavalink ports are resolved from the bot's fresh heartbeat by both panel
-diagnostics and CLI validation. A missing/stale heartbeat produces a clear error
-instead of connecting to port zero.

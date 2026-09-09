@@ -1,0 +1,5 @@
+# Scoped, noninteractive sudo for the Elbot panel and auto-update job.
+# Install with: sudo install -m 0440 infra/sudoers.d/elbot-panel /etc/sudoers.d/elbot-panel
+# then validate: sudo visudo -c
+# Replace "elbot" with the user that runs elbot-panel.service.
+elbot ALL=(root) NOPASSWD: /usr/bin/systemctl enable --now elbot-update.timer, /usr/bin/systemctl disable --now elbot-update.timer, /usr/bin/systemctl start elbot.service, /usr/bin/systemctl stop elbot.service, /usr/bin/systemctl restart elbot.service, /usr/bin/systemctl status elbot.service

@@ -1,0 +1,11 @@
+[Unit]
+Description=Elbot scheduled update
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=elbot                                # must be the bot owner, not root
+Group=elbot
+WorkingDirectory=/opt/elbot               # tell users to place repo here or edit this
+Environment=ELBOT_SERVICE_SUDO=1
+ExecStart=/opt/elbot/.venv/bin/python -m elbot.core.auto_update_job

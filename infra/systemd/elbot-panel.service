@@ -1,0 +1,19 @@
+[Unit]
+Description=Elbot management panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=elbot                                # bot owner; edit to match your install
+Group=elbot
+WorkingDirectory=/opt/elbot               # tell users to place repo here or edit this
+# The panel loads .env itself. Set ELBOT_PREINSTALLED_TIMER=1 and
+# ELBOT_SERVICE_SUDO=1 there so it toggles elbot-update.timer and controls
+# elbot.service through the scoped rules in infra/sudoers.d/elbot-panel.
+ExecStart=/opt/elbot/.venv/bin/gunicorn --workers 1 --threads 4 --timeout 660 --bind 127.0.0.1:8000 elbot.portal:app
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
