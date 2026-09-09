@@ -434,3 +434,30 @@ def test_diagnostics_missing_runtime_port(monkeypatch, tmp_path):
     monkeypatch.setattr(portal.Config, "BASE_DIR", tmp_path)
     with pytest.raises(ValueError, match="runtime port is unavailable"):
         portal._diagnostics_service({"LAVALINK_PORT": "0"})
+
+
+@pytest.mark.parametrize("version", ["4.0.0", '{"version": "4.0.0"}'])
+def test_diagnostics_accepts_text_or_json_version(monkeypatch, version):
+    import asyncio
+    class Response:
+        status = 200
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        def raise_for_status(self):
+            pass
+        async def text(self):
+            return version
+        async def json(self, **kwargs):
+            return {"plugins": [{"name": "youtube-plugin", "version": "1.18.2"}]}
+    class Session:
+        def get(self, url):
+            return Response()
+    service, _ = portal._diagnostics_service({"LAVALINK_PORT": "2333"})
+    async def get_session():
+        return Session()
+    monkeypatch.setattr(service, "_get_session", get_session)
+    report = asyncio.run(service.collect())
+    assert report.lavalink_version == "4.0.0"
+    assert report.youtube_plugin_version == "1.18.2"

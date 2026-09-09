@@ -770,8 +770,13 @@ class DiagnosticsService:
         session = await self._get_session()
         start_time = time.perf_counter()
         async with session.get(f"{self._base_url}/version") as resp:
-            if resp.status == 200:
-                version_data = await resp.json()
+            resp.raise_for_status()
+            version_text = (await resp.text()).strip()
+            try:
+                parsed_version = json.loads(version_text)
+            except ValueError:
+                parsed_version = version_text
+            version_data = parsed_version if isinstance(parsed_version, dict) else {"version": str(parsed_version)}
         latency_ms = (time.perf_counter() - start_time) * 1000
         for path in ("/v4/info", "/plugins"):
             async with session.get(f"{self._base_url}{path}") as resp:
