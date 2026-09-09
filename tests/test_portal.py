@@ -420,3 +420,17 @@ def test_cli_reads_panel_quoted_settings(tmp_path):
     password = "a'b" + chr(92) + "c"
     portal._write_env(path, {"LAVALINK_PASSWORD": password})
     assert ops.read_env(path)["LAVALINK_PASSWORD"] == password
+
+
+def test_diagnostics_resolves_live_port(monkeypatch, tmp_path):
+    from elbot.runtime_health import publish_health
+    monkeypatch.setattr(portal.Config, "BASE_DIR", tmp_path)
+    publish_health(tmp_path / "logs" / "health.json", discord_ready=True, music_ready=False, lavalink_port=2340)
+    service, meta = portal._diagnostics_service({"LAVALINK_PORT": "0"})
+    assert meta["port"] == 2340
+
+
+def test_diagnostics_missing_runtime_port(monkeypatch, tmp_path):
+    monkeypatch.setattr(portal.Config, "BASE_DIR", tmp_path)
+    with pytest.raises(ValueError, match="runtime port is unavailable"):
+        portal._diagnostics_service({"LAVALINK_PORT": "0"})

@@ -8,11 +8,12 @@ from pathlib import Path
 from .file_io import atomic_write_text
 
 
-def publish_health(path: Path, *, discord_ready: bool, music_ready: bool) -> None:
+def publish_health(path: Path, *, discord_ready: bool, music_ready: bool, lavalink_port: int | None = None) -> None:
     atomic_write_text(path, json.dumps({
         "updated_at": time.time(),
         "discord_ready": discord_ready,
         "music_ready": music_ready,
+        "lavalink_port": lavalink_port,
     }))
 
 

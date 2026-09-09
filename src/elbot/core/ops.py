@@ -346,7 +346,8 @@ def control_service(
     if action not in {"start", "stop", "restart"}:
         raise error_cls(f"Unsupported systemd action: {action}")
 
-    run(["systemctl", action, "elbot.service"])
+    prefix = ["sudo", "-n"] if os.environ.get("ELBOT_SERVICE_SUDO") == "1" else []
+    run([*prefix, "systemctl", action, "elbot.service"])
 
 
 # --- Docker helpers ---------------------------------------------------------

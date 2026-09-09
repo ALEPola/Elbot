@@ -235,3 +235,14 @@ GitHub Actions workflows live in [`.github/workflows`](.github/workflows) and ru
 ## License
 
 [MIT](LICENSE)
+
+
+Panel services running without root privileges can use an administrator-installed
+`elbot-update.service` and `elbot-update.timer`. Set `ELBOT_PREINSTALLED_TIMER=1`
+to toggle that timer using noninteractive sudo, without writing units or running
+`daemon-reload` from the panel. Set `ELBOT_SERVICE_SUDO=1` for noninteractive sudo
+on bot service actions. Grant only the exact systemctl commands for those ELBOT
+units in sudoers; the update service must run as the bot owner, not root.
+Automatic Lavalink ports are resolved from the bot's fresh heartbeat by both panel
+diagnostics and CLI validation. A missing/stale heartbeat produces a clear error
+instead of connecting to port zero.

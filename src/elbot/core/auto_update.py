@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import os
 import subprocess
 import textwrap
 from dataclasses import dataclass
@@ -145,6 +146,10 @@ def enable_systemd_timer(project_root: Path, python_executable: str, service_nam
     if not systemd_supported():
         raise RuntimeError("systemd is not available on this host")
 
+    if os.environ.get("ELBOT_PREINSTALLED_TIMER") == "1":
+        _run(["sudo", "-n", _systemctl(), "enable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
+        return
+
     service_path, timer_path = ensure_systemd_units(project_root, python_executable, service_name)
     systemctl = _systemctl()
     assert systemctl
@@ -164,6 +169,9 @@ def disable_systemd_timer() -> None:
     systemctl = _systemctl()
     assert systemctl
 
+    if os.environ.get("ELBOT_PREINSTALLED_TIMER") == "1":
+        _run(["sudo", "-n", systemctl, "disable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
+        return
     _run([systemctl, "disable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
     _run([systemctl, "stop", SYSTEMD_SERVICE_NAME], check=False, text=True)
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import json
+import time
 import os
 import socket
 import sys
@@ -145,9 +147,26 @@ def get_lavalink_connection_info() -> tuple[str, int, str, bool]:
                 port_raw,
                 port,
             )
+    port = resolve_lavalink_port(port)
     password = os.getenv("LAVALINK_PASSWORD") or Config.LAVALINK_PASSWORD
     secure = os.getenv("LAVALINK_SSL", "false").lower() == "true"
     return host, port, password, secure
+
+def resolve_lavalink_port(port: int) -> int:
+    """Resolve automatic port selection from the live bot's heartbeat."""
+    if 1 <= port <= 65535:
+        return port
+    if port == 0:
+        try:
+            data = json.loads((Path(Config.BASE_DIR) / "logs" / "health.json").read_text(encoding="utf-8"))
+            age = time.time() - float(data["updated_at"])
+            actual = data["lavalink_port"]
+            if 0 <= age <= 45 and isinstance(actual, int) and 1 <= actual <= 65535:
+                return actual
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    raise ValueError("Lavalink runtime port is unavailable. Start the bot and wait for a fresh heartbeat.")
+
 
 def log_cookie_status() -> None:
     """Log the configured YouTube cookie file, if any."""

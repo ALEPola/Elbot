@@ -33,7 +33,7 @@ from markupsafe import escape
 from .runtime_health import read_health
 from .file_io import atomic_write_text
 from .core import auto_update
-from .config import Config
+from .config import Config, resolve_lavalink_port
 from .music import CookieManager, DiagnosticsReport, DiagnosticsService, PlaybackMetrics
 
 ROOT_DIR = Config.BASE_DIR
@@ -216,9 +216,9 @@ def _diagnostics_service(
     secure_flag = str(env.get("LAVALINK_SSL", "false")).strip().lower()
     secure_enabled = secure_flag in {"1", "true", "yes"}
     try:
-        port = int(port_str)
+        port = resolve_lavalink_port(int(port_str))
     except (TypeError, ValueError) as exc:
-        raise ValueError("Invalid LAVALINK_PORT value; expected integer.") from exc
+        raise ValueError(str(exc)) from exc
 
     service = DiagnosticsService(
         host=host,
@@ -599,7 +599,8 @@ def service_action(action: str):
         return redirect(url_for("index"))
     try:
         result = subprocess.run(
-            ["systemctl", action, SERVICE_NAME],
+            [*(["sudo", "-n"] if os.environ.get("ELBOT_SERVICE_SUDO") == "1" else []),
+             "systemctl", action, SERVICE_NAME],
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,

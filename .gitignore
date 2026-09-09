@@ -213,3 +213,6 @@ tmp/
 *credentials*
 *secret*
 !.env.example
+
+# Bot runtime heartbeat
+logs/health.json

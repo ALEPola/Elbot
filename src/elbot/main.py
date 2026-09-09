@@ -19,7 +19,7 @@ os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 mafic = None
 from nextcord.ext import commands, tasks  # noqa: E402
 
-from .config import Config, log_cookie_status  # noqa: E402
+from .config import Config, log_cookie_status, resolve_lavalink_port  # noqa: E402
 from .utils import load_all_cogs, safe_reply  # noqa: E402
 from .runtime_health import publish_health  # noqa: E402
 
@@ -91,7 +91,10 @@ async def _fetch_lavalink_plugins(response_json: Any) -> str:
 
 async def _lavalink_health_check() -> tuple[bool, Optional[str]]:
     host = Config.LAVALINK_HOST
-    port = Config.LAVALINK_PORT
+    try:
+        port = resolve_lavalink_port(Config.LAVALINK_PORT)
+    except ValueError as exc:
+        return False, str(exc)
     password = Config.LAVALINK_PASSWORD
     secure = os.getenv("LAVALINK_SSL", "false").lower() == "true"
     scheme = "https" if secure else "http"
@@ -270,6 +273,7 @@ def main() -> None:
             publish_health(
                 health_path,
                 discord_ready=not disconnected and bot.is_ready(),
+                lavalink_port=Config.LAVALINK_PORT,
                 music_ready=not disconnected and any(node.available for node in nodes.values()),
             )
         except OSError:

@@ -101,3 +101,17 @@ def test_current_status_cron(monkeypatch) -> None:
     result = auto_update.current_status()
     assert result.mode == "cron"
     assert result.cron_enabled is True
+
+
+def test_preinstalled_timer_never_links_or_reloads(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setenv("ELBOT_PREINSTALLED_TIMER", "1")
+    monkeypatch.setattr(auto_update, "_systemctl", lambda: "/usr/bin/systemctl")
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    auto_update.enable_systemd_timer(tmp_path, "/usr/bin/python3", "elbot.service")
+    auto_update.disable_systemd_timer()
+    assert calls == [
+        ["sudo", "-n", "/usr/bin/systemctl", "enable", "--now", "elbot-update.timer"],
+        ["sudo", "-n", "/usr/bin/systemctl", "disable", "--now", "elbot-update.timer"],
+    ]
+    assert not (tmp_path / "infra").exists()

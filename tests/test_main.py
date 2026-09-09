@@ -116,3 +116,20 @@ def test_command_error_logs_original_exception_and_reference(caplog):
     assert "command=play" in caplog.text
     assert "ValueError: test failure" in caplog.text
     assert caplog.records[-1].exc_info[0] is ValueError
+
+
+def test_validation_resolves_live_port(monkeypatch, tmp_path):
+    from elbot.runtime_health import publish_health
+    monkeypatch.setattr(config_module.Config, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(main.Config, "LAVALINK_PORT", 0)
+    publish_health(tmp_path / "logs" / "health.json", discord_ready=True, music_ready=False, lavalink_port=2341)
+    assert main.resolve_lavalink_port(0) == 2341
+
+
+def test_validation_rejects_stale_port(monkeypatch, tmp_path):
+    import json
+    monkeypatch.setattr(config_module.Config, "BASE_DIR", tmp_path)
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs" / "health.json").write_text(json.dumps({"updated_at": 1, "lavalink_port": 2333}))
+    with pytest.raises(ValueError, match="runtime port"):
+        main.resolve_lavalink_port(0)
