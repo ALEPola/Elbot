@@ -1,23 +1,29 @@
 ﻿{% extends "base.html" %}
 {% block title %}Elbot Portal{% endblock %}
 {% block content %}
+<h2>Bot health: {{ health.status }}</h2>
+<p>Discord: {{ health.discord }} · Music: {{ health.music }}.
+{% if health.age_seconds is not none %}Last heartbeat {{ health.age_seconds }} seconds ago.{% endif %}
+Refresh this page for the latest status.</p>
 <h2>Operations</h2>
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     <ul class="flash">
     {% for category, message in messages %}
-      <li class="{{ category }}">{{ message|safe }}</li>
+      <li class="{{ category }}">{{ message }}</li>
     {% endfor %}
     </ul>
   {% endif %}
 {% endwith %}
 <div class="grid">
   <form method="post" action="{{ url_for('update') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Update Bot</h3>
     <p>Runs <code>elbotctl update</code> to pull the latest code and dependencies.</p>
     <button type="submit">Run Update</button>
   </form>
   <form method="post" action="{{ url_for('toggle_auto_update') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Auto Update Scheduler</h3>
     {% if auto_update_status.mode == 'systemd' %}
       {% set details = auto_update_status.details %}
@@ -47,24 +53,29 @@
     {% endif %}
   </form>
   <form method="post" action="{{ url_for('service_action', action='restart') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Restart Service</h3>
     <p>Requires the systemd service to be installed. You may need sudo.</p>
     <button type="submit">Restart</button>
   </form>
   <form method="post" action="{{ url_for('service_action', action='status') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Service Status</h3>
     <button type="submit">Check Status</button>
   </form>
   <form method="post" action="{{ url_for('validate_lavalink') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Validate Lavalink</h3>
     <p>Runs <code>elbotctl check</code> to confirm Lavalink connectivity.</p>
     <button type="submit">Run Validation</button>
   </form>
   <form method="post" action="{{ url_for('service_action', action='start') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Start Service</h3>
     <button type="submit">Start</button>
   </form>
   <form method="post" action="{{ url_for('service_action', action='stop') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h3>Stop Service</h3>
     <button type="submit">Stop</button>
   </form>

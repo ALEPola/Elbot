@@ -1,3 +1,7 @@
+import base64
+import pytest
+from werkzeug.security import generate_password_hash
+
 import importlib
 import subprocess
 import tempfile
@@ -9,7 +13,12 @@ from elbot import config as elbot_config
 from elbot import portal
 
 
+TEST_HASH = generate_password_hash("test-password", method="pbkdf2:sha256:1000")
+
+
 def make_client(monkeypatch, *, check_output=None, run=None, root_dir=None, env_file=None):
+    monkeypatch.setenv("ELBOT_PORTAL_PASSWORD_HASH", TEST_HASH)
+    monkeypatch.setenv("ELBOT_PORTAL_USERNAME", "admin")
     importlib.reload(portal)
     if root_dir is None:
         root_dir = Path(tempfile.mkdtemp(prefix="portal-root-"))
@@ -39,7 +48,12 @@ def make_client(monkeypatch, *, check_output=None, run=None, root_dir=None, env_
     if run is not None:
         monkeypatch.setattr(subprocess, "run", run)
     portal.app.config["TESTING"] = True
-    return portal.app.test_client()
+    client = portal.app.test_client()
+    client.environ_base["HTTP_AUTHORIZATION"] = "Basic " + base64.b64encode(b"admin:test-password").decode()
+    with client.session_transaction() as session:
+        session["csrf_token"] = "test-csrf"
+    client.environ_base["HTTP_X_CSRF_TOKEN"] = "test-csrf"
+    return client
 
 
 def test_portal_secret_uses_env(monkeypatch):
@@ -251,7 +265,158 @@ def test_settings_preserves_secrets_when_blank(monkeypatch, tmp_path):
     )
     assert resp.status_code == 302
 
-    updated = env_path.read_text(encoding="utf-8")
-    assert "DISCORD_TOKEN=secret" in updated
-    assert "OPENAI_API_KEY=sk-test" in updated
-    assert "LAVALINK_PASSWORD=pw" in updated
+    updated = portal._read_env(env_path)
+    assert updated["DISCORD_TOKEN"] == "secret"
+    assert updated["OPENAI_API_KEY"] == "sk-test"
+    assert updated["LAVALINK_PASSWORD"] == "pw"
+
+
+@pytest.mark.parametrize("path", ["/", "/logs", "/settings", "/api/health", "/setup", "/static/style.css"])
+def test_auth_required(monkeypatch, path):
+    client = make_client(monkeypatch)
+    client.environ_base.pop("HTTP_AUTHORIZATION")
+    assert client.get(path).status_code == 401
+
+
+def test_auth_disabled_without_hash(monkeypatch):
+    client = make_client(monkeypatch)
+    monkeypatch.delenv("ELBOT_PORTAL_PASSWORD_HASH")
+    assert client.get("/").status_code == 503
+
+
+def test_wrong_credentials(monkeypatch):
+    client = make_client(monkeypatch)
+    assert client.get("/", headers={"Authorization": "Basic " + base64.b64encode(b"admin:wrong").decode()}).status_code == 401
+
+
+@pytest.mark.parametrize("path", ["/setup", "/settings", "/restart", "/update", "/auto-update", "/branch", "/logs/summary", "/service/stop", "/service/validate-lavalink"])
+def test_csrf_blocks_mutations(monkeypatch, path):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Unauthenticated mutation reached a subprocess")
+    client = make_client(monkeypatch, run=unexpected)
+    client.environ_base.pop("HTTP_X_CSRF_TOKEN")
+    assert client.post(path).status_code == 403
+    assert client.post(path, data={"csrf_token": "wrong"}).status_code == 403
+
+
+def test_forms_and_csrf_submission(monkeypatch):
+    client = make_client(monkeypatch, run=lambda *a, **k: subprocess.CompletedProcess(a[0], 0))
+    client.environ_base.pop("HTTP_X_CSRF_TOKEN")
+    body = client.get("/").get_data(as_text=True)
+    assert body.count('name="csrf_token"') == body.count("<form")
+    assert client.post("/restart", data={"csrf_token": "test-csrf"}).status_code == 302
+
+
+def test_timeout_response(monkeypatch):
+    def timeout(*args, **kwargs):
+        assert kwargs["timeout"] == 60
+        raise subprocess.TimeoutExpired(args[0], 60)
+    client = make_client(monkeypatch, run=timeout)
+    response = client.post("/restart")
+    assert response.status_code == 504
+    assert "timed out" in response.json["error"]
+
+
+def test_background_update_failure_skips_restart(monkeypatch, caplog):
+    calls = []
+    def failed(*args, **kwargs):
+        calls.append(args[0])
+        raise subprocess.CalledProcessError(1, args[0], stderr="update failed")
+    monkeypatch.setattr(subprocess, "run", failed)
+    portal._auto_update_once()
+    assert len(calls) == 1
+    assert "restart skipped" in caplog.text
+
+
+def test_background_update_success_restarts(monkeypatch):
+    calls = []
+    def success(args):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0)
+    monkeypatch.setattr(portal, "_run_elbotctl", success)
+    portal._auto_update_once()
+    assert calls == [["update"], ["service", "restart"]]
+
+
+def test_background_timeout_skips_restart(monkeypatch):
+    calls = []
+    def timeout(*args, **kwargs):
+        calls.append(args[0])
+        assert kwargs["timeout"] == 600
+        raise subprocess.TimeoutExpired(args[0], 600)
+    monkeypatch.setattr(subprocess, "run", timeout)
+    portal._auto_update_once()
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("host", [None, "0.0.0.0"])
+def test_bind_address(monkeypatch, host):
+    monkeypatch.setattr(portal, "AUTO_UPDATE", False)
+    monkeypatch.delenv("ELBOT_PORTAL_HOST", raising=False)
+    if host:
+        monkeypatch.setenv("ELBOT_PORTAL_HOST", host)
+    calls = []
+    monkeypatch.setattr(portal.app, "run", lambda **kwargs: calls.append(kwargs))
+    portal.main()
+    assert calls[0]["host"] == (host or "127.0.0.1")
+
+
+def test_config_failed_replace_preserves_original(monkeypatch, tmp_path):
+    from elbot import file_io
+    path = tmp_path / ".env"
+    original = "# comment\nDISCORD_TOKEN=old\n"
+    path.write_text(original)
+    def failure(*args):
+        raise OSError("disk failure")
+    monkeypatch.setattr(file_io.os, "replace", failure)
+    with pytest.raises(OSError):
+        portal._write_env(path, {"DISCORD_TOKEN": "new"})
+    assert path.read_text() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_config_round_trip_and_comments(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("# retain me\nUNRELATED=value\n")
+    value = "spaces # quotes ' and backslash " + chr(92)
+    portal._write_env(path, {"DISCORD_TOKEN": value})
+    assert portal._read_env(path)["DISCORD_TOKEN"] == value
+    assert "# retain me" in path.read_text()
+    assert portal._read_env(path)["UNRELATED"] == "value"
+
+
+@pytest.mark.parametrize("values", [{"DISCORD_TOKEN": "x\nINJECTED=yes"}, {"LAVALINK_PORT": "99999"}])
+def test_invalid_config_preserves_file(tmp_path, values):
+    path = tmp_path / ".env"
+    path.write_text("DISCORD_TOKEN=original\n")
+    with pytest.raises(ValueError):
+        portal._write_env(path, values)
+    assert path.read_text() == "DISCORD_TOKEN=original\n"
+
+
+def test_health_endpoint(monkeypatch, tmp_path):
+    from elbot.runtime_health import publish_health
+    client = make_client(monkeypatch, root_dir=tmp_path)
+    assert client.get("/api/health").status_code == 503
+    publish_health(tmp_path / "logs" / "health.json", discord_ready=True, music_ready=True)
+    assert client.get("/api/health").json["status"] == "ready"
+    assert client.get("/api/health").status_code == 200
+
+
+def test_browser_receives_usable_csrf_token(monkeypatch):
+    client = make_client(monkeypatch, run=lambda *a, **k: subprocess.CompletedProcess(a[0], 0))
+    client.environ_base.pop("HTTP_X_CSRF_TOKEN")
+    with client.session_transaction() as session:
+        session.clear()
+    assert client.get("/").status_code == 200
+    with client.session_transaction() as session:
+        token = session["csrf_token"]
+    assert client.post("/restart", data={"csrf_token": token}).status_code == 302
+
+
+def test_cli_reads_panel_quoted_settings(tmp_path):
+    from elbot.core import ops
+    path = tmp_path / ".env"
+    password = "a'b" + chr(92) + "c"
+    portal._write_env(path, {"LAVALINK_PASSWORD": password})
+    assert ops.read_env(path)["LAVALINK_PASSWORD"] == password

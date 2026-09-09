@@ -24,6 +24,7 @@ def _run_cli(args: list[str]) -> subprocess.CompletedProcess:
         text=True,
         capture_output=True,
         env=env,
+        timeout=600 if args[0] == "update" else 60,
     )
 
 
@@ -49,7 +50,7 @@ def _notify_failure(summary: str, details: str) -> None:
         _append_log("Failed to dispatch webhook notification.")
 
 
-def main() -> int:
+def _perform_update() -> int:
     update = _run_cli(["update"])
     if update.returncode == 0:
         _append_log("Update succeeded." if not update.stdout else f"Update succeeded: {update.stdout.strip()}")
@@ -66,6 +67,16 @@ def main() -> int:
     _append_log(f"Update failed: {detail.strip()}")
     _notify_failure("update run", detail)
     return update.returncode or 1
+
+
+def main() -> int:
+    try:
+        return _perform_update()
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        detail = f"Auto-update operation failed: {type(exc).__name__}"
+        _append_log(detail)
+        _notify_failure("execution", detail)
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised via systemd/cron

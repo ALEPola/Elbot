@@ -3,6 +3,7 @@
 {% block content %}
 <h2>Switch Branch</h2>
 <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <select name="branch">
     {{ options|safe }}
   </select>

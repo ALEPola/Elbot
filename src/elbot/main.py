@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import sys
+import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
@@ -16,10 +17,11 @@ os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
 # mafic is optional at import time; import lazily where needed to avoid
 # breaking test collection when the package isn't installed.
 mafic = None
-from nextcord.ext import commands  # noqa: E402
+from nextcord.ext import commands, tasks  # noqa: E402
 
 from .config import Config, log_cookie_status  # noqa: E402
 from .utils import load_all_cogs, safe_reply  # noqa: E402
+from .runtime_health import publish_health  # noqa: E402
 
 
 def _setup_logging() -> logging.Logger:
@@ -48,6 +50,16 @@ def _setup_logging() -> logging.Logger:
 
 
 logger = _setup_logging()
+
+
+def _log_command_error(error: Exception, command: str) -> str:
+    error_id = uuid.uuid4().hex[:12]
+    original = getattr(error, "original", error)
+    logger.error(
+        "Command failed error_id=%s command=%s", error_id, command,
+        exc_info=(type(original), original, original.__traceback__),
+    )
+    return error_id
 
 
 async def _fetch_lavalink_plugins(response_json: Any) -> str:
@@ -233,26 +245,54 @@ def main() -> None:
                 f"⏳ Command on cooldown. Try in {round(error.retry_after, 2)}s."
             )
         else:
-            logger.exception("command error")
-            await ctx.send("❌ An unexpected error occurred. Contact the admin.")
+            error_id = _log_command_error(error, str(ctx.command))
+            await ctx.send(f"❌ An unexpected error occurred. Reference: {error_id}.")
 
     @bot.listen()
     async def on_application_command_error(
         interaction: nextcord.Interaction, error: Exception
     ) -> None:
-        logger.exception(
-            "slash command error", extra={"command": getattr(interaction, "data", {})}
-        )
+        command_name = (getattr(interaction, "data", None) or {}).get("name", "unknown")
+        error_id = _log_command_error(error, command_name)
         await safe_reply(
             interaction,
-            "⚠️ Something went wrong while running that command. The team has been notified.",
+            f"⚠️ Something went wrong while running that command. Reference: {error_id}.",
             ephemeral=True,
         )
+
+    health_path = Path(Config.BASE_DIR) / "logs" / "health.json"
+
+    def write_heartbeat(disconnected: bool = False) -> None:
+        music_module = sys.modules.get("mafic")
+        pool = getattr(music_module, "NodePool", None)
+        nodes = getattr(pool, "label_to_node", {})
+        try:
+            publish_health(
+                health_path,
+                discord_ready=not disconnected and bot.is_ready(),
+                music_ready=not disconnected and any(node.available for node in nodes.values()),
+            )
+        except OSError:
+            logger.exception("Could not write bot heartbeat")
+
+    @tasks.loop(seconds=15)
+    async def heartbeat():
+        write_heartbeat()
+
+    @bot.listen()
+    async def on_connect():
+        if not heartbeat.is_running():
+            heartbeat.start()
+
+    @bot.listen()
+    async def on_disconnect():
+        write_heartbeat(disconnected=True)
 
     @bot.event
     async def on_ready() -> None:
         if bot.user is None:  # pragma: no cover - defensive
             return
+        write_heartbeat()
         logger.info("bot ready user=%s id=%s", bot.user, bot.user.id)
         if not getattr(bot, "_app_commands_synced", False):
             try:
@@ -303,11 +343,15 @@ def main() -> None:
             )
         await safe_reply(inter, status, ephemeral=True)
 
+    write_heartbeat(disconnected=True)
     try:
         bot.run(Config.DISCORD_TOKEN)
     except Exception:  # pragma: no cover - network/auth failures
         logger.exception("bot failed to start")
         raise
+    finally:
+        heartbeat.cancel()
+        write_heartbeat(disconnected=True)
 
 
 if __name__ == "__main__":

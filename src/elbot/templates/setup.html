@@ -12,6 +12,7 @@
   {% endif %}
 {% endwith %}
 <form method="post" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>Discord Bot Token
     <input type="password" name="discord_token" value="{{ values.get('DISCORD_TOKEN', '') }}" autocomplete="new-password" required>
   </label>

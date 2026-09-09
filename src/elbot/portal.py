@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import secrets
+import re
 import subprocess
 import sys
 import threading
@@ -16,6 +17,8 @@ from typing import Any, Dict, Iterable, Tuple
 
 from flask import (
     Flask,
+    has_request_context,
+    session,
     flash,
     jsonify,
     redirect,
@@ -24,6 +27,11 @@ from flask import (
     url_for,
 )
 
+from werkzeug.security import check_password_hash
+from markupsafe import escape
+
+from .runtime_health import read_health
+from .file_io import atomic_write_text
 from .core import auto_update
 from .config import Config
 from .music import CookieManager, DiagnosticsReport, DiagnosticsService, PlaybackMetrics
@@ -68,28 +76,110 @@ def _portal_secret_key() -> str:
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = _portal_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    SESSION_COOKIE_SECURE=os.environ.get("ELBOT_PORTAL_HTTPS", "0") == "1",
+    MAX_CONTENT_LENGTH=64 * 1024,
+)
+
+
+def csrf_token() -> str:
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return session["csrf_token"]
+
+
+app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.before_request
+def protect_portal():
+    password_hash = os.environ.get("ELBOT_PORTAL_PASSWORD_HASH", "").strip()
+    if not password_hash:
+        return "Panel access is disabled. Configure ELBOT_PORTAL_PASSWORD_HASH on the host.", 503
+    credentials = request.authorization
+    username = os.environ.get("ELBOT_PORTAL_USERNAME", "admin")
+    try:
+        authenticated = (
+            credentials and credentials.type == "basic"
+            and secrets.compare_digest((credentials.username or "").encode(), username.encode())
+            and check_password_hash(password_hash, credentials.password or "")
+        )
+    except ValueError:
+        logger.error("Invalid panel password hash configuration")
+        return "Panel credentials are misconfigured. Check the host configuration.", 503
+    if not authenticated:
+        return "Authentication required.", 401, {"WWW-Authenticate": 'Basic realm="ELBOT", charset="UTF-8"'}
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token", "")
+        expected = session.get("csrf_token", "")
+        if not expected or not secrets.compare_digest(supplied.encode(), expected.encode()):
+            return jsonify(error="Invalid or missing CSRF token. Reload the page and try again."), 403
+
+
+@app.after_request
+def security_headers(response):
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
+@app.errorhandler(subprocess.TimeoutExpired)
+def command_timeout(error):
+    logger.warning("Panel operation timed out after %ss", error.timeout)
+    return jsonify(error="Operation timed out. Check service status before retrying."), 504
+
+
+@app.errorhandler(subprocess.CalledProcessError)
+def command_failed(error):
+    logger.error("Panel operation failed with exit code %s", error.returncode)
+    return jsonify(error="Operation failed. Check the service logs for details."), 502
+
+
+def _report_error(message: str) -> None:
+    logger.error("%s", message)
+    if has_request_context():
+        flash(message, "error")
+
 
 _DIAGNOSTICS_COOKIES = CookieManager()
 _DIAGNOSTICS_METRICS = PlaybackMetrics()
 
 
 def _read_env(path: Path) -> Dict[str, str]:
-    data: Dict[str, str] = {}
+    from dotenv import dotenv_values
+
     if not path.exists():
-        return data
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line or line.strip().startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        data[key.strip()] = value.strip()
-    return data
+        return {}
+    return {key: value or "" for key, value in dotenv_values(path, interpolate=False).items()}
 
 
 def _write_env(path: Path, values: Dict[str, str]) -> None:
-    data = _read_env(path)
-    data.update(values)
-    lines = [f"{k}={v}" for k, v in sorted(data.items())]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for key, value in values.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or any(c in value for c in "\r\n\0"):
+            raise ValueError("Configuration values must be single-line text.")
+    if "LAVALINK_PORT" in values:
+        port = values["LAVALINK_PORT"]
+        if not port.isdigit() or not 0 <= int(port) <= 65535:
+            raise ValueError("LAVALINK_PORT must be between 0 and 65535.")
+    # Preserve comments and unrelated settings, and quote literal values for dotenv.
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    remaining = dict(values)
+    output = []
+    for line in lines:
+        key = line.partition("=")[0].strip().removeprefix("export ").strip()
+        if key in values:
+            if key in remaining:
+                value = remaining.pop(key).replace("\\", "\\\\").replace("'", "\\'")
+                output.append(f"{key}='{value}'")
+        else:
+            output.append(line)
+    for key, value in remaining.items():
+        value = value.replace("\\", "\\\\").replace("'", "\\'")
+        output.append(f"{key}='{value}'")
+    atomic_write_text(path, "\n".join(output) + "\n")
 
 
 def _env_values() -> Dict[str, str]:
@@ -192,13 +282,17 @@ def _run_elbotctl(args: Iterable[str]) -> subprocess.CompletedProcess | None:
     env.setdefault("PYTHONPATH", str(ROOT_DIR / "src"))
     try:
         return subprocess.run(
-            cmd, cwd=ROOT_DIR, text=True, capture_output=True, env=env, check=True
+            cmd, cwd=ROOT_DIR, text=True, capture_output=True, env=env, check=True,
+            timeout=600 if any(arg in {"update", "install"} for arg in cmd[3:]) else 60
         )
+    except subprocess.TimeoutExpired:
+        _report_error("Operation timed out. Check service status before retrying.")
+        return None
     except subprocess.CalledProcessError as exc:
-        flash(exc.stderr or exc.stdout or str(exc), "error")
+        _report_error(exc.stderr or exc.stdout or str(exc))
         return exc
     except FileNotFoundError:
-        flash("Python interpreter not found while invoking elbotctl.", "error")
+        _report_error("Python interpreter not found while invoking elbotctl.")
         return None
 
 
@@ -212,11 +306,20 @@ def _read_tail(path: Path, max_lines: int = 200) -> str:
     return "".join(path.read_text(encoding="utf-8").splitlines(True)[-max_lines:])
 
 
+def _scheduler_status():
+    try:
+        return auto_update.current_status()
+    except (subprocess.TimeoutExpired, OSError):
+        return auto_update.AutoUpdateStatus(
+            mode="systemd", details=auto_update.SystemdTimerStatus(supported=True, error="Scheduler status unavailable.")
+        )
+
+
 @app.context_processor
 def inject_flags():
     return {
         "configured": _is_configured(),
-        "auto_update_status": auto_update.current_status(),
+        "auto_update_status": _scheduler_status(),
         "legacy_auto_update": AUTO_UPDATE,
         "auto_update": AUTO_UPDATE,
         "auto_lavalink_enabled": _auto_lavalink_enabled(),
@@ -227,7 +330,7 @@ def inject_flags():
 def index():
     if not _is_configured() and not app.config.get("TESTING"):
         return redirect(url_for("setup"))
-    return render_template("index.html")
+    return render_template("index.html", health=read_health(ROOT_DIR / "logs" / "health.json"))
 
 
 @app.route("/setup", methods=["GET", "POST"])
@@ -261,7 +364,11 @@ def setup():
                         "LAVALINK_PASSWORD": lavalink_password,
                     }
                 )
-            _write_env(ENV_FILE, updates)
+            try:
+                _write_env(ENV_FILE, updates)
+            except (ValueError, OSError):
+                flash("Configuration could not be saved. Check values and file permissions.", "error")
+                return render_template("setup.html", values=values), 400
             flash("Configuration saved. Installing dependencies...", "info")
             result = _run_elbotctl(["install", "--non-interactive", "--no-service"])
             if result and getattr(result, "returncode", 0) == 0:
@@ -285,7 +392,11 @@ def settings():
                 if key in SENSITIVE_KEYS and not value:
                     value = current_values.get(key, "")
                 updates[key] = value
-        _write_env(ENV_FILE, updates)
+        try:
+            _write_env(ENV_FILE, updates)
+        except (ValueError, OSError):
+            flash("Configuration could not be saved. Check values and file permissions.", "error")
+            return render_template("settings.html", values=values), 400
         flash("Settings updated.", "success")
         return redirect(url_for("settings"))
     return render_template("settings.html", values=values)
@@ -298,6 +409,12 @@ def view_logs():
     if LOG_FILE.exists():
         logs = "".join(LOG_FILE.read_text(encoding="utf-8").splitlines(True)[-200:])
     return render_template("logs.html", logs=logs, ai_enabled=bool(_openai_api_key()))
+
+
+@app.route("/api/health")
+def api_health():
+    health = read_health(ROOT_DIR / "logs" / "health.json")
+    return jsonify(health), 200 if health["status"] == "ready" else 503
 
 
 @app.route("/api/ytcheck")
@@ -381,6 +498,7 @@ def update_status():
             text=True,
             capture_output=True,
             check=False,
+            timeout=30,
         )
     except FileNotFoundError:
         git_status = ""
@@ -401,6 +519,7 @@ def update_status():
             capture_output=True,
             env=env,
             check=False,
+            timeout=30,
         )
         elbotctl_output = (result.stdout or result.stderr or "").strip()
         if result.returncode != 0 and not elbotctl_output:
@@ -437,7 +556,7 @@ def update():
 @app.route("/auto-update", methods=["POST"])
 def toggle_auto_update():
     action = request.form.get("action", "").lower()
-    next_url = request.form.get("next") or url_for("index")
+    next_url = url_for("index")
     try:
         if action == "enable":
             if auto_update.systemd_supported():
@@ -460,7 +579,7 @@ def toggle_auto_update():
         else:
             flash("Unsupported auto-update action.", "error")
     except subprocess.CalledProcessError as exc:
-        flash(exc.stderr or exc.stdout or str(exc), "error")
+        _report_error(exc.stderr or exc.stdout or str(exc))
     except RuntimeError as exc:
         flash(str(exc), "error")
     except PermissionError:
@@ -485,6 +604,7 @@ def service_action(action: str):
             text=True,
             capture_output=True,
             check=True,
+            timeout=60,
         )
         flash(result.stdout or f"Service {action} executed.", "success")
     except FileNotFoundError:
@@ -505,7 +625,7 @@ def validate_lavalink():
     output = (result.stdout or "").strip()
     if getattr(result, "returncode", 1) == 0:
         if output:
-            flash(f"Lavalink validation succeeded:<pre>{output}</pre>", "success")
+            flash(f"Lavalink validation succeeded: {output}", "success")
         else:
             flash("Lavalink validation succeeded.", "success")
     else:
@@ -520,7 +640,7 @@ def branch():
         known = _run("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads"])
         known_branches = known.splitlines() if known else []
         if branch_name and branch_name in known_branches:
-            subprocess.run(["git", "checkout", branch_name], cwd=ROOT_DIR, check=False)
+            subprocess.run(["git", "checkout", branch_name], cwd=ROOT_DIR, check=True, timeout=30)
         return redirect(url_for("branch"))
 
     current = _run("git", ["rev-parse", "--abbrev-ref", "HEAD"])
@@ -529,7 +649,7 @@ def branch():
     if branches:
         for b in branches.splitlines():
             selected = "selected" if b == current else ""
-            options += f'<option value="{b}" {selected}>{b}</option>'
+            options += f'<option value="{escape(b)}" {selected}>{escape(b)}</option>'
     return render_template(
         "branch.html",
         options=options
@@ -539,17 +659,28 @@ def branch():
 
 def _run(command: str, args: Iterable[str]) -> str:
     try:
-        output = subprocess.check_output([command, *args], cwd=ROOT_DIR, text=True)
+        output = subprocess.check_output([command, *args], cwd=ROOT_DIR, text=True, timeout=30)
         return output.strip()
-    except Exception:
+    except (OSError, subprocess.CalledProcessError):
         return ""
+
+
+def _auto_update_once() -> None:
+    result = _run_elbotctl(["update"])
+    if result is None or result.returncode != 0:
+        logger.error("Automatic update failed; restart skipped.")
+        return
+    result = _run_elbotctl(["service", "restart"])
+    if result is None or result.returncode != 0:
+        logger.error("Automatic update succeeded but service restart failed.")
+    else:
+        logger.info("Automatic update and restart succeeded.")
 
 
 def _auto_update_worker() -> None:
     while True:
         try:
-            _run_elbotctl(["update"])
-            _run_elbotctl(["service", "restart"])
+            _auto_update_once()
         except Exception as exc:  # pragma: no cover - background errors
             logging.getLogger("elbot.portal").error("Auto update failed: %s", exc)
         time.sleep(86400)
@@ -558,7 +689,7 @@ def _auto_update_worker() -> None:
 def main():
     if AUTO_UPDATE:
         threading.Thread(target=_auto_update_worker, daemon=True).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    app.run(host=os.environ.get("ELBOT_PORTAL_HOST", "127.0.0.1"), port=int(os.environ.get("PORT", 8000)))
 
 
 if __name__ == "__main__":

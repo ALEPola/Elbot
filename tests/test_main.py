@@ -103,3 +103,16 @@ def test_fetch_lavalink_plugins_reads_v4_info_shape():
     )
 
     assert version == "1.18.2"
+
+
+def test_command_error_logs_original_exception_and_reference(caplog):
+    try:
+        raise ValueError("test failure")
+    except ValueError as error:
+        wrapped = main.commands.CommandInvokeError(error)
+        reference = main._log_command_error(wrapped, "play")
+    assert len(reference) == 12
+    assert reference in caplog.text
+    assert "command=play" in caplog.text
+    assert "ValueError: test failure" in caplog.text
+    assert caplog.records[-1].exc_info[0] is ValueError

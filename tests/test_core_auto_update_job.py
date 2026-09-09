@@ -73,3 +73,16 @@ def test_main_restart_failure(monkeypatch, tmp_path: Path) -> None:
     assert notifications and notifications[0][0] == 'service restart'
     text = log_file.read_text(encoding='utf-8')
     assert 'Service restart failed' in text
+
+
+def test_timeout_is_logged_without_restart(monkeypatch, tmp_path):
+    calls = []
+    def timeout(args):
+        calls.append(args)
+        raise subprocess.TimeoutExpired(args, 600)
+    monkeypatch.setattr(auto_update_job, "_run_cli", timeout)
+    monkeypatch.setattr(auto_update_job, "LOG_FILE", tmp_path / "update.log")
+    monkeypatch.setattr(auto_update_job, "_notify_failure", lambda *args: None)
+    assert auto_update_job.main() == 1
+    assert calls == [["update"]]
+    assert "TimeoutExpired" in (tmp_path / "update.log").read_text()

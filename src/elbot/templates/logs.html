@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     outputEl.classList.add('hidden');
 
     try {
-      const response = await fetch(endpoint, { method: 'POST' });
+      const response = await fetch(endpoint, { method: 'POST', headers: { 'X-CSRF-Token': {{ csrf_token()|tojson }} } });
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || 'Failed to summarize logs.');

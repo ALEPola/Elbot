@@ -14,6 +14,11 @@ SYSTEMD_TIMER_NAME = "elbot-update.timer"
 DEFAULT_ON_CALENDAR = "*-*-* 03:00:00"
 
 
+def _run(*args, **kwargs):
+    kwargs.setdefault("timeout", 30)
+    return subprocess.run(*args, **kwargs)
+
+
 @dataclass
 class SystemdTimerStatus:
     supported: bool
@@ -40,14 +45,14 @@ def systemd_timer_status() -> SystemdTimerStatus:
     systemctl = _systemctl()
     assert systemctl  # for mypy
 
-    enabled = subprocess.run(
+    enabled = _run(
         [systemctl, "is-enabled", SYSTEMD_TIMER_NAME],
         text=True,
         capture_output=True,
     )
     status.enabled = enabled.returncode == 0
 
-    active = subprocess.run(
+    active = _run(
         [systemctl, "is-active", SYSTEMD_TIMER_NAME],
         text=True,
         capture_output=True,
@@ -55,7 +60,7 @@ def systemd_timer_status() -> SystemdTimerStatus:
     status.active = active.returncode == 0
 
     if status.enabled:
-        show = subprocess.run(
+        show = _run(
             [systemctl, "show", SYSTEMD_TIMER_NAME, "--property=LastTriggerUSec,NextElapseUSecRealtime"],
             text=True,
             capture_output=True,
@@ -146,10 +151,10 @@ def enable_systemd_timer(project_root: Path, python_executable: str, service_nam
 
     # Link units so systemd is aware of them, then enable the timer.
     for unit in (service_path, timer_path):
-        subprocess.run([systemctl, "link", str(unit)], check=False, text=True)
+        _run([systemctl, "link", str(unit)], check=False, text=True)
 
-    subprocess.run([systemctl, "daemon-reload"], check=True, text=True)
-    subprocess.run([systemctl, "enable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
+    _run([systemctl, "daemon-reload"], check=True, text=True)
+    _run([systemctl, "enable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
 
 
 def disable_systemd_timer() -> None:
@@ -159,8 +164,8 @@ def disable_systemd_timer() -> None:
     systemctl = _systemctl()
     assert systemctl
 
-    subprocess.run([systemctl, "disable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
-    subprocess.run([systemctl, "stop", SYSTEMD_SERVICE_NAME], check=False, text=True)
+    _run([systemctl, "disable", "--now", SYSTEMD_TIMER_NAME], check=True, text=True)
+    _run([systemctl, "stop", SYSTEMD_SERVICE_NAME], check=False, text=True)
 
 
 def cron_supported() -> bool:
@@ -178,24 +183,24 @@ def ensure_cron_entry(project_root: Path, python_executable: str, service_name: 
 
 def enable_cron(project_root: Path, python_executable: str, service_name: str) -> None:
     entry = ensure_cron_entry(project_root, python_executable, service_name)
-    cron = subprocess.run(["crontab", "-l"], text=True, capture_output=True)
+    cron = _run(["crontab", "-l"], text=True, capture_output=True)
     lines = [line for line in cron.stdout.splitlines() if "elbot.core.auto_update_job" not in line]
     lines.append(entry)
     cron_text = "\n".join(lines) + "\n"
-    proc = subprocess.run(["crontab", "-"], input=cron_text, text=True)
+    proc = _run(["crontab", "-"], input=cron_text, text=True)
     if proc.returncode != 0:
         raise RuntimeError("Failed to install cron entry")
 
 
 def disable_cron() -> None:
-    cron = subprocess.run(["crontab", "-l"], text=True, capture_output=True)
+    cron = _run(["crontab", "-l"], text=True, capture_output=True)
     lines = [line for line in cron.stdout.splitlines() if "elbot.core.auto_update_job" not in line]
     cron_text = "\n".join(lines)
-    subprocess.run(["crontab", "-"], input=cron_text, text=True, check=True)
+    _run(["crontab", "-"], input=cron_text, text=True, check=True)
 
 
 def cron_entry_present() -> bool:
-    cron = subprocess.run(["crontab", "-l"], text=True, capture_output=True)
+    cron = _run(["crontab", "-l"], text=True, capture_output=True)
     if cron.returncode != 0:
         return False
     return any("elbot.core.auto_update_job" in line for line in cron.stdout.splitlines())

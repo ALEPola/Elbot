@@ -16,6 +16,9 @@ from getpass import getpass
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Sequence
 
+from dotenv import dotenv_values
+from ..file_io import atomic_write_text
+
 # --- Shared type aliases ----------------------------------------------------
 
 RunFunc = Callable[[list[str]], object]
@@ -42,17 +45,11 @@ def sanitize_env_value(key: str, value: str) -> str:
 
 
 def read_env(path: Path) -> EnvMap:
-    values: EnvMap = {}
     if not path.exists():
-        return values
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line or line.strip().startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        values[key] = sanitize_env_value(key, value)
+        return {}
+    values = {key: value or "" for key, value in dotenv_values(path, interpolate=False).items()}
+    if "DISCORD_TOKEN" in values:
+        values["DISCORD_TOKEN"] = sanitize_env_value("DISCORD_TOKEN", values["DISCORD_TOKEN"])
     return values
 
 
@@ -61,8 +58,7 @@ def write_env(path: Path, data: Mapping[str, str]) -> None:
     for key, value in data.items():
         existing[key] = sanitize_env_value(key, value)
     lines = [f"{key}={sanitize_env_value(key, existing[key])}" for key in sorted(existing.keys())]
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("\n".join(lines) + "\n")
+    atomic_write_text(path, "\n".join(lines) + "\n")
 
 
 def update_env_var(env_path: Path, key: str, value: str) -> None:
