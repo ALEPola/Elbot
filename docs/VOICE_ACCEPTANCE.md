@@ -155,6 +155,65 @@ Nothing leaves the process yet: wake events are only logged, dispatched as
   service-restart check on the bridge path.
 - Wake detection is only active during a `/listen` session (2 min cap); the
   always-on mode belongs with Phase 3's session lifecycle and cost limits.
+
+# Phase 3: GPT-Live session bridge
+
+Built 2026-09-10: `elbot.live.session` (WebSocket client for
+`wss://api.openai.com/v1/live/sessions`, Responses delegation, persisted
+`UsageLedger` with daily/monthly USD caps) and `elbot.live.controller`
+(arms per guild on `/live start`; opens the socket only on a wake phrase;
+forwards the wake slice plus the active speaker's audio while their window
+is open; paces reply audio to the transport; ducks and mixes music in the
+Node transport; warns before the session limit; closes on idle or cap).
+`/live start|stop|status|cost`. Nothing leaves the Pi outside an open
+window; no transcripts are stored.
+
+## Live test session, 2026-09-10 22:52–23:24 EDT (#ITCH CAVE)
+
+Found and fixed, in order, against the real API and real speakers:
+
+1. **401 on connect** — `.env`'s `OPENAI_API_KEY` was the stale key flagged
+   for rotation in March. Replaced (old key never printed by either of us).
+2. **No reply ever came** — GPT-Live's turn detection needs a continuous
+   input stream; Discord only delivers packets while someone is speaking.
+   Fixed by padding the input with real-time silence while a window is open
+   (`72f2f9c`).
+3. **One person could hold the floor** by repeating the name — same root
+   cause as the Phase 2 fix, present here too since Live reuses
+   `CommandWindow` (already fixed).
+4. **A stray syllable during a reply wiped the whole reply** — barge-in
+   fired on the first packet of pending output; now requires ~300 ms of
+   sustained speech (`301c713`).
+5. **Sessions never closed on their own** — GPT-Live streams silent audio
+   between turns; treating it as activity kept the music ducked and the
+   idle timer alive indefinitely. Silence is now dropped unless it is the
+   tail of speech already playing (`ff70570`).
+6. **Spend was only recorded at session close** — moved to incremental
+   accounting so a crash mid-session doesn't lose the record (`3e9779e`).
+7. **Reported too quiet** to be usable at 1.8x gain; raised to 3.5x and
+   added a 5s mixer diagnostic (speech/music frames, encode errors) so a
+   silent report and a quiet report can be told apart (`9ff8704`).
+8. **Reproduced twice: the voice transport crashed with `invalid_control`
+   within ~2s of the reply starting**, taking the whole voice connection
+   (and music) down with it — matches an earlier "it's not responding"
+   report exactly. Root cause: GPT-Live's own docs say audio-delta chunk
+   boundaries are arbitrary, and the code assumed every delta was
+   sample-aligned before resampling it. Fixed by holding back a trailing
+   odd byte across deltas (`e796d7f`), and the bridge now logs the real
+   exception instead of a generic reason on any control-message error.
+
+**Confirmed working live**: session connect (~1-1.5s after wake), bidirectional
+audio and transcripts, backend delegation (multiple `session.delegation.created`
++ `response.event` in one session), correct per-speaker context, spend
+tracked to the ledger and shown in `/live cost`, clean idle auto-close
+(logged sessions: 47s/$0.039, 86s/$0.072, 29s/$0.024, 2s/$0.002 x2 — the
+2s ones are the crashes above, now fixed).
+
+**Not yet confirmed**: a full session on `e796d7f` (the byte-alignment
+fix) — the crash reproduced on every attempt before it, none after it was
+deployed yet. Music-ducking-while-audible has not been confirmed by ear
+(sessions so far ran without `/play`). Ledger currently shows ~$0.20 spent
+today across all test sessions, well inside the $2/day cap.
 - Recovery restarts the track from 0:00 rather than resuming at position.
 - With `ELBOT_VOICE_TRANSPORT=bridge`, the production bot's music runs on the
   bridge stack; revert by restoring `tmp/.env.pre-bridge-flip` (transport
