@@ -17,8 +17,18 @@ let generation = 0;
 let members = new Set();
 const subscriptions = new Map();
 const frames = new FrameQueue();
+// PCM is best-effort: under backpressure drop audio rather than the transport.
+// Only a runaway control backlog is fatal.
+let pcmDropped = 0;
 const emit = (message) => {
-  if (process.stdout.writableLength > 512 * 1024) { shutdown(1); return; }
+  const pending = process.stdout.writableLength;
+  if (message.op === 'pcm' && pending > 256 * 1024) {
+    if (++pcmDropped % 250 === 0) {
+      process.stdout.write(JSON.stringify({op: 'receive_error', reason: 'backpressure', dropped: pcmDropped}) + '\n');
+    }
+    return;
+  }
+  if (pending > 4 * 1024 * 1024) { shutdown(1); return; }
   process.stdout.write(JSON.stringify(message) + '\n');
 };
 

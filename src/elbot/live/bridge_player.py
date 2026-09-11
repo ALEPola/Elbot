@@ -6,6 +6,7 @@ by the bridge WebSocket handshake before any Discord voice connection starts.
 
 import asyncio
 import base64
+from collections import deque
 import contextlib
 import json
 import logging
@@ -39,6 +40,8 @@ class BridgePlayer(mafic.Player):
         self._voice_ids = set()
         self._member_cache = {}
         self._fetching = set()
+        self._stderr_reader = None
+        self._stderr_tail = deque(maxlen=5)
         self.receive_errors = 0
 
     async def _send(self, payload):
@@ -95,9 +98,10 @@ class BridgePlayer(mafic.Player):
         self._process = await asyncio.create_subprocess_exec(
             os.getenv("ELBOT_VOICE_NODE", "node"), str(script),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, env=env, limit=65536,
+            stderr=asyncio.subprocess.PIPE, env=env, limit=65536,
         )
         self._reader = asyncio.create_task(self._read())
+        self._stderr_reader = asyncio.create_task(self._read_stderr())
         self._ticker = asyncio.create_task(self._tick())
         try:
             await self._send({
@@ -172,7 +176,16 @@ class BridgePlayer(mafic.Player):
                     self._receive(message)
                 elif op == "receive_error":
                     self.receive_errors += 1
+                    if message.get("reason") == "backpressure":
+                        logger.warning(
+                            "Voice receiver dropping audio under backpressure (dropped=%s)",
+                            message.get("dropped"), extra={"guild_id": self.guild.id},
+                        )
                 elif op == "failed":
+                    logger.warning(
+                        "Shared voice transport failed: %s", message.get("reason"),
+                        extra={"guild_id": self.guild.id},
+                    )
                     break
         except (ValueError, KeyError, TypeError, OSError):
             logger.warning("Shared voice transport returned invalid data or closed")
@@ -182,7 +195,21 @@ class BridgePlayer(mafic.Player):
             self._connected = False
             self.audio.stop()
             if not self._closing:
-                logger.warning("Shared voice transport stopped", extra={"guild_id": self.guild.id})
+                logger.warning(
+                    "Shared voice transport stopped (exit=%s) %s",
+                    self._process.returncode if self._process else None,
+                    " | ".join(self._stderr_tail),
+                    extra={"guild_id": self.guild.id},
+                )
+
+    async def _read_stderr(self):
+        try:
+            while line := await self._process.stderr.readline():
+                text = line.decode(errors="replace").strip()[:300]
+                if text:
+                    self._stderr_tail.append(text)
+        except (OSError, ValueError):
+            pass
 
     def _receive(self, message):
         if (not self.audio.active or time.monotonic() >= self._listen_until
@@ -274,7 +301,10 @@ class BridgePlayer(mafic.Player):
                 except asyncio.TimeoutError:
                     self._process.kill()
                     await self._process.wait()
-            tasks = [task for task in (self._reader, self._ticker) if task and task is not asyncio.current_task()]
+            tasks = [
+                task for task in (self._reader, self._stderr_reader, self._ticker)
+                if task and task is not asyncio.current_task()
+            ]
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
