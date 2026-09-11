@@ -78,6 +78,7 @@ class LiveController:
         self._sent_samples = 0
         self._out_buf = bytearray()
         self._out_state = None
+        self._out_pending = b""  # a byte held back when a delta splits a 16-bit sample
         self._barge_frames = 0
         self._last_activity = 0.0
         self._warned = False
@@ -164,6 +165,15 @@ class LiveController:
 
     async def _on_audio(self, pcm16k: bytes) -> None:
         if self._stopped or not pcm16k:
+            return
+        # GPT-Live's own docs say audio-delta chunk boundaries are arbitrary;
+        # nothing guarantees each delta ends on a 16-bit sample boundary.
+        pcm16k = self._out_pending + pcm16k
+        if len(pcm16k) % 2:
+            self._out_pending, pcm16k = pcm16k[-1:], pcm16k[:-1]
+        else:
+            self._out_pending = b""
+        if not pcm16k:
             return
         # GPT-Live streams silence between turns; it must not duck the music,
         # keep the session "active" or hold the command window open.

@@ -189,7 +189,14 @@ input.on('line', line => {
     } else if (message.op === 'speak_clear') {
       speech.clear(); duckUntil = 0;
     } else if (message.op === 'close') shutdown();
-  } catch { emit({op: 'failed', reason: 'invalid_control'}); shutdown(1); }
+  } catch (e) {
+    // Visible in the parent's stderr log; never includes audio payloads.
+    console.error('[bridge] invalid control, op=%s: %s', (() => {
+      try { return JSON.parse(line).op; } catch { return '?'; }
+    })(), e && e.message);
+    emit({op: 'failed', reason: 'invalid_control'});
+    shutdown(1);
+  }
 });
 input.on('close', () => shutdown());
 process.on('SIGTERM', () => shutdown());

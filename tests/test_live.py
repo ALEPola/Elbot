@@ -243,3 +243,24 @@ async def test_output_silence_does_not_duck_or_keep_session_busy():
         assert len(ctrl._out_buf) > 0 and ctrl._last_activity > 0.0
     finally:
         await ctrl.stop("test")
+
+
+@pytest.mark.asyncio
+async def test_odd_length_audio_deltas_are_realigned_not_corrupted():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    await ctrl.start()
+    try:
+        player.window.wake(100)
+        await ctrl.on_wake(wake(), "opened")
+        # GPT-Live's docs: delta chunk boundaries are arbitrary, so a delta can
+        # split a 16-bit sample. Feed 3 odd-length chunks that only add up to a
+        # whole number of samples together.
+        await ctrl._on_audio(b"\x00\x10\x00")       # 1.5 samples
+        await ctrl._on_audio(b"\x10\x00\x10\x00\x00")  # + 2.5 samples
+        await ctrl._on_audio(b"\x10")                # + 0.5 -> 4.5 total, 1 byte held back
+        total = 3 + 5 + 1
+        assert (total - len(ctrl._out_pending)) % 2 == 0
+        await asyncio.sleep(0.1)
+        assert len(player.spoken) == 0 or all(len(s) % 4 == 0 for s in player.spoken)
+    finally:
+        await ctrl.stop("test")
