@@ -21,7 +21,7 @@ const subscriptions = new Map();
 const frames = new FrameQueue();
 // Bot speech (48 kHz stereo PCM from Python) is mixed over ducked music.
 const speech = new SpeechQueue();
-const DUCK_GAIN = 0.25, DUCK_TAIL_MS = 400;
+const DUCK_GAIN = 0.18, DUCK_TAIL_MS = 400;
 let duckUntil = 0;
 const musicDecoder = new opus.OpusEncoder(48000, 2);
 const speechEncoder = new opus.OpusEncoder(48000, 2);

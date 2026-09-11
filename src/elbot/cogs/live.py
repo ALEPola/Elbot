@@ -61,6 +61,7 @@ class Live(commands.Cog):
 
         async def on_stopped(controller, reason):
             self.controllers.pop(interaction.guild.id, None)
+            music.voice_holds.discard(interaction.guild.id)
             await announce(
                 f"ELBOT Live stopped ({reason}). This run: {controller.stats['sessions']} session(s), "
                 f"{controller.stats['seconds'] / 60:.1f} min, ${controller.stats['usd']:.2f}."
@@ -77,6 +78,7 @@ class Live(commands.Cog):
             return
         controller = LiveController(player, config, self.ledger, announce=announce, on_stopped=on_stopped)
         self.controllers[interaction.guild.id] = controller
+        music.voice_holds.add(interaction.guild.id)  # keep the music cog's idle timer from leaving
         await controller.start()
         day_usd, _ = self.ledger.usd(config.price_per_minute)
         await interaction.followup.send(

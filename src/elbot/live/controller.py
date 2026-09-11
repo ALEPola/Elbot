@@ -172,6 +172,8 @@ class LiveController:
                 pcm48, self._out_state = upsample_to_discord(pcm16k, self._out_state)
                 self._out_buf += pcm48  # finish the tail of a real utterance smoothly
             return
+        if self.config.speech_gain != 1.0 and audioop is not None:
+            pcm16k = audioop.mul(pcm16k, 2, self.config.speech_gain)  # saturating
         pcm48, self._out_state = upsample_to_discord(pcm16k, self._out_state)
         self._out_buf += pcm48
         self._last_activity = self._clock()

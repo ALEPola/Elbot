@@ -344,6 +344,7 @@ class Music(commands.Cog):
             maxsize=256, ttl=300
         )
         self.fallback = None
+        self.voice_holds: set[int] = set()
         self.embed_factory = EmbedFactory()
         host, port, password, secure = _lavalink_config()
         self.diagnostics = DiagnosticsService(
@@ -1313,6 +1314,10 @@ class Music(commands.Cog):
                 await asyncio.sleep(timeout)
                 current = self._states.get(guild_id)
                 if current is not state:
+                    return
+                if guild_id in self.voice_holds:
+                    # Something else (ELBOT Live) is using the voice connection.
+                    self._schedule_idle_disconnect(guild_id, state)
                     return
                 if state.now_playing is None and len(state.queue) == 0:
                     self.logger.info(
