@@ -34,7 +34,7 @@ class LiveConfig:
     instructions: str = ""
     backend_instructions: str = ""
     price_per_minute: float = 0.05
-    speech_gain: float = 1.8
+    speech_gain: float = 3.5
     session_max_s: float = 600.0
     warn_at_s: float = 420.0
     idle_s: float = 30.0
@@ -57,7 +57,7 @@ class LiveConfig:
             instructions=os.getenv("ELBOT_LIVE_INSTRUCTIONS", DEFAULT_INSTRUCTIONS),
             backend_instructions=os.getenv("ELBOT_LIVE_BACKEND_INSTRUCTIONS", DEFAULT_BACKEND_INSTRUCTIONS),
             price_per_minute=num("ELBOT_LIVE_PRICE_PER_MIN", 0.05),
-            speech_gain=max(0.1, min(4.0, num("ELBOT_LIVE_SPEECH_GAIN", 1.8))),
+            speech_gain=max(0.1, min(8.0, num("ELBOT_LIVE_SPEECH_GAIN", 3.5))),
             session_max_s=num("ELBOT_LIVE_SESSION_MAX_MIN", 10) * 60,
             warn_at_s=num("ELBOT_LIVE_WARN_MIN", 7) * 60,
             idle_s=num("ELBOT_LIVE_IDLE_S", 30),

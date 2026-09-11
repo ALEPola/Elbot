@@ -181,6 +181,15 @@ class BridgePlayer(mafic.Player):
                         self._connected = True
                 elif op == "pcm":
                     self._receive(message)
+                elif op == "diag":
+                    logger.info(
+                        "Node mixer 5s: speech_frames=%s speech_bytes_in=%s music_frames=%s "
+                        "mixed=%s encode_errors=%s idle_ticks=%s",
+                        message.get("speechFrames"), message.get("speechBytesIn"),
+                        message.get("musicFrames"), message.get("mixed"),
+                        message.get("encodeErrors"), message.get("silentTicks"),
+                        extra={"guild_id": self.guild.id},
+                    )
                 elif op == "receive_error":
                     self.receive_errors += 1
                     if message.get("reason") == "backpressure":

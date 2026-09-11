@@ -129,22 +129,32 @@ async function start(config) {
   connection.receiver.speaking.on('start', subscribe);
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
   player = createAudioPlayer({behaviors: {noSubscriber: NoSubscriberBehavior.Pause}});
+  const diag = {speechFrames: 0, speechBytesIn: 0, musicFrames: 0, silentTicks: 0, encodeErrors: 0, mixed: 0};
+  setInterval(() => { emit({op: 'diag', ...diag}); }, 5000).unref();
   const source = Readable.from((async function* () {
     while (!closing) {
       const music = frames.pop();
       let musicPcm = null;
       if (music) {
+        diag.musicFrames++;
         // Always decode so the decoder state stays continuous across ducking.
         try { musicPcm = musicDecoder.decode(music); } catch { musicPcm = null; }
       }
       const speechPcm = speech.take(FRAME_BYTES);
       if (speechPcm) {
+        diag.speechFrames++;
         duckUntil = Date.now() + DUCK_TAIL_MS;
-        yield speechEncoder.encode(mixFrame(musicPcm, speechPcm, DUCK_GAIN));
+        try {
+          const mixed = mixFrame(musicPcm, speechPcm, DUCK_GAIN);
+          diag.mixed++;
+          yield speechEncoder.encode(mixed);
+        } catch (e) { diag.encodeErrors++; }
       } else if (music) {
-        if (Date.now() < duckUntil && musicPcm) yield speechEncoder.encode(mixFrame(musicPcm, null, DUCK_GAIN));
-        else yield music;
-      } else await delay(5);
+        if (Date.now() < duckUntil && musicPcm) {
+          try { yield speechEncoder.encode(mixFrame(musicPcm, null, DUCK_GAIN)); }
+          catch { diag.encodeErrors++; yield music; }
+        } else yield music;
+      } else { diag.silentTicks++; await delay(5); }
     }
   })(), {objectMode: true, highWaterMark: 1});
   player.on('error', () => { emit({op: 'failed', reason: 'playback_error'}); shutdown(1); });
@@ -175,7 +185,7 @@ input.on('line', line => {
     } else if (message.op === 'speak') {
       const pcm = Buffer.from(String(message.pcm || ''), 'base64');
       if (pcm.length % 4 !== 0) throw new Error('Speech PCM must be 16-bit stereo');
-      if (pcm.length) speech.push(pcm);
+      if (pcm.length) { speech.push(pcm); diag.speechBytesIn += pcm.length; }
     } else if (message.op === 'speak_clear') {
       speech.clear(); duckUntil = 0;
     } else if (message.op === 'close') shutdown();
