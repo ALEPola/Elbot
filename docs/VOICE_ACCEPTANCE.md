@@ -118,10 +118,43 @@ start, ~14 s gap, no operator action, no stuck registration). The gap is
 dominated by the 8 s connection warmup wait plus five 0.75 s retries before
 the reconnect attempt; tunable via `ELBOT_PLAYER_*` if it matters.
 
+# Phase 2: local wake phrase and privacy gate
+
+Engine: Vosk `vosk-model-small-en-us-0.15` with a keyword-restricted grammar
+(`elbot`, `el bot`, `hey elbot`, `hey el bot`, `elbow`), one recognizer per
+speaker on its own thread, fed 16 kHz mono resampled from the isolated
+streams. Audio is held only until each utterance finalizes and zeroed
+unless it contains a wake phrase. Chosen over Porcupine (needs a Picovoice
+key) and openWakeWord (needs a custom-trained model; no armv7 ONNX runtime).
+
+Pi benchmark on synthetic phrases (two Windows TTS voices): 15/16 detected,
+0 false wakes on negatives, "elbow" fallback fires; 5 concurrent recognizers
+at 0.26x realtime (~0.18 core per talking speaker).
+
+## Live runs, 2026-09-10 22:32–22:40 EDT (#ITCH CAVE, 5–6 humans)
+
+- Run 1 exposed a floor-holding problem: the active speaker's repeats
+  extended their window without limit, so one person kept it while everyone
+  else got "hang on". Fixed in `2a1528e` (one extension, 5 s default,
+  repeats post nothing).
+- Run 2 (fixed build): **24 s / 15 speaker turns from three people with no
+  wake phrase → zero activations**; then 7 wakes across the session, every
+  one from a person saying the name, correct display name each time,
+  including a sixth previously unseen member. `/listen status`: 7302 PCM
+  frames, 0 decode errors, 7 wake phrases, 33 utterances checked (26
+  ignored). No warnings. Simultaneous-activation arbitration verified
+  (`busy` then `opened` after the 5 s window). Members confirmed the `elbow`
+  hits were people saying "ELBOT". **Exit test met.**
+
+Nothing leaves the process yet: wake events are only logged, dispatched as
+`wake_phrase`, and announced in the invoking text channel by `/listen`.
+
 ## Open
 
 - 20 consecutive bridge-path cycles (5 run) and the Lavalink/bot
   service-restart check on the bridge path.
+- Wake detection is only active during a `/listen` session (2 min cap); the
+  always-on mode belongs with Phase 3's session lifecycle and cost limits.
 - Recovery restarts the track from 0:00 rather than resuming at position.
 - With `ELBOT_VOICE_TRANSPORT=bridge`, the production bot's music runs on the
   bridge stack; revert by restoring `tmp/.env.pre-bridge-flip` (transport
