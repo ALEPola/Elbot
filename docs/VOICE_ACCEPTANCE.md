@@ -212,8 +212,39 @@ tracked to the ledger and shown in `/live cost`, clean idle auto-close
 **Not yet confirmed**: a full session on `e796d7f` (the byte-alignment
 fix) — the crash reproduced on every attempt before it, none after it was
 deployed yet. Music-ducking-while-audible has not been confirmed by ear
-(sessions so far ran without `/play`). Ledger currently shows ~$0.20 spent
+(sessions so far ran without `/play`). Ledger currently shows ~$0.28 spent
 today across all test sessions, well inside the $2/day cap.
+
+## New bug found after the crash fix: the Node audio pipeline can silently deadlock
+
+Deployed `52857e9` (a second, unrelated bug: `diag` — the mixer
+diagnostics object added in `9ff8704` — was declared inside `start()` but
+read from the top-level `speak` control handler, a `ReferenceError` on
+every single reply that was the true cause of every `invalid_control`
+crash tonight, not the byte-alignment issue, though that fix stands on its
+own merits per the API docs). After that fix, one full session ran with no
+crash: bidirectional audio, transcripts, a backend delegation, clean idle
+close (95s, $0.079).
+
+But the mixer diagnostic log (`speech_frames`, `mixed`, `idle_ticks` — a
+5s summary from `bridge.mjs`) showed the frame-generation loop inside the
+`Readable.from` async generator hard-stopping after exactly 70 frames
+(~1.4s of audio) with **no error, no crash, no log line** — `speechFrames`/
+`mixed`/`idle_ticks` stayed bit-for-bit identical across 20+ consecutive
+5s ticks (over 90 seconds) while `speechBytesIn` kept climbing, proving
+new audio kept arriving from Python but the generator never advanced past
+some `yield`. The GPT-Live session and Python-side accounting are
+unaffected (idle-close still worked correctly), so this is isolated to the
+Node/`@discordjs/voice` playback loop. Leading theory: the AudioPlayer (or
+its underlying stream consumer) stopped calling `read()` on the resource —
+possibly a `NoSubscriberBehavior`/backpressure interaction with
+`Readable.from(..., {highWaterMark: 1})` — but this is unconfirmed; no
+`voice_status` state change was logged at the moment it froze. **Not yet
+investigated further; no fix attempted.** Next session should start here:
+add a watchdog (diag ticks not advancing while speech is queued → treat as
+failed transport, matching the existing `bridge_transport_failed` recovery
+path) and/or reproduce with verbose `@discordjs/voice` debug logging to
+see what state the AudioPlayer/connection is actually in when it happens.
 - Recovery restarts the track from 0:00 rather than resuming at position.
 - With `ELBOT_VOICE_TRANSPORT=bridge`, the production bot's music runs on the
   bridge stack; revert by restoring `tmp/.env.pre-bridge-flip` (transport
