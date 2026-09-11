@@ -25,6 +25,9 @@ const DUCK_GAIN = 0.18, DUCK_TAIL_MS = 400;
 let duckUntil = 0;
 const musicDecoder = new opus.OpusEncoder(48000, 2);
 const speechEncoder = new opus.OpusEncoder(48000, 2);
+// Module scope: touched both by the 'speak' control handler and the frame
+// generator inside start(), which run in different closures.
+const diag = {speechFrames: 0, speechBytesIn: 0, musicFrames: 0, silentTicks: 0, encodeErrors: 0, mixed: 0};
 // PCM is best-effort: under backpressure drop audio rather than the transport.
 // Only a runaway control backlog is fatal.
 let pcmDropped = 0;
@@ -129,7 +132,6 @@ async function start(config) {
   connection.receiver.speaking.on('start', subscribe);
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
   player = createAudioPlayer({behaviors: {noSubscriber: NoSubscriberBehavior.Pause}});
-  const diag = {speechFrames: 0, speechBytesIn: 0, musicFrames: 0, silentTicks: 0, encodeErrors: 0, mixed: 0};
   setInterval(() => { emit({op: 'diag', ...diag}); }, 5000).unref();
   const source = Readable.from((async function* () {
     while (!closing) {
