@@ -138,7 +138,9 @@ async def test_wake_connects_sends_context_and_only_active_speaker_audio():
         player.live_tap(Speaker(200, "Jovan", 1, 2), b"\x05\x00\x05\x00" * 960)
         player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x05\x00\x05\x00" * 960)
         await asyncio.sleep(0.35)
-        assert len(session.audio) == 2 and len(session.audio[1]) == 320 * 2
+        assert len(session.audio) >= 2
+        chunk = session.audio[1]
+        assert any(chunk[:640]) and not any(chunk[700:])  # Alexis's 20 ms, then silence padding; Jovan's dropped
 
         await ctrl._on_audio(b"\x02\x00" * 3200)  # 200 ms of bot speech
         await asyncio.sleep(0.2)
@@ -204,3 +206,18 @@ async def test_listener_ending_stops_controller():
     player.audio.active = False
     await asyncio.sleep(0.6)
     assert stopped == ["listener ended"] and not ctrl.running
+
+
+@pytest.mark.asyncio
+async def test_silence_is_padded_in_real_time_while_window_open():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    await ctrl.start()
+    try:
+        player.window.wake(100)
+        await ctrl.on_wake(wake(audio=b""), "opened")
+        await asyncio.sleep(0.6)
+        sent = sum(len(a) for a in ctrl.session.audio) // 2
+        assert 0.4 * 16000 <= sent <= 0.9 * 16000  # ~0.6 s of stream, all padding
+        assert all(set(a) == {0} for a in ctrl.session.audio if a)
+    finally:
+        await ctrl.stop("test")

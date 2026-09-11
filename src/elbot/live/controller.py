@@ -63,6 +63,8 @@ class LiveController:
         self.active_name = ""
         self._in_buf = bytearray()
         self._in_state = None
+        self._stream_started = 0.0
+        self._sent_samples = 0
         self._out_buf = bytearray()
         self._out_state = None
         self._last_activity = 0.0
@@ -119,6 +121,11 @@ class LiveController:
             "This identity is verified by the application; address them by this name."
         )
         await self.session.append_audio(event.audio)
+        # Discord sends packets only while someone speaks; GPT-Live's turn
+        # detection needs a continuous stream, so from here the monitor pads
+        # real time with silence until the window closes.
+        self._stream_started = self._clock()
+        self._sent_samples = 0
         self._last_activity = self._clock()
         self.player.window.touch(event.speaker.user_id)
 
@@ -168,16 +175,39 @@ class LiveController:
                 logger.warning("Could not send speech to the voice transport")
                 self._out_buf.clear()
 
+    def _pad_silence(self) -> None:
+        if not self._stream_started or self.active_speaker is None:
+            return
+        if not self.player.window.is_open_for(self.active_speaker):
+            self._stream_started = 0.0
+            return
+        expected = int((self._clock() - self._stream_started) * OUT_RATE)
+        have = self._sent_samples + len(self._in_buf) // 2
+        missing = min(expected - have, OUT_RATE)  # never more than 1 s per tick
+        if missing > OUT_RATE // 50:  # 20 ms
+            self._in_buf += b"\0" * (missing * 2)
+
     async def _monitor(self) -> None:
+        last_report = self._clock()
         while True:
             await asyncio.sleep(0.25)
+            self._pad_silence()
             if self._in_buf and self.session is not None and self.session.connected:
                 pcm = bytes(self._in_buf)
                 self._in_buf.clear()
+                self._sent_samples += len(pcm) // 2
                 try:
                     await self.session.append_audio(pcm)
                 except (ConnectionError, Exception):
                     logger.warning("Dropping input audio; GPT-Live socket unavailable")
+            if self.session is not None and self.session.connected and self._clock() - last_report >= 10:
+                last_report = self._clock()
+                logger.info(
+                    "GPT-Live %.0fs: sent %.1fs audio, pending out %d ms, events %s",
+                    self.session.connected_seconds(), self._sent_samples / OUT_RATE,
+                    len(self._out_buf) // OUT_FRAME * 20, self.session.usage.events,
+                    extra={"guild_id": self.player.guild.id},
+                )
             if not self.player.is_connected() or not self.player.audio.active:
                 asyncio.get_running_loop().create_task(self.stop("listener ended"))
                 return
