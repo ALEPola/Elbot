@@ -73,3 +73,44 @@ exercises the voice/Lavalink stack directly rather than the `/play` handler;
 the handler's cleanup paths are covered by `tests/test_voice_lifecycle.py`.
 Interruption/recovery (step 7) and service-restart (step 8) checks remain
 **pending**.
+
+# Phase 1: per-user voice reception (bridge transport)
+
+Run 2026-09-10 21:48–22:19 EDT with `ELBOT_VOICE_TRANSPORT=bridge`, Mafic on
+the bridge-mode Lavalink fork (127.0.0.1:2334), Node 22.23.2 armv7l.
+
+## Bridge-path cycle run
+
+Same harness as Phase 0, driving `BridgePlayer`: 5/5 cycles, connect
+1.05–1.44 s (avg 1.16), time to audible track 1.42–2.11 s (avg 1.59), leave
+≤0.12 s, no orphaned Node processes. Audible playback confirmed by a
+listener. Slower to start than the Koe path (Node + DAVE handshake) but
+every cycle clean.
+
+## Speaker attribution (`/listen start`, #ITCH CAVE, 5–6 humans)
+
+Two defects found and fixed on the way:
+
+1. `channel.members` is empty without the privileged members intent (the
+   guild cache held only the bot), so listening stopped on its first tick.
+   Occupants now come from `channel.voice_states` with a one-time REST
+   `fetch_member` per player (`5aba6ff`).
+2. `opusscript` (WebAssembly libopus) aborted the Node process with an
+   internal assertion 17–26 s into multi-speaker sessions, taking music
+   down with it. Replaced by the native `@discordjs/opus`, compiled on the
+   Pi (`ba21b01`).
+
+Result with the native decoder: 42 `speaker_start`/`speaker_stop` events in
+~40 s of deliberately overlapping speech from four people, every event
+carrying the correct Discord display name, `/listen status` reporting
+825+ PCM frames and 0 decode errors, no transport warnings, Node at ~70 MB
+RSS and ~17% CPU. An earlier (crashed) run had attributed five distinct
+people correctly before the decoder abort. **Exit test met.**
+
+## Open
+
+- When the Node transport dies, the music cog does not notice: Lavalink keeps
+  "playing" with no audio path until the next command. Needs a
+  transport-failed signal into the cog's reconnect logic.
+- 20 consecutive bridge-path cycles and the interruption/restart checks have
+  not been run on the bridge path.

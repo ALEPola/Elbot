@@ -1087,6 +1087,26 @@ class Music(commands.Cog):
             except Exception:
                 pass
 
+    @commands.Cog.listener()
+    async def on_bridge_transport_failed(self, player: object) -> None:
+        guild = getattr(player, "guild", None)
+        if guild is None:
+            return
+        state = self._states.get(guild.id)
+        if state is None or state.player is not player:
+            return
+        current = state.now_playing
+        self.logger.warning(
+            "Voice transport failed; recovering playback",
+            extra={"guild_id": guild.id, "had_track": current is not None},
+        )
+        if current is None:
+            return
+        state.now_playing = None
+        state.playback_started_at = 0.0
+        state.queue.add_next(current)
+        await self._begin_playback(guild.id)
+
     async def _begin_playback(self, guild_id: int) -> None:
         state = self._get_state(guild_id)
         self._cancel_idle_disconnect(state)

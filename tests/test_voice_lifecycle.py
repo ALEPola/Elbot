@@ -148,3 +148,25 @@ async def test_ai_voice_placeholder_does_not_touch_voice(existing):
     player.move_to.assert_not_awaited()
     player.disconnect.assert_not_awaited()
     channel.connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_bridge_transport_failure_requeues_track_and_restarts_playback():
+    music = make_music()
+    music._begin_playback = AsyncMock()
+    state = music._states[7]
+    player = SimpleNamespace(guild=SimpleNamespace(id=7))
+    track = SimpleNamespace(handle=SimpleNamespace(title="song"))
+    state.player = player
+    state.now_playing = track
+    state.playback_started_at = 123.0
+
+    await music.on_bridge_transport_failed(SimpleNamespace(guild=SimpleNamespace(id=7)))
+    assert state.now_playing is track  # a stale/foreign player is ignored
+    music._begin_playback.assert_not_awaited()
+
+    await music.on_bridge_transport_failed(player)
+    assert state.now_playing is None
+    assert state.playback_started_at == 0.0
+    assert state.queue.pop_next() is track
+    music._begin_playback.assert_awaited_once_with(7)

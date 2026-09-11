@@ -42,6 +42,7 @@ class BridgePlayer(mafic.Player):
         self._fetching = set()
         self._stderr_reader = None
         self._stderr_tail = deque(maxlen=5)
+        self._failure_reported = False
         self.receive_errors = 0
 
     async def _send(self, payload):
@@ -201,6 +202,14 @@ class BridgePlayer(mafic.Player):
                     " | ".join(self._stderr_tail),
                     extra={"guild_id": self.guild.id},
                 )
+                self._report_failure()
+
+    def _report_failure(self):
+        if self._failure_reported or self._closing:
+            return
+        self._failure_reported = True
+        # The music cog re-queues the current track and reconnects.
+        self.client.dispatch("bridge_transport_failed", self)
 
     async def _read_stderr(self):
         try:
@@ -260,6 +269,7 @@ class BridgePlayer(mafic.Player):
             self._bridge_failed.set()
             self._connected = False
             logger.warning("Voice receiver control failed; local listening stopped")
+            self._report_failure()
 
     async def _tick_loop(self):
         while not self._closing:
