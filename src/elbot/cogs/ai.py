@@ -306,48 +306,10 @@ class AICog(commands.Cog):
             )
             return
 
-        await interaction.response.defer(with_message=True)
-
-        voice_state = interaction.user.voice
-        if not voice_state or not voice_state.channel:
-            await interaction.followup.send(
-                "You need to be connected to a voice channel to use this command.",
-                delete_after=10,
-            )
-            return
-
-        channel = voice_state.channel
-        logger.debug("Connecting to voice channel %s", channel)
-
-        voice_client = interaction.guild.voice_client if interaction.guild else None
-        vc = voice_client
-        joined_here = False
-        try:
-            if voice_client:
-                if voice_client.channel != channel:
-                    await voice_client.move_to(channel)
-                vc = voice_client
-            else:
-                vc = await channel.connect()
-                joined_here = True
-        except nextcord.ClientException:
-            await interaction.followup.send(
-                "I'm already connected to a voice channel; disconnect me first.",
-                delete_after=10,
-            )
-            return
-
-        logger.info("Connected to voice channel %s for realtime chat", channel)
-
-        try:
-            await interaction.followup.send(
-                "Voice chat is not yet fully implemented. This is a placeholder.",
-                delete_after=10,
-            )
-        finally:
-            logger.info("Disconnecting from voice channel %s", channel)
-            if joined_here and vc:
-                await vc.disconnect()
+        await interaction.response.send_message(
+            "Voice chat is not yet implemented.",
+            ephemeral=True,
+        )
 
     @ai.subcommand(
         name="voice_toggle",

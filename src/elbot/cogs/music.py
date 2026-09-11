@@ -57,6 +57,7 @@ class GuildState:
     queue: MusicQueue = field(default_factory=MusicQueue)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     playback_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    voice_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     now_playing: Optional[QueuedTrack] = None
     player: Optional[object] = None
     last_channel_id: Optional[int] = None
@@ -558,13 +559,64 @@ class Music(commands.Cog):
         state.playback_started_at = 0.0
         if state.player:
             try:
-                await state.player.disconnect(force=True)
+                await self._release_voice(state.player)
             except Exception:  # pragma: no cover - defensive cleanup
                 pass
         await self._clear_now_playing_message(state)
         self._states.pop(guild_id, None)
 
     async def _ensure_voice(
+        self, interaction: nextcord.Interaction
+    ) -> tuple[Optional[mafic.Player], Optional[str]]:
+        if interaction.guild is None:
+            return None, "This command can only be used in guilds."
+        state = self._get_state(interaction.guild.id)
+        async with state.voice_lock:
+            return await self._ensure_voice_locked(interaction)
+
+    async def _release_voice(self, player: object) -> None:
+        """Bound network teardown and always release a failed local registration."""
+        try:
+            await asyncio.wait_for(player.disconnect(force=True), timeout=5.0)
+        except Exception as exc:
+            self.logger.warning(
+                "Voice teardown failed; releasing local registration",
+                extra={"error_type": type(exc).__name__},
+            )
+            player.cleanup()
+        except asyncio.CancelledError:
+            player.cleanup()
+            raise
+
+    async def _connect_voice(self, channel, player_cls, timeout: float):
+        # Capture exactly the client created by this attempt, even when
+        # Nextcord raises before channel.connect returns it.
+        player = None
+
+        def create_player(client, target):
+            nonlocal player
+            player = player_cls(client, target)
+            return player
+
+        try:
+            return await asyncio.wait_for(
+                channel.connect(cls=create_player, timeout=timeout, reconnect=True),
+                timeout=timeout,
+            )
+        except (Exception, asyncio.CancelledError) as exc:
+            self.logger.warning(
+                "Voice handshake failed",
+                extra={
+                    "error_type": type(exc).__name__,
+                    "timeout_s": timeout,
+                    **(self._player_connect_diagnostics(player) if player else {}),
+                },
+            )
+            if player is not None:
+                await self._release_voice(player)
+            raise
+
+    async def _ensure_voice_locked(
         self, interaction: nextcord.Interaction
     ) -> tuple[Optional[mafic.Player], Optional[str]]:
         user = interaction.user
@@ -587,7 +639,7 @@ class Music(commands.Cog):
         voice = guild.voice_client
         if voice and not isinstance(voice, mafic_lib.Player):
             try:
-                await voice.disconnect(force=True)
+                await self._release_voice(voice)
             except Exception:
                 pass
             voice = None
@@ -602,7 +654,7 @@ class Music(commands.Cog):
                 },
             )
             try:
-                await voice.disconnect(force=True)
+                await self._release_voice(voice)
             except Exception:
                 pass
             voice = None
@@ -616,17 +668,13 @@ class Music(commands.Cog):
             try:
                 await voice.move_to(target_channel)
             except Exception:
-                await voice.disconnect(force=True)
+                await self._release_voice(voice)
                 voice = None
                 state.player = None
 
         if voice is None:
             try:
-                voice = await target_channel.connect(
-                    cls=mafic_lib.Player,
-                    timeout=connect_timeout,
-                    reconnect=True,
-                )
+                voice = await self._connect_voice(target_channel, mafic_lib.Player, connect_timeout)
             except Exception as exc:
                 self.logger.error(
                     "Voice connection failed",
@@ -637,7 +685,13 @@ class Music(commands.Cog):
 
         state.player = voice
         state.last_channel_id = interaction.channel_id
-        if not await self._wait_for_player_connection(voice, connect_timeout):
+        try:
+            connected = await self._wait_for_player_connection(voice, connect_timeout)
+        except asyncio.CancelledError:
+            await self._release_voice(voice)
+            state.player = None
+            raise
+        if not connected:
             self.logger.warning(
                 "Voice connect returned but player is still not connected",
                 extra={
@@ -648,7 +702,7 @@ class Music(commands.Cog):
                 },
             )
             try:
-                await voice.disconnect(force=True)
+                await self._release_voice(voice)
             except Exception:
                 pass
             state.player = None
@@ -961,6 +1015,17 @@ class Music(commands.Cog):
         mafic_lib,
         connect_timeout: float,
     ) -> Optional[object]:
+        async with state.voice_lock:
+            if state.player is not player:
+                return state.player
+            return await self._reconnect_player_locked(
+                guild_id, state, player, mafic_lib, connect_timeout
+            )
+
+    async def _reconnect_player_locked(
+        self, guild_id: int, state: GuildState, player: object,
+        mafic_lib, connect_timeout: float,
+    ) -> Optional[object]:
         channel = getattr(player, "channel", None)
         if channel is None:
             self.logger.warning(
@@ -969,15 +1034,12 @@ class Music(commands.Cog):
             )
             return None
         try:
-            await player.disconnect(force=True)
+            await self._release_voice(player)
         except Exception:
             pass
         try:
-            new_player = await channel.connect(
-                cls=mafic_lib.Player,
-                timeout=connect_timeout,
-                reconnect=True,
-            )
+            state.player = None
+            new_player = await self._connect_voice(channel, mafic_lib.Player, connect_timeout)
         except Exception as exc:
             self.logger.warning(
                 "Voice reconnect attempt failed",
@@ -1142,7 +1204,7 @@ class Music(commands.Cog):
         failed_player = state.player
         if failed_player is not None and not self._player_is_connected(failed_player):
             try:
-                await failed_player.disconnect(force=True)
+                await self._release_voice(failed_player)
             except Exception:
                 pass
             state.player = None
