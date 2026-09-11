@@ -58,7 +58,7 @@ plugins:
 
 logging:
   file:
-    path: "/home/alex/.local/share/Elbot/lavalink-bridge.log"
+    name: "/home/alex/.local/share/Elbot/lavalink-bridge.log"
   level:
     lavalink.server.player.transport: INFO
     dev.lavalink.youtube.http.YoutubeAccessTokenTracker: WARN

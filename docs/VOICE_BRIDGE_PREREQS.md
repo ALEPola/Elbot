@@ -116,9 +116,22 @@ Node/`@discordjs/voice`, including ordinary music. Consequences:
   `davey-linux-arm-gnueabihf` binding loads; `node --test` passes 2/2;
   `node_modules` is 12 MB. Repeat the same install inside the repo's
   transport directory once it is on the Pi.
-- **Config drafted** in `infra/lavalink-bridge/`: `application.yml`
-  (port 2334, bound to 127.0.0.1, secrets via `${ENV}` placeholders) and a
-  `lavalink-bridge.service` unit with secrets in a 0600 drop-in.
+- **Bridge instance running on the Pi** (`lavalink-bridge.service`,
+  enabled): the fork jar at `/home/alex/.local/share/Elbot/bridge/`, config
+  from `infra/lavalink-bridge/application.yml`, secrets in the root-owned
+  0600 drop-in `/etc/systemd/system/lavalink-bridge.service.d/secrets.conf`
+  (values copied from `.env`, never committed). Listens on
+  `127.0.0.1:2334` only. `/v4/info` shows both plugins load on the fork
+  (youtube 1.18.2, lavasrc 4.8.3) and the Spotify source registers. The
+  `/bridge/v1` probe passes on the Pi (401 without/with wrong token,
+  connect with the right one). The unit needs
+  `-Dspring.cloud.config.enabled=false
+  -Dspring.cloud.config.import-check.enabled=false`, as auto-lavalink does.
+- **Bot-side env added to `.env`** (inert): `ELBOT_VOICE_TRANSPORT=lavalink`,
+  `ELBOT_VOICE_BRIDGE_URL=ws://127.0.0.1:2334/bridge/v1`, a generated
+  `ELBOT_VOICE_BRIDGE_TOKEN`, and `ELBOT_VOICE_NODE`. When the flag flips
+  to `bridge`, the bot must also point Mafic at the bridge instance
+  (`LAVALINK_PORT=2334`, `AUTO_LAVALINK=0`) — see section 2.
 
 ## 6. Suggested order when greenlit
 
