@@ -142,7 +142,7 @@ async def test_wake_connects_sends_context_and_only_active_speaker_audio():
         chunk = session.audio[1]
         assert any(chunk[:640]) and not any(chunk[700:])  # Alexis's 20 ms, then silence padding; Jovan's dropped
 
-        await ctrl._on_audio(b"\x02\x00" * 3200)  # 200 ms of bot speech
+        await ctrl._on_audio(b"\x00\x10" * 3200)  # 200 ms of bot speech (above the silence gate)
         await asyncio.sleep(0.2)
         assert player.spoken and sum(len(s) for s in player.spoken) % OUT_FRAME == 0
     finally:
@@ -223,5 +223,23 @@ async def test_silence_is_padded_in_real_time_while_window_open():
         sent = sum(len(a) for a in ctrl.session.audio) // 2
         assert 0.4 * 16000 <= sent <= 0.9 * 16000  # ~0.6 s of stream, all padding
         assert all(set(a) == {0} for a in ctrl.session.audio if a)
+    finally:
+        await ctrl.stop("test")
+
+
+@pytest.mark.asyncio
+async def test_output_silence_does_not_duck_or_keep_session_busy():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    await ctrl.start()
+    try:
+        player.window.wake(100)
+        await ctrl.on_wake(wake(), "opened")
+        before = ctrl._last_activity
+        await asyncio.sleep(0.01)
+        await ctrl._on_audio(b"\x05\x00" * 1600)  # near-silent
+        assert len(ctrl._out_buf) == 0 and ctrl._last_activity == before
+        ctrl._last_activity = 0.0
+        await ctrl._on_audio(b"\x00\x10" * 1600)  # speech-level
+        assert len(ctrl._out_buf) > 0 and ctrl._last_activity > 0.0
     finally:
         await ctrl.stop("test")

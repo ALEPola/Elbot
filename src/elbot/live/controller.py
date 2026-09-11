@@ -32,6 +32,16 @@ class LimitReached(RuntimeError):
     pass
 
 
+SILENCE_PEAK = 250  # of 32767
+
+
+def _is_silence(pcm16: bytes) -> bool:
+    if audioop is not None:
+        return audioop.max(pcm16, 2) < SILENCE_PEAK
+    return all(abs(int.from_bytes(pcm16[i:i + 2], "little", signed=True)) < SILENCE_PEAK
+               for i in range(0, len(pcm16) - 1, 2))
+
+
 def upsample_to_discord(pcm16k: bytes, state=None):
     """16 kHz mono -> 48 kHz stereo s16le."""
     if audioop is not None:
@@ -153,6 +163,13 @@ class LiveController:
 
     async def _on_audio(self, pcm16k: bytes) -> None:
         if self._stopped or not pcm16k:
+            return
+        # GPT-Live streams silence between turns; it must not duck the music,
+        # keep the session "active" or hold the command window open.
+        if _is_silence(pcm16k):
+            if self._out_buf:
+                pcm48, self._out_state = upsample_to_discord(pcm16k, self._out_state)
+                self._out_buf += pcm48  # finish the tail of a real utterance smoothly
             return
         pcm48, self._out_state = upsample_to_discord(pcm16k, self._out_state)
         self._out_buf += pcm48
