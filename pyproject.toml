@@ -52,6 +52,9 @@ include-package-data = true
 elbot = [
     "templates/*.html",
     "static/*",
+    "live/transport/*.mjs",
+    "live/transport/package.json",
+    "live/transport/pnpm-lock.yaml",
 ]
 
 [tool.setuptools.packages.find]

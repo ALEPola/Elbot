@@ -1,0 +1,151 @@
+// No Discord login token: the existing Nextcord gateway supplies voice events.
+// stdin/stdout are private IPC. Never redirect stdout to operational logs.
+import readline from 'node:readline';
+import {Readable} from 'node:stream';
+import {setTimeout as delay} from 'node:timers/promises';
+import WebSocket from 'ws';
+import prism from 'prism-media';
+import {
+  joinVoiceChannel, VoiceConnectionStatus, entersState, EndBehaviorType,
+  createAudioPlayer, createAudioResource, StreamType, NoSubscriberBehavior,
+} from '@discordjs/voice';
+import {parseFrame, FrameQueue} from './frames.mjs';
+
+let connection, adapter, bridge, player;
+let guildId, listening = false, closing = false;
+let generation = 0;
+let members = new Set();
+const subscriptions = new Map();
+const frames = new FrameQueue();
+const emit = (message) => {
+  if (process.stdout.writableLength > 512 * 1024) { shutdown(1); return; }
+  process.stdout.write(JSON.stringify(message) + '\n');
+};
+
+function stopReceive() {
+  listening = false;
+  for (const {source, decoder} of subscriptions.values()) { source.destroy(); decoder.destroy(); }
+  subscriptions.clear();
+}
+
+function shutdown(code = 0) {
+  if (closing) return;
+  closing = true;
+  stopReceive();
+  frames.clear();
+  player?.stop();
+  if (connection?.state.status !== VoiceConnectionStatus.Destroyed) connection?.destroy();
+  bridge?.terminate();
+  process.exitCode = code;
+  process.stdin.destroy();
+  // Native voice resources must not leave an orphan process after parent exit.
+  setTimeout(() => process.exit(code), 250).unref();
+}
+
+function subscribe(userId) {
+  if (!listening || !members.has(userId) || subscriptions.has(userId)) return;
+  const ssrc = connection.receiver.ssrcMap.get(userId)?.audioSSRC;
+  if (ssrc === undefined) return;
+  const source = connection.receiver.subscribe(userId, {
+    end: {behavior: EndBehaviorType.AfterSilence, duration: 500},
+  });
+  const decoder = new prism.opus.Decoder({rate: 48000, channels: 2, frameSize: 960});
+  const state = {source, decoder};
+  const streamGeneration = generation;
+  subscriptions.set(userId, state);
+  const clean = () => {
+    if (subscriptions.get(userId) === state) subscriptions.delete(userId);
+    source.unpipe(decoder); source.destroy(); decoder.destroy();
+  };
+  source.on('error', () => { emit({op: 'receive_error', user_id: userId}); clean(); });
+  decoder.on('error', () => { emit({op: 'receive_error', user_id: userId}); clean(); });
+  source.on('end', clean);
+  decoder.on('data', pcm => {
+    if (listening && members.has(userId)) emit({
+      op: 'pcm', generation: streamGeneration, user_id: userId, ssrc, pcm: pcm.toString('base64'),
+    });
+  });
+  source.pipe(decoder);
+}
+
+async function start(config) {
+  if (bridge) throw new Error('Already started');
+  guildId = config.guild_id;
+  const url = new URL(config.bridge_url);
+  if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('Invalid bridge URL');
+  bridge = new WebSocket(url, {headers: {Authorization: `Bearer ${config.bridge_token}`}, maxPayload: 65536});
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Bridge timeout')), 10000);
+    bridge.once('open', () => { clearTimeout(timer); resolve(); });
+    bridge.once('error', () => { clearTimeout(timer); reject(new Error('Bridge unavailable')); });
+  });
+  bridge.on('message', (data, binary) => {
+    if (!binary) return; // Voice credentials in control messages are never logged.
+    const opus = parseFrame(data, guildId);
+    if (opus) frames.push(opus);
+  });
+  bridge.on('error', () => { emit({op: 'failed', reason: 'bridge_error'}); shutdown(1); });
+  bridge.on('close', () => { if (!closing) { emit({op: 'failed', reason: 'bridge_closed'}); shutdown(1); } });
+  connection = joinVoiceChannel({
+    guildId, channelId: config.channel_id, selfDeaf: false, selfMute: false,
+    adapterCreator(methods) {
+      adapter = methods;
+      return {
+        sendPayload(payload) { emit({op: 'gateway_send', payload}); return !closing; },
+        destroy() {},
+      };
+    },
+  });
+  connection.on('error', () => { emit({op: 'failed', reason: 'voice_error'}); shutdown(1); });
+  connection.on('stateChange', (oldState, newState) => {
+    if (newState.status !== VoiceConnectionStatus.Ready) { stopReceive(); frames.clear(); }
+    emit({op: 'voice_status', status: newState.status});
+    if (newState.status === VoiceConnectionStatus.Disconnected && !closing) {
+      // A move may recover via the existing gateway, otherwise fail visibly.
+      entersState(connection, VoiceConnectionStatus.Ready, 10000).catch(() => {
+        if (!closing) { emit({op: 'failed', reason: 'voice_disconnected'}); shutdown(1); }
+      });
+    }
+  });
+  connection.receiver.speaking.on('start', subscribe);
+  await entersState(connection, VoiceConnectionStatus.Ready, 20000);
+  player = createAudioPlayer({behaviors: {noSubscriber: NoSubscriberBehavior.Pause}});
+  const source = Readable.from((async function* () {
+    while (!closing) {
+      const frame = frames.pop();
+      if (frame) yield frame;
+      else await delay(5);
+    }
+  })(), {objectMode: true, highWaterMark: 1});
+  player.on('error', () => { emit({op: 'failed', reason: 'playback_error'}); shutdown(1); });
+  connection.subscribe(player);
+  player.play(createAudioResource(source, {inputType: StreamType.Opus, silencePaddingFrames: 0}));
+  emit({op: 'ready'});
+}
+
+const input = readline.createInterface({input: process.stdin, crlfDelay: Infinity});
+input.on('line', line => {
+  try {
+    if (line.length > 65536) throw new Error('Oversized control message');
+    const message = JSON.parse(line);
+    if (message.op === 'start') {
+      start(message).catch(() => { emit({op: 'failed', reason: 'startup_failed'}); shutdown(1); });
+    } else if (message.op === 'voice_state') adapter?.onVoiceStateUpdate(message.data);
+    else if (message.op === 'voice_server') adapter?.onVoiceServerUpdate(message.data);
+    else if (message.op === 'listen') {
+      stopReceive(); members = new Set(message.members || []);
+      generation = message.generation;
+      listening = Boolean(message.enabled) && connection?.state.status === VoiceConnectionStatus.Ready;
+      if (listening) for (const id of members) subscribe(id);
+    } else if (message.op === 'members') {
+      members = new Set(message.members || []);
+      for (const [id, {source, decoder}] of subscriptions) {
+        if (!members.has(id)) { source.destroy(); decoder.destroy(); subscriptions.delete(id); }
+      }
+    } else if (message.op === 'close') shutdown();
+  } catch { emit({op: 'failed', reason: 'invalid_control'}); shutdown(1); }
+});
+input.on('close', () => shutdown());
+process.on('SIGTERM', () => shutdown());
+process.on('SIGINT', () => shutdown());
+process.on('uncaughtException', () => { emit({op: 'failed', reason: 'transport_exception'}); shutdown(1); });

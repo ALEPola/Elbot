@@ -216,3 +216,6 @@ tmp/
 
 # Bot runtime heartbeat
 logs/health.json
+
+# Node (voice transport bridge) — reinstall via pnpm/npm, don't commit
+src/elbot/live/transport/node_modules/

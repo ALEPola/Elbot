@@ -589,6 +589,11 @@ class Music(commands.Cog):
             raise
 
     async def _connect_voice(self, channel, player_cls, timeout: float):
+        if os.getenv("ELBOT_VOICE_TRANSPORT", "lavalink") == "bridge":
+            from elbot.live.bridge_player import BridgePlayer
+
+            player_cls = BridgePlayer
+            timeout = max(timeout, 30.0)
         # Capture exactly the client created by this attempt, even when
         # Nextcord raises before channel.connect returns it.
         player = None
