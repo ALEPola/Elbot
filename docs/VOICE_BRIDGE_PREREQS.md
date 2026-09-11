@@ -103,8 +103,19 @@ Node/`@discordjs/voice`, including ordinary music. Consequences:
   `/bridge/v1` returns 401 with no token and with a wrong token, and
   accepts the correct Bearer token. Not yet tested: actual frame export
   with a player attached (needs the Node side).
-- **Node 22 tarball staged**: `node-v22.23.2-linux-armv7l.tar.xz`
-  (25 MB), SHA-256 verified against nodejs.org `SHASUMS256.txt`.
+- **Node 22 installed on the Pi** at `/home/alex/.local/node22`
+  (v22.23.2 linux-armv7l, checksum re-verified on the Pi, 187 MB, no sudo,
+  system Node 18 untouched). Set
+  `ELBOT_VOICE_NODE=/home/alex/.local/node22/bin/node`.
+- **Transport deps proven on armhf** in
+  `/home/alex/.local/share/Elbot/transport-staging` (a copy of
+  `src/elbot/live/transport`, outside the repo until main is pulled):
+  pnpm 12 has no armv7 binary, so use `npx -y pnpm@10 install
+  --frozen-lockfile` (lockfile 9.0). `@discordjs/voice` reports opusscript,
+  native AES-256-GCM and `@snazzah/davey` 0.1.12; the
+  `davey-linux-arm-gnueabihf` binding loads; `node --test` passes 2/2;
+  `node_modules` is 12 MB. Repeat the same install inside the repo's
+  transport directory once it is on the Pi.
 - **Config drafted** in `infra/lavalink-bridge/`: `application.yml`
   (port 2334, bound to 127.0.0.1, secrets via `${ENV}` placeholders) and a
   `lavalink-bridge.service` unit with secrets in a 0600 drop-in.
