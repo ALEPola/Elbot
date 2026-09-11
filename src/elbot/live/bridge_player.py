@@ -36,6 +36,9 @@ class BridgePlayer(mafic.Player):
         self._closing = False
         self._listen_until = 0.0
         self._members = set()
+        self._voice_ids = set()
+        self._member_cache = {}
+        self._fetching = set()
         self.receive_errors = 0
 
     async def _send(self, payload):
@@ -48,8 +51,36 @@ class BridgePlayer(mafic.Player):
             self._process.stdin.write(data)
             await asyncio.wait_for(self._process.stdin.drain(), 2)
 
+    def _member(self, user_id):
+        return self.guild.get_member(user_id) or self._member_cache.get(user_id)
+
+    def _voice_user_ids(self):
+        return {uid for uid in self.channel.voice_states if uid != self.client.user.id}
+
     def _human_members(self):
-        return {m.id for m in self.channel.members if not m.bot}
+        ids = set()
+        for uid in self._voice_user_ids():
+            member = self._member(uid)
+            if member is not None and not member.bot:
+                ids.add(uid)
+        return ids
+
+    async def _refresh_members(self):
+        # Without the privileged members intent only the bot itself is cached,
+        # so occupants come from voice states and are fetched over REST once.
+        for uid in self._voice_user_ids():
+            if self._member(uid) is None and uid not in self._fetching:
+                self._fetching.add(uid)
+                try:
+                    self._member_cache[uid] = await self.guild.fetch_member(uid)
+                except Exception:
+                    pass
+                finally:
+                    self._fetching.discard(uid)
+        for uid in list(self._member_cache):
+            if uid not in self.channel.voice_states:
+                del self._member_cache[uid]
+        self._voice_ids = self._voice_user_ids()
 
     async def connect(self, *, timeout, reconnect, **kwargs):
         host, port, _, secure = get_lavalink_connection_info()
@@ -157,7 +188,7 @@ class BridgePlayer(mafic.Player):
         if (not self.audio.active or time.monotonic() >= self._listen_until
                 or message.get("generation") != self._generation):
             return
-        member = self.guild.get_member(int(message["user_id"]))
+        member = self._member(int(message["user_id"]))
         if (member is None or member.bot
                 or getattr(getattr(member, "voice", None), "channel", None) != self.channel):
             return
@@ -172,9 +203,13 @@ class BridgePlayer(mafic.Player):
             raise RuntimeError("Voice transport is not connected")
         if self.channel.id != self.audio.channel_id:
             self.audio = SpeakerAudio(self.guild.id, self.channel.id)
+        await self._refresh_members()
+        members = self._human_members()
+        if not members:
+            raise RuntimeError("No human members in the voice channel")
         self._generation = self.audio.start()
         self._listen_until = time.monotonic() + min(max(seconds, 1), 120)
-        self._members = self._human_members()
+        self._members = members
         try:
             await self._send({
                 "op": "listen", "enabled": True, "generation": self._generation,
@@ -203,8 +238,15 @@ class BridgePlayer(mafic.Player):
         while not self._closing:
             await asyncio.sleep(0.1)
             if self.audio.active:
+                if self._voice_user_ids() != self._voice_ids:
+                    await self._refresh_members()
                 members = self._human_members()
                 if time.monotonic() >= self._listen_until or not members:
+                    logger.info(
+                        "Local listening ended: %s",
+                        "time limit" if members else "no human members",
+                        extra={"guild_id": self.guild.id},
+                    )
                     await self.stop_listening()
                 elif members != self._members:
                     for user_id in self._members - members:
