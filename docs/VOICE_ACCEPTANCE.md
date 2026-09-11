@@ -107,10 +107,22 @@ carrying the correct Discord display name, `/listen status` reporting
 RSS and ~17% CPU. An earlier (crashed) run had attributed five distinct
 people correctly before the decoder abort. **Exit test met.**
 
+## Transport interruption (bridge path)
+
+`4fa98ff` makes `BridgePlayer` dispatch `bridge_transport_failed`; the music
+cog re-queues the current track and re-enters `_begin_playback`. Verified
+live at 22:22 by killing the Node bridge process during playback: transport
+stopped 22:22:16, cog re-queued and retried, new bridge process and
+reconnect at 22:22:29, playback restarted 22:22:30 (same track from the
+start, ~14 s gap, no operator action, no stuck registration). The gap is
+dominated by the 8 s connection warmup wait plus five 0.75 s retries before
+the reconnect attempt; tunable via `ELBOT_PLAYER_*` if it matters.
+
 ## Open
 
-- When the Node transport dies, the music cog does not notice: Lavalink keeps
-  "playing" with no audio path until the next command. Needs a
-  transport-failed signal into the cog's reconnect logic.
-- 20 consecutive bridge-path cycles and the interruption/restart checks have
-  not been run on the bridge path.
+- 20 consecutive bridge-path cycles (5 run) and the Lavalink/bot
+  service-restart check on the bridge path.
+- Recovery restarts the track from 0:00 rather than resuming at position.
+- With `ELBOT_VOICE_TRANSPORT=bridge`, the production bot's music runs on the
+  bridge stack; revert by restoring `tmp/.env.pre-bridge-flip` (transport
+  `lavalink`, `AUTO_LAVALINK=1`, `LAVALINK_PORT=2333`) and restarting.
