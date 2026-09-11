@@ -82,6 +82,7 @@ class LiveController:
         self._last_activity = 0.0
         self._warned = False
         self._allowance_s = 0.0
+        self._accounted_s = 0.0
         self._tasks: list[asyncio.Task] = []
         self._stopped = False
         self._tap_fn = self._tap  # one bound object so identity checks work
@@ -226,6 +227,7 @@ class LiveController:
                     logger.warning("Dropping input audio; GPT-Live socket unavailable")
             if self.session is not None and self.session.connected and self._clock() - last_report >= 10:
                 last_report = self._clock()
+                self._account(self.session.connected_seconds())
                 logger.info(
                     "GPT-Live %.0fs: sent %.1fs audio, pending out %d ms, events %s",
                     self.session.connected_seconds(), self._sent_samples / OUT_RATE,
@@ -265,6 +267,7 @@ class LiveController:
             )
         self._allowance_s = allowance
         self._warned = False
+        self._accounted_s = 0.0
         session = self._session_factory(self.config, on_audio=self._on_audio, on_event=self._on_event)
         await session.connect()
         self.session = session
@@ -287,15 +290,23 @@ class LiveController:
             return
         usage = await session.close(reason=reason)
         seconds = usage.reported_s if usage.reported_s is not None else usage.connected_s
-        self.ledger.add(seconds)
+        self._account(seconds)
         usd = seconds / 60 * self.config.price_per_minute
-        self.stats["seconds"] += seconds
-        self.stats["usd"] += usd
         logger.info(
             "GPT-Live session ended: %s | %.0fs | $%.3f | tokens in/out %d/%d",
             reason, seconds, usd, usage.input_tokens, usage.output_tokens,
             extra={"guild_id": self.player.guild.id},
         )
+
+    def _account(self, total_seconds: float) -> None:
+        """Record spend incrementally so a crash or restart mid-session is not lost."""
+        delta = max(0.0, total_seconds - self._accounted_s)
+        if delta <= 0:
+            return
+        self._accounted_s = total_seconds
+        self.ledger.add(delta)
+        self.stats["seconds"] += delta
+        self.stats["usd"] += delta / 60 * self.config.price_per_minute
 
     async def _clear_output(self) -> None:
         self._out_buf.clear()
