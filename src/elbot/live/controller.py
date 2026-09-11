@@ -25,6 +25,7 @@ logger = logging.getLogger("elbot.live.controller")
 OUT_FRAME = 3840  # 20 ms of 48 kHz stereo s16le
 PACE_S = 0.06
 BARGE_IN_BYTES = OUT_FRAME * 10  # 200 ms of pending bot speech
+BARGE_IN_FRAMES = 15  # the speaker must keep talking ~300 ms to cut the bot off
 
 
 class LimitReached(RuntimeError):
@@ -67,6 +68,7 @@ class LiveController:
         self._sent_samples = 0
         self._out_buf = bytearray()
         self._out_state = None
+        self._barge_frames = 0
         self._last_activity = 0.0
         self._warned = False
         self._allowance_s = 0.0
@@ -139,10 +141,15 @@ class LiveController:
         self.player.window.touch(speaker.user_id)
         self._last_activity = self._clock()
         if len(self._out_buf) > BARGE_IN_BYTES:
-            self.stats["barge_ins"] += 1
-            self._out_buf.clear()
-            self._out_state = None
-            asyncio.get_running_loop().create_task(self._speak_clear())
+            self._barge_frames += 1
+            if self._barge_frames >= BARGE_IN_FRAMES:
+                self._barge_frames = 0
+                self.stats["barge_ins"] += 1
+                self._out_buf.clear()
+                self._out_state = None
+                asyncio.get_running_loop().create_task(self._speak_clear())
+        else:
+            self._barge_frames = 0
 
     async def _on_audio(self, pcm16k: bytes) -> None:
         if self._stopped or not pcm16k:

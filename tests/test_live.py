@@ -159,7 +159,11 @@ async def test_barge_in_clears_pending_bot_speech():
         player.window.wake(100)
         await ctrl.on_wake(wake(), "opened")
         ctrl._out_buf += b"\0" * (BARGE_IN_BYTES + OUT_FRAME)
-        player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x01\x00\x01\x00" * 960)
+        for _ in range(5):  # a syllable is not a barge-in
+            player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x01\x00\x01\x00" * 960)
+        assert ctrl.stats["barge_ins"] == 0 and len(ctrl._out_buf) > 0
+        for _ in range(12):  # sustained speech is
+            player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x01\x00\x01\x00" * 960)
         await asyncio.sleep(0.05)
         assert ctrl.stats["barge_ins"] == 1 and len(ctrl._out_buf) == 0 and player.cleared >= 1
     finally:
