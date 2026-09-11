@@ -1,0 +1,29 @@
+# Bridge-mode Lavalink (fork build) on 127.0.0.1:2334, alongside the stock
+# instance that elbot.service manages on 2333. Install as
+# /etc/systemd/system/lavalink-bridge.service; secrets go in the drop-in
+# /etc/systemd/system/lavalink-bridge.service.d/secrets.conf (mode 0600):
+#   [Service]
+#   Environment=LAVALINK_PASSWORD=...
+#   Environment=ELBOT_VOICE_BRIDGE_TOKEN=...
+#   Environment=SPOTIFY_CLIENT_ID=...
+#   Environment=SPOTIFY_CLIENT_SECRET=...
+
+[Unit]
+Description=Lavalink (external bridge mode) for ELBOT voice receive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=alex
+WorkingDirectory=/home/alex/.local/share/Elbot/bridge
+ExecStart=/usr/bin/java -Xms128m -Xmx512m \
+  -Djava.net.preferIPv4Stack=true \
+  -Dspring.config.location=file:/home/alex/.local/share/Elbot/bridge/application.yml \
+  -jar /home/alex/.local/share/Elbot/bridge/Lavalink-bridge.jar
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

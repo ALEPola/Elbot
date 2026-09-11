@@ -33,6 +33,17 @@ been deployed.
   never receives audio — receive is entirely the Node side), and it has no
   retry or fallback if the bridge client drops. Voice-gateway handling is
   delegated to the bridge, which in our design is fed by Nextcord.
+- The server **broadcasts** to every connected bridge client: all guilds'
+  Opus frames, plus `voice_state` control messages carrying the Discord
+  voice session id, endpoint and token in cleartext JSON. Our side copes
+  (`frames.mjs` drops other guilds' frames, `bridge.mjs` ignores text
+  frames), but this means: keep the bridge bound to localhost, never expose
+  `/bridge/v1` beyond the Pi, and expect per-client bandwidth to scale with
+  the number of guilds playing, not the number of clients.
+- Frames are polled by a JVM `scheduleAtFixedRate` every 20 ms;
+  `frames.mjs` absorbs jitter with a 10-frame (200 ms) queue that drops the
+  oldest frame. Expect that queue's `dropped` counter to be the first thing
+  to watch on the Pi.
 
 ## 2. Transport mode is server-wide, not per-player
 
@@ -79,9 +90,28 @@ Node/`@discordjs/voice`, including ordinary music. Consequences:
 - The lockfile is pnpm's; use `corepack pnpm install --frozen-lockfile`
   (corepack is bundled with Node 22). Expect ~60 MB of `node_modules`.
 
-## 5. Suggested order when greenlit
+## 5. Status of the staged pieces (2026-09-10, nothing on the Pi yet)
 
-1. Build the fork jar on Windows; keep the checksum.
+- **Fork jar built** on the Windows dev machine from a fresh clone at
+  `e72ce9a` with the repo's Gradle wrapper (8.14.1) on Temurin JDK 17:
+  `Lavalink-bridge.jar`, 100 MB, SHA-256
+  `442aa2592092b2200a4d09a5bbe1fe6e407ce59c4cee0b253e215e733081501f`.
+  Manifest: `Build-Jdk-Spec: 17`, `Implementation-Version:
+  e72ce9ae…-SNAPSHOT`; all four bridge classes present.
+- **Smoke-tested locally** in `external_bridge` mode on 127.0.0.1:2334
+  (HTTP source only): boots in ~2 s, `/version` and `/v4/info` answer,
+  `/bridge/v1` returns 401 with no token and with a wrong token, and
+  accepts the correct Bearer token. Not yet tested: actual frame export
+  with a player attached (needs the Node side).
+- **Node 22 tarball staged**: `node-v22.23.2-linux-armv7l.tar.xz`
+  (25 MB), SHA-256 verified against nodejs.org `SHASUMS256.txt`.
+- **Config drafted** in `infra/lavalink-bridge/`: `application.yml`
+  (port 2334, bound to 127.0.0.1, secrets via `${ENV}` placeholders) and a
+  `lavalink-bridge.service` unit with secrets in a 0600 drop-in.
+
+## 6. Suggested order when greenlit
+
+1. ~~Build the fork jar on Windows; keep the checksum.~~ Done, see above.
 2. Install Node 22 to `/opt/node22`; `pnpm install` in
    `src/elbot/live/transport`; run `node --test` there.
 3. Run the fork on a second port (`transport-mode: external_bridge`) with

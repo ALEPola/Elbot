@@ -1,0 +1,64 @@
+# Second Lavalink instance for ELBOT's voice receive bridge.
+# Runs the Aiko-IT-Systems feat/transport-bridge fork (e72ce9a) in
+# external_bridge mode next to the stock instance on 2333. Not enabled by
+# default; see docs/VOICE_BRIDGE_PREREQS.md.
+#
+# Values in ${...} are read from the unit's Environment= lines. Never put the
+# Spotify or bridge secrets in this file.
+
+server:
+  port: 2334
+  # The bridge broadcasts Discord voice tokens to every authenticated
+  # client, so this instance must never listen beyond the Pi.
+  address: "127.0.0.1"
+
+lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      repository: "https://maven.lavalink.dev/releases"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
+      repository: "https://maven.lavalink.dev/releases"
+  pluginsDir: "/home/alex/.local/share/Elbot/plugins"
+  server:
+    password: "${LAVALINK_PASSWORD}"
+    transport-mode: external_bridge
+    bridge:
+      auth-token: "${ELBOT_VOICE_BRIDGE_TOKEN}"
+    sources:
+      youtube: false
+      soundcloud: true
+      bandcamp: true
+      twitch: true
+      vimeo: true
+      http: true
+    bufferDurationMs: 0
+    resamplingQuality: LOW
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - MUSIC
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
+  lavasrc:
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+    spotify:
+      clientId: "${SPOTIFY_CLIENT_ID}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET}"
+      countryCode: "US"
+
+logging:
+  file:
+    path: "/home/alex/.local/share/Elbot/lavalink-bridge.log"
+  level:
+    lavalink.server.player.transport: INFO
+    dev.lavalink.youtube.http.YoutubeAccessTokenTracker: WARN
