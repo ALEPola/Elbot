@@ -5,11 +5,13 @@ import {Readable} from 'node:stream';
 import {setTimeout as delay} from 'node:timers/promises';
 import WebSocket from 'ws';
 import prism from 'prism-media';
+import opus from '@discordjs/opus';
 import {
   joinVoiceChannel, VoiceConnectionStatus, entersState, EndBehaviorType,
   createAudioPlayer, createAudioResource, StreamType, NoSubscriberBehavior,
 } from '@discordjs/voice';
 import {parseFrame, FrameQueue} from './frames.mjs';
+import {FRAME_BYTES, SpeechQueue, mixFrame} from './mixer.mjs';
 
 let connection, adapter, bridge, player;
 let guildId, listening = false, closing = false;
@@ -17,6 +19,12 @@ let generation = 0;
 let members = new Set();
 const subscriptions = new Map();
 const frames = new FrameQueue();
+// Bot speech (48 kHz stereo PCM from Python) is mixed over ducked music.
+const speech = new SpeechQueue();
+const DUCK_GAIN = 0.25, DUCK_TAIL_MS = 400;
+let duckUntil = 0;
+const musicDecoder = new opus.OpusEncoder(48000, 2);
+const speechEncoder = new opus.OpusEncoder(48000, 2);
 // PCM is best-effort: under backpressure drop audio rather than the transport.
 // Only a runaway control backlog is fatal.
 let pcmDropped = 0;
@@ -43,6 +51,7 @@ function shutdown(code = 0) {
   closing = true;
   stopReceive();
   frames.clear();
+  speech.clear();
   player?.stop();
   if (connection?.state.status !== VoiceConnectionStatus.Destroyed) connection?.destroy();
   bridge?.terminate();
@@ -122,9 +131,20 @@ async function start(config) {
   player = createAudioPlayer({behaviors: {noSubscriber: NoSubscriberBehavior.Pause}});
   const source = Readable.from((async function* () {
     while (!closing) {
-      const frame = frames.pop();
-      if (frame) yield frame;
-      else await delay(5);
+      const music = frames.pop();
+      let musicPcm = null;
+      if (music) {
+        // Always decode so the decoder state stays continuous across ducking.
+        try { musicPcm = musicDecoder.decode(music); } catch { musicPcm = null; }
+      }
+      const speechPcm = speech.take(FRAME_BYTES);
+      if (speechPcm) {
+        duckUntil = Date.now() + DUCK_TAIL_MS;
+        yield speechEncoder.encode(mixFrame(musicPcm, speechPcm, DUCK_GAIN));
+      } else if (music) {
+        if (Date.now() < duckUntil && musicPcm) yield speechEncoder.encode(mixFrame(musicPcm, null, DUCK_GAIN));
+        else yield music;
+      } else await delay(5);
     }
   })(), {objectMode: true, highWaterMark: 1});
   player.on('error', () => { emit({op: 'failed', reason: 'playback_error'}); shutdown(1); });
@@ -152,6 +172,12 @@ input.on('line', line => {
       for (const [id, {source, decoder}] of subscriptions) {
         if (!members.has(id)) { source.destroy(); decoder.destroy(); subscriptions.delete(id); }
       }
+    } else if (message.op === 'speak') {
+      const pcm = Buffer.from(String(message.pcm || ''), 'base64');
+      if (pcm.length % 4 !== 0) throw new Error('Speech PCM must be 16-bit stereo');
+      if (pcm.length) speech.push(pcm);
+    } else if (message.op === 'speak_clear') {
+      speech.clear(); duckUntil = 0;
     } else if (message.op === 'close') shutdown();
   } catch { emit({op: 'failed', reason: 'invalid_control'}); shutdown(1); }
 });

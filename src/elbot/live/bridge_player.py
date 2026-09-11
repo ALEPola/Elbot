@@ -49,6 +49,7 @@ class BridgePlayer(mafic.Player):
         self.window = CommandWindow()
         self.wake_count = 0
         self._notify = None
+        self.live_tap = None
 
     async def _send(self, payload):
         async with self._send_lock:
@@ -237,8 +238,15 @@ class BridgePlayer(mafic.Player):
         speaker = Speaker(member.id, member.display_name, self.guild.id, self.channel.id)
         if self.audio.bind(self._generation, ssrc, speaker):
             pcm = base64.b64decode(message["pcm"], validate=True)
-            if self.audio.feed(self._generation, ssrc, pcm) and self.wake is not None:
-                self.wake.feed(speaker, pcm)
+            if self.audio.feed(self._generation, ssrc, pcm):
+                if self.wake is not None:
+                    self.wake.feed(speaker, pcm)
+                if self.live_tap is not None:
+                    try:
+                        self.live_tap(speaker, pcm)
+                    except Exception:
+                        logger.exception("Live audio tap failed")
+                        self.live_tap = None
 
     async def start_listening(self, seconds=120, *, notify=None):
         if not self.is_connected():
@@ -250,7 +258,7 @@ class BridgePlayer(mafic.Player):
         if not members:
             raise RuntimeError("No human members in the voice channel")
         self._generation = self.audio.start()
-        self._listen_until = time.monotonic() + min(max(seconds, 1), 120)
+        self._listen_until = time.monotonic() + min(max(seconds, 1), 3600)
         self._members = members
         self._notify = notify
         if self.wake is None:
@@ -274,6 +282,15 @@ class BridgePlayer(mafic.Player):
             await asyncio.get_running_loop().run_in_executor(None, wake.close)
         if self._process and self._process.returncode is None:
             await self._send({"op": "listen", "enabled": False})
+
+    async def speak(self, pcm48: bytes):
+        """Queue 48 kHz stereo s16le bot speech; the transport ducks music under it."""
+        if pcm48:
+            await self._send({"op": "speak", "pcm": base64.b64encode(pcm48).decode()})
+
+    async def speak_clear(self):
+        if self._process and self._process.returncode is None:
+            await self._send({"op": "speak_clear"})
 
     async def _handle_wake_events(self):
         if self.wake is None:
