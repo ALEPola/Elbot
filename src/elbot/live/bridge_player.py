@@ -18,6 +18,7 @@ import mafic
 
 from elbot.config import get_lavalink_connection_info
 from .audio_input import Speaker, SpeakerAudio
+from .wake_word import CommandWindow, create_detector
 
 
 logger = logging.getLogger("elbot.live")
@@ -44,6 +45,10 @@ class BridgePlayer(mafic.Player):
         self._stderr_tail = deque(maxlen=5)
         self._failure_reported = False
         self.receive_errors = 0
+        self.wake = None
+        self.window = CommandWindow()
+        self.wake_count = 0
+        self._notify = None
 
     async def _send(self, payload):
         async with self._send_lock:
@@ -232,9 +237,10 @@ class BridgePlayer(mafic.Player):
         speaker = Speaker(member.id, member.display_name, self.guild.id, self.channel.id)
         if self.audio.bind(self._generation, ssrc, speaker):
             pcm = base64.b64decode(message["pcm"], validate=True)
-            self.audio.feed(self._generation, ssrc, pcm)
+            if self.audio.feed(self._generation, ssrc, pcm) and self.wake is not None:
+                self.wake.feed(speaker, pcm)
 
-    async def start_listening(self, seconds=120):
+    async def start_listening(self, seconds=120, *, notify=None):
         if not self.is_connected():
             raise RuntimeError("Voice transport is not connected")
         if self.channel.id != self.audio.channel_id:
@@ -246,6 +252,10 @@ class BridgePlayer(mafic.Player):
         self._generation = self.audio.start()
         self._listen_until = time.monotonic() + min(max(seconds, 1), 120)
         self._members = members
+        self._notify = notify
+        if self.wake is None:
+            self.wake = await asyncio.get_running_loop().run_in_executor(None, create_detector)
+        self.window.close()
         try:
             await self._send({
                 "op": "listen", "enabled": True, "generation": self._generation,
@@ -258,8 +268,28 @@ class BridgePlayer(mafic.Player):
     async def stop_listening(self):
         self.audio.stop()
         self._listen_until = 0
+        self.window.close()
+        wake, self.wake = self.wake, None
+        if wake is not None:
+            await asyncio.get_running_loop().run_in_executor(None, wake.close)
         if self._process and self._process.returncode is None:
             await self._send({"op": "listen", "enabled": False})
+
+    async def _handle_wake_events(self):
+        if self.wake is None:
+            return
+        self.window.expire()
+        for event in self.wake.poll():
+            self.wake_count += 1
+            outcome = self.window.wake(event.speaker.user_id)
+            logger.info(
+                "wake | %s | %s | %s", event.speaker.display_name, event.text, outcome,
+                extra={"guild_id": event.speaker.guild_id, "user_id": event.speaker.user_id},
+            )
+            self.client.dispatch("wake_phrase", self, event, outcome)
+            if self._notify is not None:
+                with contextlib.suppress(Exception):
+                    await self._notify(event, outcome)
 
     async def _tick(self):
         try:
@@ -288,12 +318,17 @@ class BridgePlayer(mafic.Player):
                 elif members != self._members:
                     for user_id in self._members - members:
                         self.audio.remove(user_id)
+                        if self.wake is not None:
+                            self.wake.remove(user_id)
                     self._members = members
                     await self._send({"op": "members", "members": [str(i) for i in members]})
             for event in self.audio.tick():
                 logger.info("%s | %s", event.kind, event.speaker.display_name, extra={
                     "guild_id": event.speaker.guild_id, "user_id": event.speaker.user_id,
                 })
+                if event.kind == "speaker_stop" and self.wake is not None:
+                    self.wake.flush(event.speaker.user_id)
+            await self._handle_wake_events()
 
     async def disconnect(self, *, force=False):
         if self._closing:
@@ -302,6 +337,10 @@ class BridgePlayer(mafic.Player):
         self.audio.stop()
         self._bridge_ready.clear()
         self._connected = False
+        wake, self.wake = self.wake, None
+        if wake is not None:
+            with contextlib.suppress(Exception):
+                await asyncio.get_running_loop().run_in_executor(None, wake.close)
         try:
             if self._process and self._process.returncode is None:
                 with contextlib.suppress(Exception):

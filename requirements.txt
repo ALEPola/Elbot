@@ -13,3 +13,4 @@ icalendar
 aiohttp
 cachetools
 ffmpeg
+vosk>=0.3.45

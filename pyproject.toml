@@ -25,6 +25,7 @@ dependencies = [
     "icalendar",
     "aiohttp",
     "cachetools",
+    "vosk>=0.3.45",
     "pywin32; sys_platform == 'win32'",
 ]
 
