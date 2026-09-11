@@ -141,3 +141,16 @@ def test_command_window_arbitration():
     now[0] += 2.0
     assert not window.is_open_for(1)
     assert window.wake(2) == "opened"
+
+
+def test_repeating_the_name_cannot_hold_the_floor():
+    now = [0.0]
+    window = CommandWindow(5.0, clock=lambda: now[0])
+    assert window.wake(1) == "opened"
+    now[0] += 4.0
+    assert window.wake(1) == "extended"  # once
+    now[0] += 4.0
+    assert window.wake(1) == "held"  # no further extension
+    assert window.wake(2) == "busy"
+    now[0] += 1.5
+    assert window.wake(2) == "opened"  # the held window expired on schedule

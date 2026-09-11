@@ -39,7 +39,7 @@ class Listen(commands.Cog):
         channel = interaction.channel
 
         async def notify(event, outcome):
-            if channel is None:
+            if channel is None or outcome in ("extended", "held"):
                 return
             if outcome == "busy":
                 text = f"One at a time — **{event.speaker.display_name}**, hang on."

@@ -234,22 +234,33 @@ class WakeDetector:
 
 
 class CommandWindow:
-    """One active speaker per guild; others are told to wait."""
+    """One active speaker per guild; others are told to wait.
 
-    def __init__(self, seconds: float = 8.0, *, clock: Callable[[], float] = time.monotonic):
+    A repeat of the wake phrase by the active speaker extends the window once;
+    further repeats do not, so one person cannot hold the floor by shouting.
+    """
+
+    def __init__(self, seconds: float = 5.0, *, max_extensions: int = 1,
+                 clock: Callable[[], float] = time.monotonic):
         self.seconds = seconds
+        self.max_extensions = max_extensions
         self._clock = clock
         self.active: Optional[int] = None
         self.until = 0.0
+        self._extensions = 0
 
     def wake(self, user_id: int) -> str:
         self.expire()
         if self.active is None:
             self.active, self.until = user_id, self._clock() + self.seconds
+            self._extensions = 0
             return "opened"
         if self.active == user_id:
-            self.until = self._clock() + self.seconds
-            return "extended"
+            if self._extensions < self.max_extensions:
+                self._extensions += 1
+                self.until = self._clock() + self.seconds
+                return "extended"
+            return "held"
         return "busy"
 
     def touch(self, user_id: int) -> None:
@@ -262,12 +273,12 @@ class CommandWindow:
 
     def expire(self) -> bool:
         if self.active is not None and self._clock() >= self.until:
-            self.active, self.until = None, 0.0
+            self.close()
             return True
         return False
 
     def close(self) -> None:
-        self.active, self.until = None, 0.0
+        self.active, self.until, self._extensions = None, 0.0, 0
 
 
 def create_detector() -> Optional[WakeDetector]:
