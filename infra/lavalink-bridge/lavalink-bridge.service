@@ -18,6 +18,8 @@ User=alex
 WorkingDirectory=/home/alex/.local/share/Elbot/bridge
 ExecStart=/usr/bin/java -Xms128m -Xmx512m \
   -Djava.net.preferIPv4Stack=true \
+  -Dspring.cloud.config.enabled=false \
+  -Dspring.cloud.config.import-check.enabled=false \
   -Dspring.config.location=file:/home/alex/.local/share/Elbot/bridge/application.yml \
   -jar /home/alex/.local/share/Elbot/bridge/Lavalink-bridge.jar
 Restart=on-failure
