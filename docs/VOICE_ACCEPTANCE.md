@@ -265,6 +265,37 @@ instrumentation gap this doc called out.
 **Confirmed 2026-09-11**: full GPT-Live back-and-forth including the
 post-reply pause (the exact trigger) survives with no more silence, and
 music ducking under a spoken reply is audible. Phase 3 exit test is met.
+
+# Phase 5: read-only DJ tools
+
+Built 2026-09-11: `get_current_track`, `get_queue`, `search_track`,
+`get_requester`, `recommend_similar` registered as Responses-delegation
+function tools (`elbot.live.session.DEFAULT_TOOLS`), executed against real
+Music cog state in `elbot.live.tools`, dispatched by name through
+`LiveController._on_tool_call`. None mutate queue or playback state.
+
+Implements the documented function-calling protocol: calls arrive one at a
+time via nested `response.output_item.done` events inside the
+`response.event` envelope; a terminal nested event
+(`completed`/`failed`/`incomplete`) means no more are coming for that
+turn, so calls are collected and answered together, then one
+`response.create` (no `delegation_id`, no body, per the docs) resumes it.
+
+**Bug found and fixed on first live test**: the API rejected `get_queue`'s
+schema outright (`Invalid schema for function 'get_queue': 'required' ...
+Missing 'limit'`) — strict-mode function schemas require every key in
+`properties` to also appear in `required`; an omitted-when-optional key
+like the original `limit` isn't valid strict-mode JSON Schema at all. Every
+GPT-Live turn errored once tools were registered, before any tool was even
+called. Fixed by making `limit` required but typed `["integer", "null"]`,
+with `null` meaning the default (`e796d7f`... `681bfa1`).
+
+**Confirmed live** after the fix: `get_queue({"limit": None})` called,
+delegated (`session.delegation.created`), executed, and correctly reported
+an empty queue; after a track was queued, correctly read it back. Exit
+test met for `get_queue`. The other four tools share the identical
+schema/dispatch path but have not each been individually exercised live
+yet.
 - Recovery restarts the track from 0:00 rather than resuming at position.
 - With `ELBOT_VOICE_TRANSPORT=bridge`, the production bot's music runs on the
   bridge stack; revert by restoring `tmp/.env.pre-bridge-flip` (transport
