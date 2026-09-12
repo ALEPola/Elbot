@@ -204,3 +204,31 @@ def test_track_key_prefers_stable_identifier_over_position_embedding_encoded_id(
     encoded_only = SimpleNamespace(encoded="blob-1", id=None, identifier=None)
     assert music._track_key(encoded_only) == "encoded:blob-1"
     assert music._track_key(None) is None
+
+
+@pytest.mark.asyncio
+async def test_autocomplete_never_offers_a_truncated_broken_uri():
+    """Regression: a track's .uri can be a 1000+ char signed CDN stream
+    link, not the clean webpage URL. Discord caps a choice's value at 100
+    chars regardless, so blindly slicing it produced a corrupted,
+    unresolvable string that silently played the wrong/metadata-less
+    stream when selected. A too-long uri must fall back to the title.
+    """
+    long_uri = "https://rr11---sn-8xgp1vo-ab5d.googlevideo.com/videoplayback?" + "x" * 200
+    short = SimpleNamespace(title="Se Me Nota (Agarrame)", duration=177_000, uri="https://youtu.be/abc123")
+    long_ = SimpleNamespace(title="Chimbala x Omega - Se Me Nota", duration=178_000, uri=long_uri)
+
+    music = Music.__new__(Music)
+    music._autocomplete_cache = {}
+    music._backend = SimpleNamespace(
+        wait_ready=AsyncMock(),
+        resolve_tracks=AsyncMock(return_value=[short, long_]),
+    )
+
+    choices = await music.play_autocomplete(SimpleNamespace(), "se me nota")
+
+    values = list(choices.values())
+    assert values[0] == "https://youtu.be/abc123"  # short uri: used as-is
+    assert all(len(v) <= 100 for v in values)
+    assert long_uri not in values  # never submit the corrupted, truncated URL
+    assert values[1] == "Chimbala x Omega - Se Me Nota"  # falls back to the title

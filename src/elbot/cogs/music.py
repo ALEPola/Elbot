@@ -1616,8 +1616,16 @@ class Music(commands.Cog):
                 if title
                 else f"{value}"
             )
-            val = getattr(t, "uri", None) or title or value
-            choices[label[:100]] = str(val)[:100]
+            val = str(getattr(t, "uri", None) or title or value)
+            if len(val) > 100:
+                # Discord truncates the value to 100 chars regardless; for a
+                # URI (often a signed, 1000+ char direct CDN stream link,
+                # not the clean webpage URL) that produces a corrupted,
+                # unresolvable string rather than a merely-shorter one.
+                # Fall back to the title (a safe, still-meaningful search
+                # query) instead of submitting known-broken data.
+                val = str(title or value)[:100]
+            choices[label[:100]] = val
         if choices:
             self._autocomplete_cache[cache_key] = choices
         return choices
