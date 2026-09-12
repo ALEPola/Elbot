@@ -179,6 +179,12 @@ class BridgePlayer(mafic.Player):
                     else:
                         self._bridge_ready.set()
                         self._connected = True
+                elif op == "player_status":
+                    logger.info(
+                        "Node audio player: %s -> %s (playable=%s)",
+                        message.get("previous"), message.get("status"),
+                        message.get("playable"), extra={"guild_id": self.guild.id},
+                    )
                 elif op == "pcm":
                     self._receive(message)
                 elif op == "diag":

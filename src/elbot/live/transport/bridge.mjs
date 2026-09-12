@@ -8,12 +8,13 @@ import prism from 'prism-media';
 import opus from '@discordjs/opus';
 import {
   joinVoiceChannel, VoiceConnectionStatus, entersState, EndBehaviorType,
-  createAudioPlayer, createAudioResource, StreamType, NoSubscriberBehavior,
+  createAudioPlayer, NoSubscriberBehavior,
 } from '@discordjs/voice';
 import {parseFrame, FrameQueue} from './frames.mjs';
 import {FRAME_BYTES, SpeechQueue, mixFrame} from './mixer.mjs';
+import {createRestartablePlayback} from './playback.mjs';
 
-let connection, adapter, bridge, player;
+let connection, adapter, bridge, player, playback;
 let guildId, listening = false, closing = false;
 let generation = 0;
 let members = new Set();
@@ -55,6 +56,7 @@ function shutdown(code = 0) {
   stopReceive();
   frames.clear();
   speech.clear();
+  playback?.dispose();
   player?.stop();
   if (connection?.state.status !== VoiceConnectionStatus.Destroyed) connection?.destroy();
   bridge?.terminate();
@@ -104,7 +106,7 @@ async function start(config) {
   bridge.on('message', (data, binary) => {
     if (!binary) return; // Voice credentials in control messages are never logged.
     const opus = parseFrame(data, guildId);
-    if (opus) frames.push(opus);
+    if (opus) { frames.push(opus); playback?.ensurePlaying(); }
   });
   bridge.on('error', () => { emit({op: 'failed', reason: 'bridge_error'}); shutdown(1); });
   bridge.on('close', () => { if (!closing) { emit({op: 'failed', reason: 'bridge_closed'}); shutdown(1); } });
@@ -132,9 +134,13 @@ async function start(config) {
   connection.receiver.speaking.on('start', subscribe);
   await entersState(connection, VoiceConnectionStatus.Ready, 20000);
   player = createAudioPlayer({behaviors: {noSubscriber: NoSubscriberBehavior.Pause}});
+  player.on('stateChange', (oldState, newState) => emit({
+    op: 'player_status', previous: oldState.status, status: newState.status,
+    playable: player.playable.length,
+  }));
   setInterval(() => { emit({op: 'diag', ...diag}); }, 5000).unref();
-  const source = Readable.from((async function* () {
-    while (!closing) {
+  playback = createRestartablePlayback(player, isCurrent => Readable.from((async function* () {
+    while (!closing && isCurrent()) {
       const music = frames.pop();
       let musicPcm = null;
       if (music) {
@@ -158,10 +164,11 @@ async function start(config) {
         } else yield music;
       } else { diag.silentTicks++; await delay(5); }
     }
-  })(), {objectMode: true, highWaterMark: 1});
+  })(), {objectMode: true, highWaterMark: 1}));
   player.on('error', () => { emit({op: 'failed', reason: 'playback_error'}); shutdown(1); });
   connection.subscribe(player);
-  player.play(createAudioResource(source, {inputType: StreamType.Opus, silencePaddingFrames: 0}));
+  // Drain any bridge frames received while the voice connection was starting.
+  playback.ensurePlaying();
   emit({op: 'ready'});
 }
 
@@ -187,7 +194,10 @@ input.on('line', line => {
     } else if (message.op === 'speak') {
       const pcm = Buffer.from(String(message.pcm || ''), 'base64');
       if (pcm.length % 4 !== 0) throw new Error('Speech PCM must be 16-bit stereo');
-      if (pcm.length) { speech.push(pcm); diag.speechBytesIn += pcm.length; }
+      if (pcm.length) {
+        speech.push(pcm); diag.speechBytesIn += pcm.length;
+        playback?.ensurePlaying();
+      }
     } else if (message.op === 'speak_clear') {
       speech.clear(); duckUntil = 0;
     } else if (message.op === 'close') shutdown();
