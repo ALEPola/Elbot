@@ -132,6 +132,19 @@ class LiveController:
         self.active_name = event.speaker.display_name
         self._in_buf.clear()
         self._in_state = None
+        if self._out_buf:
+            # Diagnostic (2026-09-12): user reports ELBOT's own speech
+            # sometimes cuts off mid-reply "randomly". A wake re-trigger
+            # (outcome extended/held, e.g. a Vosk false-positive on "elbow"
+            # from ongoing chatter, not just a fresh "opened" command)
+            # unconditionally wipes any still-playing reply here. Logging
+            # this to see whether that's actually what's happening before
+            # changing the behavior.
+            logger.info(
+                "Wake (%s) cut off %d ms of pending ELBOT speech",
+                outcome, len(self._out_buf) // OUT_FRAME * 20,
+                extra={"guild_id": self.player.guild.id},
+            )
         await self._clear_output()
         await self.session.append_instructions(
             f"Current speaker: {event.speaker.display_name} (Discord user id {event.speaker.user_id}). "
@@ -160,6 +173,15 @@ class LiveController:
             if self._barge_frames >= BARGE_IN_FRAMES:
                 self._barge_frames = 0
                 self.stats["barge_ins"] += 1
+                # Diagnostic (2026-09-12): see the matching note in on_wake.
+                # This fires whenever the active speaker keeps talking for
+                # ~300ms while ELBOT is still replying, whether or not they
+                # meant to interrupt it - a candidate for "random" cutoffs.
+                logger.info(
+                    "Barge-in: clearing %d ms of pending ELBOT speech",
+                    len(self._out_buf) // OUT_FRAME * 20,
+                    extra={"guild_id": self.player.guild.id},
+                )
                 self._out_buf.clear()
                 self._out_state = None
                 asyncio.get_running_loop().create_task(self._speak_clear())
