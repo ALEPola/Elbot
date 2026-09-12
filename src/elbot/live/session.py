@@ -104,8 +104,15 @@ DEFAULT_TOOLS = [
         "description": "List upcoming tracks in the queue, in play order.",
         "parameters": {
             "type": "object",
-            "properties": {"limit": {"type": "integer", "description": "Max tracks to return (default 10, max 25)."}},
-            "required": [],
+            "properties": {
+                "limit": {
+                    "type": ["integer", "null"],
+                    "description": "Max tracks to return, up to 25. Pass null for the default of 10.",
+                },
+            },
+            # Strict mode requires every property to be listed here; "limit" is
+            # still effectively optional because its type includes "null".
+            "required": ["limit"],
             "additionalProperties": False,
         },
         "strict": True,
