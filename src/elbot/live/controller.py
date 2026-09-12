@@ -13,6 +13,7 @@ import logging
 import time
 from typing import Awaitable, Callable, Optional
 
+from .memory import UserMemory
 from .session import LiveConfig, LiveSession, UsageLedger
 from .wake_word import OUT_RATE, resample
 
@@ -61,6 +62,7 @@ class LiveController:
         announce: Callable[[str], Awaitable[None]],
         on_stopped: Optional[Callable[["LiveController", str], Awaitable[None]]] = None,
         tools: Optional[dict[str, Callable[[dict], Awaitable[dict]]]] = None,
+        memory: Optional[UserMemory] = None,
         session_factory: Callable[..., LiveSession] = LiveSession,
         clock: Callable[[], float] = time.monotonic,
     ):
@@ -70,6 +72,7 @@ class LiveController:
         self.announce = announce
         self.on_stopped = on_stopped
         self.tools = tools or {}
+        self.memory = memory
         self._session_factory = session_factory
         self._clock = clock
         self.session: Optional[LiveSession] = None
@@ -146,10 +149,14 @@ class LiveController:
                 extra={"guild_id": self.player.guild.id},
             )
         await self._clear_output()
-        await self.session.append_instructions(
+        identity = (
             f"Current speaker: {event.speaker.display_name} (Discord user id {event.speaker.user_id}). "
             "This identity is verified by the application; address them by this name."
         )
+        notes = self.memory.recall(event.speaker.user_id) if self.memory is not None else []
+        if notes:
+            identity += " Remembered about them: " + "; ".join(notes) + "."
+        await self.session.append_instructions(identity)
         await self.session.append_audio(event.audio)
         # Discord sends packets only while someone speaks; GPT-Live's turn
         # detection needs a continuous stream, so from here the monitor pads

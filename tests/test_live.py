@@ -8,6 +8,7 @@ import pytest
 
 from elbot.live.audio_input import Speaker
 from elbot.live.controller import BARGE_IN_BYTES, OUT_FRAME, LiveController, upsample_to_discord
+from elbot.live.memory import UserMemory
 from elbot.live.session import LiveConfig, LiveSession, UsageLedger
 from elbot.live.wake_word import CommandWindow, WakeEvent
 
@@ -112,7 +113,7 @@ def wake(uid=100, name="Alexis", audio=b"\x01\x00" * 1600):
     return WakeEvent(Speaker(uid, name, 1, 2), "elbot [unk]", "elbot", 0.0, 0.0, audio)
 
 
-def make(cfg=None, ledger=None):
+def make(cfg=None, ledger=None, memory=None):
     player = FakePlayer()
     announced = []
 
@@ -120,7 +121,9 @@ def make(cfg=None, ledger=None):
         announced.append(text)
 
     ledger = ledger or UsageLedger(None)
-    ctrl = LiveController(player, cfg or config(), ledger, announce=announce, session_factory=FakeSession)
+    ctrl = LiveController(
+        player, cfg or config(), ledger, announce=announce, session_factory=FakeSession, memory=memory,
+    )
     return ctrl, player, announced, ledger
 
 
@@ -151,6 +154,32 @@ async def test_wake_connects_sends_context_and_only_active_speaker_audio():
         await ctrl.stop("test")
     assert not ctrl.running and player.live_tap is None
     assert ledger.seconds()[0] == 9.0 and ctrl.stats["usd"] > 0
+
+
+@pytest.mark.asyncio
+async def test_wake_injects_remembered_notes_about_the_speaker():
+    memory = UserMemory(None)
+    memory.remember(100, "likes reggaeton")
+    ctrl, player, _, _ = make(config(idle_s=60), memory=memory)
+    await ctrl.start()
+    try:
+        player.window.wake(100)
+        await ctrl.on_wake(wake(), "opened")
+        assert "likes reggaeton" in ctrl.session.instructions[0]
+    finally:
+        await ctrl.stop("test")
+
+
+@pytest.mark.asyncio
+async def test_wake_without_remembered_notes_omits_the_clause():
+    ctrl, player, _, _ = make(config(idle_s=60), memory=UserMemory(None))
+    await ctrl.start()
+    try:
+        player.window.wake(100)
+        await ctrl.on_wake(wake(), "opened")
+        assert "Remembered about them" not in ctrl.session.instructions[0]
+    finally:
+        await ctrl.stop("test")
 
 
 @pytest.mark.asyncio

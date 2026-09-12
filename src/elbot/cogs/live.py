@@ -7,6 +7,7 @@ from nextcord.ext import commands
 
 from elbot.config import Config
 from elbot.live.controller import LiveController
+from elbot.live.memory import UserMemory
 from elbot.live.session import DEFAULT_TOOLS, LiveConfig, UsageLedger
 from elbot.live.tools import build_tools
 
@@ -16,6 +17,8 @@ class Live(commands.Cog):
         self.bot = bot
         self.controllers: dict[int, LiveController] = {}
         self.ledger = UsageLedger(Path(Config.BASE_DIR) / "logs" / "live_usage.json")
+        # Global across guilds - a Discord user id means the same person everywhere.
+        self.memory = UserMemory(Path(Config.BASE_DIR) / "logs" / "live_memory.json")
 
     @nextcord.slash_command(name="live", description="Voice conversation with ELBOT (GPT-Live)")
     async def live(self, interaction: nextcord.Interaction):
@@ -81,11 +84,12 @@ class Live(commands.Cog):
             return
         controller = LiveController(
             player, config, self.ledger, announce=announce, on_stopped=on_stopped,
+            memory=self.memory,
         )
         # Tools need the controller (for the current speaker's identity), and
         # the controller needs its tools dict at construction, so wire it in
         # after the fact rather than restructuring LiveController's __init__.
-        controller.tools = build_tools(music, interaction.guild, controller)
+        controller.tools = build_tools(music, interaction.guild, controller, self.memory)
         self.controllers[interaction.guild.id] = controller
         music.voice_holds.add(interaction.guild.id)  # keep the music cog's idle timer from leaving
         await controller.start()
@@ -129,6 +133,14 @@ class Live(commands.Cog):
             f"Live: on · GPT-Live: {connected} · Talking: {speaker} · "
             f"Wakes: {controller.stats['wakes']} · Sessions: {controller.stats['sessions']} · "
             f"This run: {controller.stats['seconds'] / 60:.1f} min, ${controller.stats['usd']:.2f}",
+            ephemeral=True,
+        )
+
+    @live.subcommand(name="forget", description="Clear what ELBOT remembers about you")
+    async def forget(self, interaction: nextcord.Interaction):
+        cleared = self.memory.forget_all(interaction.user.id)
+        await interaction.response.send_message(
+            "Cleared what I remember about you." if cleared else "I didn't have anything remembered about you.",
             ephemeral=True,
         )
 

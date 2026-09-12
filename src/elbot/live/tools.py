@@ -1,4 +1,5 @@
-"""Phase 5/6: DJ tools exposed to GPT-Live's backend model.
+"""Phase 5/6 DJ tools, plus a small per-user memory tool, exposed to
+GPT-Live's backend model.
 
 Phase 5 tools (get_current_track, get_queue, search_track, get_requester,
 recommend_similar) only read Music cog state. Phase 6 adds tools that
@@ -9,8 +10,13 @@ channel, so no separate membership check is needed here (mirrors the one
 `Music._control_error` does for slash commands). Destructive actions
 (stop/clear queue) are deliberately not exposed yet; see Phase 7 in
 ELBOT_GPT_LIVE_BATTLE_PLAN.md for the planned confirmation/permission
-layer before those are added. Each tool takes a JSON-schema-shaped
-`arguments` dict (already parsed) and returns a JSON-serializable dict.
+layer before those are added. remember_about_user/recall_about_user read
+and write the same UserMemory store the controller already consults on
+every wake to inject known facts into the turn's instructions, so these
+tools mainly exist for when the model is explicitly asked "what do you
+remember about me" or to record something proactively. Each tool takes a
+JSON-schema-shaped `arguments` dict (already parsed) and returns a
+JSON-serializable dict.
 """
 
 from __future__ import annotations
@@ -24,7 +30,7 @@ def _state(music, guild_id: int):
 
 
 def build_tools(
-    music, guild, controller=None
+    music, guild, controller=None, memory=None
 ) -> dict[str, Callable[[dict], Awaitable[dict]]]:
     async def get_current_track(_args: dict) -> dict:
         state = _state(music, guild.id)
@@ -182,6 +188,20 @@ def build_tools(
         await music._refresh_now_playing(guild.id)
         return {"volume": level}
 
+    async def remember_about_user(args: dict) -> dict:
+        note = str(args.get("note") or "").strip()
+        if not note:
+            return {"error": "no note given"}
+        if memory is None or controller is None or not controller.active_speaker:
+            return {"error": "no active speaker to remember this about"}
+        memory.remember(controller.active_speaker, note)
+        return {"remembered": True}
+
+    async def recall_about_user(_args: dict) -> dict:
+        if memory is None or controller is None or not controller.active_speaker:
+            return {"notes": []}
+        return {"notes": memory.recall(controller.active_speaker)}
+
     return {
         "get_current_track": get_current_track,
         "get_queue": get_queue,
@@ -193,4 +213,6 @@ def build_tools(
         "pause_playback": pause_playback,
         "resume_playback": resume_playback,
         "set_volume": set_volume,
+        "remember_about_user": remember_about_user,
+        "recall_about_user": recall_about_user,
     }

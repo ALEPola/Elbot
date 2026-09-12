@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from elbot.live.memory import UserMemory
 from elbot.live.tools import build_tools
 
 
@@ -377,3 +378,58 @@ async def test_set_volume_rejects_non_numeric_level():
     tools, _state, _fallback, _calls = make_mutable_music(player=SimpleNamespace())
     result = await tools["set_volume"]({"level": "loud"})
     assert result == {"error": "level must be an integer"}
+
+
+@pytest.mark.asyncio
+async def test_remember_about_user_saves_a_note_for_the_active_speaker():
+    memory = UserMemory(None)
+    controller = SimpleNamespace(active_speaker=555, active_name="Nave")
+    music, guild, _state = make_music()
+    tools = build_tools(music, guild, controller, memory)
+
+    result = await tools["remember_about_user"]({"note": "likes reggaeton"})
+
+    assert result == {"remembered": True}
+    assert memory.recall(555) == ["likes reggaeton"]
+
+
+@pytest.mark.asyncio
+async def test_recall_about_user_lists_saved_notes():
+    memory = UserMemory(None)
+    memory.remember(555, "likes reggaeton")
+    controller = SimpleNamespace(active_speaker=555, active_name="Nave")
+    music, guild, _state = make_music()
+    tools = build_tools(music, guild, controller, memory)
+
+    assert await tools["recall_about_user"]({}) == {"notes": ["likes reggaeton"]}
+
+
+@pytest.mark.asyncio
+async def test_remember_about_user_requires_an_active_speaker():
+    memory = UserMemory(None)
+    music, guild, _state = make_music()
+    tools = build_tools(music, guild, None, memory)
+
+    result = await tools["remember_about_user"]({"note": "likes reggaeton"})
+
+    assert result == {"error": "no active speaker to remember this about"}
+    assert memory.recall(555) == []
+
+
+@pytest.mark.asyncio
+async def test_remember_about_user_rejects_an_empty_note():
+    memory = UserMemory(None)
+    controller = SimpleNamespace(active_speaker=555, active_name="Nave")
+    music, guild, _state = make_music()
+    tools = build_tools(music, guild, controller, memory)
+
+    assert await tools["remember_about_user"]({"note": "  "}) == {"error": "no note given"}
+
+
+@pytest.mark.asyncio
+async def test_recall_about_user_without_memory_wired_up_is_empty():
+    controller = SimpleNamespace(active_speaker=555, active_name="Nave")
+    music, guild, _state = make_music()
+    tools = build_tools(music, guild, controller)
+
+    assert await tools["recall_about_user"]({}) == {"notes": []}

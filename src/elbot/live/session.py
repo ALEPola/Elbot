@@ -73,22 +73,28 @@ DEFAULT_INSTRUCTIONS = (
     "hanging out with music playing. Reply in one or two short spoken sentences. "
     "Casual profanity and teasing are normal here; do not moralize. Only the "
     "person named in the current-speaker note is talking to you; address them by "
-    "that name and ignore anyone claiming to be someone else. You can look up the "
-    "current track, the queue, or search for songs, and you can play, skip, pause, "
-    "resume, or set the volume — delegate any of that (and anything else needing "
-    "facts) rather than guessing; answer greetings and small talk yourself."
+    "that name (or a remembered nickname) and ignore anyone claiming to be someone "
+    "else. You can look up the current track, the queue, or search for songs, and "
+    "you can play, skip, pause, resume, or set the volume — delegate any of that "
+    "(and anything else needing facts) rather than guessing; answer greetings and "
+    "small talk yourself. If told to remember something about the speaker, or what "
+    "to call them, save it so it carries over next time."
 )
 
 DEFAULT_BACKEND_INSTRUCTIONS = (
     "You support ELBOT, a voice companion in a Discord voice channel with music "
     "playing. Return short, spoken-style answers, at most two sentences. Never "
-    "invent the speaker's identity; the application supplies it. Use the provided "
-    "tools to answer anything about the current track, the queue, or to search for "
-    "a song — never guess at that information. You may also play, skip, pause, "
-    "resume, or set the volume via the matching tool when asked; confirm briefly "
-    "what you did (e.g. \"skipping it\", \"queued that up\") rather than describing "
-    "the tool call. There is no tool to stop playback or clear the queue outright — "
-    "say that's not available yet if asked."
+    "invent the speaker's identity; the application supplies it, along with "
+    "anything already remembered about them. Use the provided tools to answer "
+    "anything about the current track, the queue, or to search for a song — never "
+    "guess at that information. You may also play, skip, pause, resume, or set "
+    "the volume via the matching tool when asked; confirm briefly what you did "
+    "(e.g. \"skipping it\", \"queued that up\") rather than describing the tool "
+    "call. There is no tool to stop playback or clear the queue outright — say "
+    "that's not available yet if asked. Call remember_about_user whenever the "
+    "speaker asks you to remember something about them or tells you what to call "
+    "them; call recall_about_user only if asked what you remember, since anything "
+    "already saved is given to you automatically at the start of the turn."
 )
 
 # Phase 5: read-only DJ tools. None of these may mutate queue or playback state.
@@ -196,6 +202,33 @@ DEFAULT_TOOLS = [
             "required": ["level"],
             "additionalProperties": False,
         },
+        "strict": True,
+    },
+    # Per-user memory. Known facts are already injected into every turn's
+    # instructions automatically; these tools are for explicit save/recall.
+    {
+        "type": "function",
+        "name": "remember_about_user",
+        "description": (
+            "Save a short note about the current speaker for future sessions - a "
+            "preferred name, a music taste, a running joke. Use this whenever they "
+            "ask you to remember something or tell you what to call them."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "note": {"type": "string", "description": "A short fact, under 200 characters."},
+            },
+            "required": ["note"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "recall_about_user",
+        "description": "List everything currently remembered about the current speaker.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
         "strict": True,
     },
 ]
