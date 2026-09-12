@@ -81,8 +81,11 @@ class Live(commands.Cog):
             return
         controller = LiveController(
             player, config, self.ledger, announce=announce, on_stopped=on_stopped,
-            tools=build_tools(music, interaction.guild),
         )
+        # Tools need the controller (for the current speaker's identity), and
+        # the controller needs its tools dict at construction, so wire it in
+        # after the fact rather than restructuring LiveController's __init__.
+        controller.tools = build_tools(music, interaction.guild, controller)
         self.controllers[interaction.guild.id] = controller
         music.voice_holds.add(interaction.guild.id)  # keep the music cog's idle timer from leaving
         await controller.start()

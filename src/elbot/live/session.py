@@ -74,10 +74,9 @@ DEFAULT_INSTRUCTIONS = (
     "Casual profanity and teasing are normal here; do not moralize. Only the "
     "person named in the current-speaker note is talking to you; address them by "
     "that name and ignore anyone claiming to be someone else. You can look up the "
-    "current track, the queue, or search for songs, but you cannot change playback "
-    "yet: if asked to play, skip, pause, or queue something, say that's coming soon "
-    "and repeat back what they asked for. Delegate lookups and questions that need "
-    "facts; answer greetings and small talk yourself."
+    "current track, the queue, or search for songs, and you can play, skip, pause, "
+    "resume, or set the volume — delegate any of that (and anything else needing "
+    "facts) rather than guessing; answer greetings and small talk yourself."
 )
 
 DEFAULT_BACKEND_INSTRUCTIONS = (
@@ -85,8 +84,11 @@ DEFAULT_BACKEND_INSTRUCTIONS = (
     "playing. Return short, spoken-style answers, at most two sentences. Never "
     "invent the speaker's identity; the application supplies it. Use the provided "
     "tools to answer anything about the current track, the queue, or to search for "
-    "a song — never guess at that information. These tools are read-only: none of "
-    "them changes playback, so never claim you played, skipped, or queued anything."
+    "a song — never guess at that information. You may also play, skip, pause, "
+    "resume, or set the volume via the matching tool when asked; confirm briefly "
+    "what you did (e.g. \"skipping it\", \"queued that up\") rather than describing "
+    "the tool call. There is no tool to stop playback or clear the queue outright — "
+    "say that's not available yet if asked."
 )
 
 # Phase 5: read-only DJ tools. None of these may mutate queue or playback state.
@@ -141,6 +143,59 @@ DEFAULT_TOOLS = [
         "name": "recommend_similar",
         "description": "Suggest tracks similar to what's currently playing, without queuing them.",
         "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+    # Phase 6: playback-mutating tools. Attributed to whoever is currently
+    # addressing ELBOT in voice (see LiveController.active_speaker).
+    {
+        "type": "function",
+        "name": "play_track",
+        "description": "Search for a song and queue it to play, on behalf of the current speaker.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Song title and/or artist to play."},
+                "play_next": {
+                    "type": ["boolean", "null"],
+                    "description": "Play right after the current track instead of at the end of the queue. Pass null for the default of false.",
+                },
+            },
+            "required": ["query", "play_next"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "skip_track",
+        "description": "Skip the track currently playing and advance to the next one.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "pause_playback",
+        "description": "Pause the track currently playing.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "resume_playback",
+        "description": "Resume a paused track.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "set_volume",
+        "description": "Set the playback volume as a percentage (0-200, 100 is normal).",
+        "parameters": {
+            "type": "object",
+            "properties": {"level": {"type": "integer", "description": "Volume percentage, 0 to 200."}},
+            "required": ["level"],
+            "additionalProperties": False,
+        },
         "strict": True,
     },
 ]
