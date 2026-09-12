@@ -116,6 +116,10 @@ class CacheRecord:
     created_at: float
     ttl: int
     last_used: float
+    title: Optional[str] = None
+    author: Optional[str] = None
+    duration: Optional[int] = None
+    artwork_url: Optional[str] = None
 
     def expired(self, *, now: Optional[float] = None) -> bool:
         if now is None:
@@ -131,6 +135,10 @@ class CacheRecord:
             "created_at": self.created_at,
             "ttl": self.ttl,
             "last_used": self.last_used,
+            "title": self.title,
+            "author": self.author,
+            "duration": self.duration,
+            "artwork_url": self.artwork_url,
         }
 
     @classmethod
@@ -161,6 +169,19 @@ class CacheRecord:
         if ttl <= 0:
             return None
         query = str(payload.get("query") or key)
+        title = payload.get("title")
+        title = str(title).strip() or None if title is not None else None
+        author = payload.get("author")
+        author = str(author).strip() or None if author is not None else None
+        duration_raw = payload.get("duration")
+        duration: Optional[int] = None
+        if duration_raw is not None:
+            try:
+                duration = int(duration_raw)
+            except (TypeError, ValueError):
+                duration = None
+        artwork_url = payload.get("artwork_url")
+        artwork_url = str(artwork_url).strip() or None if artwork_url is not None else None
         return cls(
             key=key,
             query=query,
@@ -169,6 +190,10 @@ class CacheRecord:
             created_at=created_at,
             ttl=ttl,
             last_used=last_used,
+            title=title,
+            author=author,
+            duration=duration,
+            artwork_url=artwork_url,
         )
 
 
@@ -238,6 +263,10 @@ class SearchCache:
                 created_at=record.created_at,
                 ttl=record.ttl,
                 last_used=record.last_used,
+                title=record.title,
+                author=record.author,
+                duration=record.duration,
+                artwork_url=record.artwork_url,
             )
 
     def remember(
@@ -247,6 +276,10 @@ class SearchCache:
         sources: Sequence[str],
         identifier: Optional[str] = None,
         ttl: Optional[int] = None,
+        title: Optional[str] = None,
+        author: Optional[str] = None,
+        duration: Optional[int] = None,
+        artwork_url: Optional[str] = None,
     ) -> None:
         cleaned = []
         for item in sources:
@@ -266,6 +299,9 @@ class SearchCache:
             candidate = str(identifier).strip()
             if candidate:
                 identifier_value = candidate
+        title_value = str(title).strip() or None if title is not None else None
+        author_value = str(author).strip() or None if author is not None else None
+        artwork_value = str(artwork_url).strip() or None if artwork_url is not None else None
         record = CacheRecord(
             key=key,
             query=query,
@@ -274,6 +310,10 @@ class SearchCache:
             created_at=now,
             ttl=ttl_value,
             last_used=now,
+            title=title_value,
+            author=author_value,
+            duration=duration,
+            artwork_url=artwork_value,
         )
         with self._lock:
             self._entries[key] = record

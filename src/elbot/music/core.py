@@ -20,7 +20,7 @@ import yt_dlp
 
 from elbot.config import get_lavalink_connection_info
 
-from .support import CookieManager, PlaybackMetrics, SearchCache
+from .support import CacheRecord, CookieManager, PlaybackMetrics, SearchCache
 
 os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
@@ -674,6 +674,7 @@ class FallbackPlayer:
                 )
                 continue
             track_handle = handles[0]
+            track_handle = self._augment_handle_from_cache(track_handle, cached)
             entry = self._build_entry(
                 track_handle,
                 query=query,
@@ -813,6 +814,10 @@ class FallbackPlayer:
                     query,
                     sources=sources_to_try,
                     identifier=identifier,
+                    title=track_handle.title,
+                    author=track_handle.author,
+                    duration=track_handle.duration,
+                    artwork_url=track_handle.artwork_url,
                 )
             except Exception as exc:
                 self.logger.debug(
@@ -979,6 +984,40 @@ class FallbackPlayer:
             duration=duration,
             uri=uri,
             source=source,
+            artwork_url=artwork_url,
+        )
+
+    def _augment_handle_from_cache(
+        self, handle: TrackHandle, record: CacheRecord
+    ) -> TrackHandle:
+        """Reapply metadata captured at cache-write time.
+
+        A cache hit re-resolves the *raw stream URL* through Lavalink, which
+        (like any other bare HTTP source) carries no title/author/artwork -
+        the original yt-dlp `info` used to enrich it on first resolution is
+        gone by the time a later, cached request reuses the same source, so
+        without this the track silently regresses to "Unknown title".
+        """
+        title = record.title or handle.title
+        author = record.author or handle.author
+        duration = record.duration if record.duration else handle.duration
+        artwork_url = record.artwork_url or handle.artwork_url
+
+        if (
+            title == handle.title
+            and author == handle.author
+            and duration == handle.duration
+            and artwork_url == handle.artwork_url
+        ):
+            return handle
+
+        return TrackHandle(
+            track=handle.track,
+            title=title,
+            author=author,
+            duration=duration,
+            uri=handle.uri,
+            source=handle.source,
             artwork_url=artwork_url,
         )
 

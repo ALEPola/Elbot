@@ -26,6 +26,17 @@ class DummyTrack:
         }
 
 
+class BlankTrack:
+    """A raw HTTP-source track with no metadata, like a real signed stream URL."""
+
+    def __init__(self, duration: int = 60_000) -> None:
+        self.info = {
+            "length": duration,
+            "uri": "https://cached",
+            "sourceName": "http",
+        }
+
+
 def make_handle(title: str) -> TrackHandle:
     return TrackHandle.from_mafic(DummyTrack(title))
 
@@ -200,4 +211,77 @@ async def test_fallback_player_reuses_cache(monkeypatch):
 
     snapshot = metrics.snapshot()
     assert snapshot["fallback_used"] == 2
+
+
+@pytest.mark.asyncio
+async def test_fallback_player_cache_hit_keeps_real_metadata(monkeypatch):
+    """Regression: a cache hit re-resolves the raw stream URL through
+    Lavalink, which (like any bare HTTP source) carries no title/author -
+    the original yt-dlp info used to enrich it on first resolution isn't
+    replayed on a cache hit, so without storing/reapplying that metadata a
+    repeat request for the same song silently regressed to "Unknown title"
+    / "Unknown artist" even though the very first request showed it fine.
+    """
+    monkeypatch.setenv("ELBOT_PRIMARY_BACKEND", "fallback")
+    backend = DummyBackend()
+
+    error = TrackLoadFailure("failure", cause=Exception("signature"))
+
+    def failing():
+        return error
+
+    backend.responses["broken"] = failing
+    backend.responses["https://cached"] = [TrackHandle.from_mafic(BlankTrack())]
+
+    async def fake_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", lambda *_args, **_kwargs: fake_sleep(0))
+
+    class DummyYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, query, download=False):
+            return {
+                "url": "https://cached",
+                "webpage_url": "https://youtube.test/watch?v=abc123",
+                "id": "abc123",
+                "title": "Real Song",
+                "uploader": "Real Artist",
+            }
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", DummyYDL)
+
+    async def immediate(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "to_thread", immediate)
+
+    cache = SearchCache(persist=False)
+    player = FallbackPlayer(
+        backend,
+        cookies=CookieManager(),
+        metrics=PlaybackMetrics(),
+        search_cache=cache,
+    )
+
+    first_entry = await player.build_queue_entry(
+        "broken", requested_by=1, requester_display="tester", channel_id=1
+    )
+    assert first_entry.handle.title == "Real Song"
+    assert first_entry.handle.author == "Real Artist"
+    assert cache.size() == 1
+
+    second_entry = await player.build_queue_entry(
+        "broken", requested_by=1, requester_display="tester", channel_id=1
+    )
+    assert second_entry.handle.title == "Real Song"
+    assert second_entry.handle.author == "Real Artist"
 
