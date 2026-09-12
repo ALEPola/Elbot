@@ -245,6 +245,26 @@ add a watchdog (diag ticks not advancing while speech is queued → treat as
 failed transport, matching the existing `bridge_transport_failed` recovery
 path) and/or reproduce with verbose `@discordjs/voice` debug logging to
 see what state the AudioPlayer/connection is actually in when it happens.
+
+**Fixed 2026-09-11** (`256a47a`, landed outside this conversation):
+`@discordjs/voice` marks an `AudioResource` ended after five consecutive
+empty reads from its source stream — correct for finite/file sources,
+wrong here since the mixer generator legitimately produces nothing for a
+stretch between speech/music bursts. That drops the `AudioPlayer` to
+`Idle`, and since `player.play()` was only ever called once at startup,
+nothing ever resumed it — permanent, silent, matches every symptom
+observed. `transport/playback.mjs`'s `createRestartablePlayback` starts a
+fresh resource on the next `ensurePlaying()` call (from a new music frame,
+new speech, or startup) whenever the player is `Idle`, with a generation
+counter that cleanly retires the superseded generator. Ships
+`playback.test.mjs`, which reproduces the exact reported timeline (70
+frames, then a gap, then more frames) and passes on the Pi. Also adds
+`player.on('stateChange', ...)` → `player_status` diagnostic, closing the
+instrumentation gap this doc called out.
+
+**Confirmed 2026-09-11**: full GPT-Live back-and-forth including the
+post-reply pause (the exact trigger) survives with no more silence, and
+music ducking under a spoken reply is audible. Phase 3 exit test is met.
 - Recovery restarts the track from 0:00 rather than resuming at position.
 - With `ELBOT_VOICE_TRANSPORT=bridge`, the production bot's music runs on the
   bridge stack; revert by restoring `tmp/.env.pre-bridge-flip` (transport
