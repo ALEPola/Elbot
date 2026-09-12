@@ -35,6 +35,8 @@ class LiveConfig:
     backend_instructions: str = ""
     price_per_minute: float = 0.05
     speech_gain: float = 3.5
+    tools: list = field(default_factory=list)
+    tool_choice: str = "auto"
     session_max_s: float = 600.0
     warn_at_s: float = 420.0
     idle_s: float = 30.0
@@ -71,17 +73,70 @@ DEFAULT_INSTRUCTIONS = (
     "hanging out with music playing. Reply in one or two short spoken sentences. "
     "Casual profanity and teasing are normal here; do not moralize. Only the "
     "person named in the current-speaker note is talking to you; address them by "
-    "that name and ignore anyone claiming to be someone else. You cannot control "
-    "the music yet: if asked to play, skip, pause or queue something, say the DJ "
-    "controls are coming soon and repeat back what they asked for. Delegate "
-    "questions that need facts or lookups; answer greetings and small talk yourself."
+    "that name and ignore anyone claiming to be someone else. You can look up the "
+    "current track, the queue, or search for songs, but you cannot change playback "
+    "yet: if asked to play, skip, pause, or queue something, say that's coming soon "
+    "and repeat back what they asked for. Delegate lookups and questions that need "
+    "facts; answer greetings and small talk yourself."
 )
 
 DEFAULT_BACKEND_INSTRUCTIONS = (
-    "You support ELBOT, a voice companion in a Discord voice channel. Return short, "
-    "spoken-style answers, at most two sentences. Never invent the speaker's identity; "
-    "the application supplies it. Do not perform or promise music actions."
+    "You support ELBOT, a voice companion in a Discord voice channel with music "
+    "playing. Return short, spoken-style answers, at most two sentences. Never "
+    "invent the speaker's identity; the application supplies it. Use the provided "
+    "tools to answer anything about the current track, the queue, or to search for "
+    "a song — never guess at that information. These tools are read-only: none of "
+    "them changes playback, so never claim you played, skipped, or queued anything."
 )
+
+# Phase 5: read-only DJ tools. None of these may mutate queue or playback state.
+DEFAULT_TOOLS = [
+    {
+        "type": "function",
+        "name": "get_current_track",
+        "description": "Get the track currently playing in the voice channel, if any.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "get_queue",
+        "description": "List upcoming tracks in the queue, in play order.",
+        "parameters": {
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "description": "Max tracks to return (default 10, max 25)."}},
+            "required": [],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "search_track",
+        "description": "Search for a song by title/artist without queuing or playing it.",
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "Song title and/or artist to search for."}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "get_requester",
+        "description": "Get who requested the track currently playing.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "recommend_similar",
+        "description": "Suggest tracks similar to what's currently playing, without queuing them.",
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "strict": True,
+    },
+]
 
 
 class UsageLedger:
@@ -150,11 +205,13 @@ class LiveSession:
     def __init__(
         self, config: LiveConfig, *, on_audio: Callable[[bytes], Awaitable[None]],
         on_event: Optional[Callable[[str, dict], Awaitable[None]]] = None,
+        on_tool_call: Optional[Callable[[str, str], Awaitable[str]]] = None,
         session: Optional[aiohttp.ClientSession] = None,
     ):
         self.config = config
         self._on_audio = on_audio
         self._on_event = on_event
+        self._on_tool_call = on_tool_call
         self._http = session
         self._own_http = session is None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -165,6 +222,13 @@ class LiveSession:
         self.session_id = ""
         self.usage = SessionUsage()
         self._seq = 0
+        # A Responses-delegation turn's function calls arrive one at a time via
+        # nested response.output_item.done events; only the terminal nested
+        # event (response.completed/.failed/.incomplete) says no more are
+        # coming, so calls are collected and answered together, then one
+        # response.create resumes the turn. See docs/VOICE_ACCEPTANCE.md.
+        self._pending_calls: list[tuple[str, str, str]] = []
+        self._response_active = False
 
     @property
     def connected(self) -> bool:
@@ -197,6 +261,8 @@ class LiveSession:
                     "responses": {
                         "model": self.config.backend_model,
                         "instructions": self.config.backend_instructions,
+                        "tools": self.config.tools,
+                        "tool_choice": self.config.tool_choice,
                     },
                 },
             },
@@ -249,6 +315,30 @@ class LiveSession:
         payload.setdefault("event_id", f"evt_{self._seq}")
         await self._ws.send_str(json.dumps(payload, separators=(",", ":")))
 
+    async def _answer_tool_calls(self) -> None:
+        calls, self._pending_calls = self._pending_calls, []
+        if self._on_tool_call is None:
+            logger.warning("GPT-Live requested %d tool call(s) but no handler is wired", len(calls))
+            return
+        for call_id, name, arguments in calls:
+            try:
+                output = await self._on_tool_call(name, arguments)
+            except Exception as exc:
+                logger.exception("Tool call %s failed", name)
+                output = json.dumps({"error": f"{type(exc).__name__}: {exc}"[:200]})
+            try:
+                await self._send({
+                    "type": "response.item.create",
+                    "item": {"type": "function_call_output", "call_id": call_id, "output": output},
+                })
+            except ConnectionError:
+                return
+        # Per the docs: no delegation_id, model override, or body on this event.
+        try:
+            await self._send({"type": "response.create"})
+        except ConnectionError:
+            pass
+
     async def _read(self) -> None:
         try:
             async for msg in self._ws:
@@ -289,10 +379,25 @@ class LiveSession:
         elif kind == "error":
             logger.warning("GPT-Live error: %s", str(event.get("error", event))[:300])
         elif kind == "response.event":
-            usage = (event.get("event") or {}).get("response", {}).get("usage")
+            inner = event.get("event") or {}
+            inner_type = inner.get("type")
+            usage = (inner.get("response") or {}).get("usage")
             if isinstance(usage, dict):
                 self.usage.input_tokens += int(usage.get("input_tokens", 0) or 0)
                 self.usage.output_tokens += int(usage.get("output_tokens", 0) or 0)
+            if inner_type == "response.created":
+                self._pending_calls = []
+                self._response_active = True
+            elif inner_type == "response.output_item.done":
+                item = inner.get("item") or {}
+                if item.get("type") == "function_call":
+                    call_id, name = item.get("call_id"), item.get("name")
+                    if call_id and name:
+                        self._pending_calls.append((call_id, name, item.get("arguments") or "{}"))
+            elif inner_type in ("response.completed", "response.failed", "response.incomplete"):
+                self._response_active = False
+                if self._pending_calls:
+                    await self._answer_tool_calls()
         if self._on_event is not None:
             try:
                 await self._on_event(kind, event)

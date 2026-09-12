@@ -7,7 +7,8 @@ from nextcord.ext import commands
 
 from elbot.config import Config
 from elbot.live.controller import LiveController
-from elbot.live.session import LiveConfig, UsageLedger
+from elbot.live.session import DEFAULT_TOOLS, LiveConfig, UsageLedger
+from elbot.live.tools import build_tools
 
 
 class Live(commands.Cog):
@@ -21,7 +22,9 @@ class Live(commands.Cog):
         pass
 
     def _config(self) -> LiveConfig:
-        return LiveConfig.from_env()
+        config = LiveConfig.from_env()
+        config.tools = DEFAULT_TOOLS
+        return config
 
     @live.subcommand(name="start", description="Start ELBOT Live in your voice channel")
     async def start(self, interaction: nextcord.Interaction):
@@ -76,7 +79,10 @@ class Live(commands.Cog):
             await player.stop_listening()
             await interaction.followup.send("Wake-phrase detection is unavailable on this host.", ephemeral=True)
             return
-        controller = LiveController(player, config, self.ledger, announce=announce, on_stopped=on_stopped)
+        controller = LiveController(
+            player, config, self.ledger, announce=announce, on_stopped=on_stopped,
+            tools=build_tools(music, interaction.guild),
+        )
         self.controllers[interaction.guild.id] = controller
         music.voice_holds.add(interaction.guild.id)  # keep the music cog's idle timer from leaving
         await controller.start()

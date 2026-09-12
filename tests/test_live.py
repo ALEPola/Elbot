@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 from datetime import date
 from types import SimpleNamespace
 
@@ -58,8 +59,9 @@ def test_upsample_16k_mono_to_48k_stereo():
 
 
 class FakeSession:
-    def __init__(self, cfg, *, on_audio, on_event=None):
+    def __init__(self, cfg, *, on_audio, on_event=None, on_tool_call=None):
         self.on_audio = on_audio
+        self.on_tool_call = on_tool_call
         self.connected = False
         self.audio = []
         self.instructions = []
@@ -264,3 +266,96 @@ async def test_odd_length_audio_deltas_are_realigned_not_corrupted():
         assert len(player.spoken) == 0 or all(len(s) % 4 == 0 for s in player.spoken)
     finally:
         await ctrl.stop("test")
+
+
+class FakeWS:
+    def __init__(self):
+        self.closed = False
+        self.sent = []
+
+    async def send_str(self, text):
+        self.sent.append(json.loads(text))
+
+
+def response_event(inner_type, **inner):
+    return {"type": "response.event", "event": {"type": inner_type, **inner}}
+
+
+def function_call_item(call_id, name, arguments):
+    return {"item": {"type": "function_call", "call_id": call_id, "name": name, "arguments": arguments}}
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_are_collected_answered_and_response_resumed():
+    calls = []
+
+    async def on_tool_call(name, arguments_json):
+        calls.append((name, arguments_json))
+        return json.dumps({"ok": name})
+
+    session = LiveSession(config(), on_audio=lambda pcm: asyncio.sleep(0), on_tool_call=on_tool_call)
+    session._ws = FakeWS()
+
+    await session._handle(response_event("response.created", response={"id": "resp_1"}))
+    await session._handle(response_event(
+        "response.output_item.done", **function_call_item("call_1", "get_current_track", "{}"),
+    ))
+    await session._handle(response_event(
+        "response.output_item.done", **function_call_item("call_2", "get_queue", '{"limit": 5}'),
+    ))
+    assert session._pending_calls  # not yet answered — no terminal event seen
+    await session._handle(response_event("response.completed", response={"id": "resp_1"}))
+
+    assert calls == [("get_current_track", "{}"), ("get_queue", '{"limit": 5}')]
+    assert session._pending_calls == []
+    sent = session._ws.sent
+    assert [m["type"] for m in sent] == [
+        "response.item.create", "response.item.create", "response.create",
+    ]
+    assert sent[0]["item"] == {"type": "function_call_output", "call_id": "call_1", "output": '{"ok": "get_current_track"}'}
+    assert sent[1]["item"]["call_id"] == "call_2"
+    # Docs: response.create carries no delegation_id, model override, or body.
+    assert set(sent[2].keys()) == {"type", "event_id"}
+
+
+@pytest.mark.asyncio
+async def test_response_without_tool_calls_sends_nothing_extra():
+    session = LiveSession(config(), on_audio=lambda pcm: asyncio.sleep(0), on_tool_call=None)
+    session._ws = FakeWS()
+    await session._handle(response_event("response.created", response={"id": "resp_1"}))
+    await session._handle(response_event("response.completed", response={"id": "resp_1"}))
+    assert session._ws.sent == []
+
+
+@pytest.mark.asyncio
+async def test_tool_call_exception_still_resumes_the_response():
+    async def on_tool_call(name, arguments_json):
+        raise RuntimeError("boom")
+
+    session = LiveSession(config(), on_audio=lambda pcm: asyncio.sleep(0), on_tool_call=on_tool_call)
+    session._ws = FakeWS()
+    await session._handle(response_event("response.created", response={"id": "resp_1"}))
+    await session._handle(response_event(
+        "response.output_item.done", **function_call_item("call_1", "search_track", '{"query": "x"}'),
+    ))
+    await session._handle(response_event("response.failed", response={"id": "resp_1"}))
+
+    sent = session._ws.sent
+    assert [m["type"] for m in sent] == ["response.item.create", "response.create"]
+    output = json.loads(sent[0]["item"]["output"])
+    assert "error" in output and "boom" in output["error"]
+
+
+@pytest.mark.asyncio
+async def test_controller_tool_call_dispatches_by_name_and_serializes_json():
+    async def get_current_track(args):
+        assert args == {}
+        return {"playing": True}
+
+    ctrl, _player, _announced, _ledger = make(config(idle_s=60))
+    ctrl.tools = {"get_current_track": get_current_track}
+    result = await ctrl._on_tool_call("get_current_track", "{}")
+    assert json.loads(result) == {"playing": True}
+
+    unknown = await ctrl._on_tool_call("does_not_exist", "{}")
+    assert "error" in json.loads(unknown)

@@ -8,6 +8,7 @@ Only the active speaker's audio inside an open command window is forwarded.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from typing import Awaitable, Callable, Optional
@@ -59,6 +60,7 @@ class LiveController:
         self, player, config: LiveConfig, ledger: UsageLedger, *,
         announce: Callable[[str], Awaitable[None]],
         on_stopped: Optional[Callable[["LiveController", str], Awaitable[None]]] = None,
+        tools: Optional[dict[str, Callable[[dict], Awaitable[dict]]]] = None,
         session_factory: Callable[..., LiveSession] = LiveSession,
         clock: Callable[[], float] = time.monotonic,
     ):
@@ -67,6 +69,7 @@ class LiveController:
         self.ledger = ledger
         self.announce = announce
         self.on_stopped = on_stopped
+        self.tools = tools or {}
         self._session_factory = session_factory
         self._clock = clock
         self.session: Optional[LiveSession] = None
@@ -280,7 +283,9 @@ class LiveController:
         self._allowance_s = allowance
         self._warned = False
         self._accounted_s = 0.0
-        session = self._session_factory(self.config, on_audio=self._on_audio, on_event=self._on_event)
+        session = self._session_factory(
+            self.config, on_audio=self._on_audio, on_event=self._on_event, on_tool_call=self._on_tool_call,
+        )
         await session.connect()
         self.session = session
         self.stats["sessions"] += 1
@@ -293,6 +298,19 @@ class LiveController:
             logger.debug("%s: %s", kind.split(".")[1], str(event.get("delta", ""))[:120])
         elif kind == "session.closed":
             logger.info("GPT-Live session closed: %s", event.get("reason"), extra={"guild_id": self.player.guild.id})
+
+    async def _on_tool_call(self, name: str, arguments_json: str) -> str:
+        tool = self.tools.get(name)
+        if tool is None:
+            logger.warning("Unknown tool call: %s", name, extra={"guild_id": self.player.guild.id})
+            return json.dumps({"error": "unknown tool"})
+        try:
+            arguments = json.loads(arguments_json) if arguments_json else {}
+        except ValueError:
+            arguments = {}
+        logger.info("Tool call: %s(%s)", name, arguments, extra={"guild_id": self.player.guild.id})
+        result = await tool(arguments)
+        return json.dumps(result)[:4000]
 
     async def _close_session(self, reason: str) -> None:
         session, self.session = self.session, None
