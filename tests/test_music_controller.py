@@ -184,3 +184,23 @@ async def test_track_start_is_a_noop_without_a_tracked_entry():
 
     music._states = {}  # unknown guild entirely
     await music.on_track_start(event)
+
+
+def test_track_key_prefers_stable_identifier_over_position_embedding_encoded_id():
+    """Regression: Lavalink's encoded/id blob embeds the current playback
+    position, so the SAME track's encoded string differs between
+    track-start (position 0) and track-end (position ~= full duration).
+    Comparing on encoded/id first made every http/fallback track's own
+    real end-of-track event look "stale" and silently strand the queue.
+    """
+    music = Music.__new__(Music)
+    start = SimpleNamespace(encoded="AAA...position0", id="AAA...position0", identifier="video-xyz")
+    end = SimpleNamespace(encoded="AAA...positionFULL", id="AAA...positionFULL", identifier="video-xyz")
+
+    assert music._track_key(start) == music._track_key(end)
+    assert music._track_key(start) == "identifier:video-xyz"
+
+    # Still falls back correctly when identifier truly isn't available.
+    encoded_only = SimpleNamespace(encoded="blob-1", id=None, identifier=None)
+    assert music._track_key(encoded_only) == "encoded:blob-1"
+    assert music._track_key(None) is None

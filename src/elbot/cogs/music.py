@@ -851,7 +851,17 @@ class Music(commands.Cog):
     def _track_key(track: object) -> Optional[str]:
         if track is None:
             return None
-        for name in ("encoded", "id", "identifier"):
+        # `identifier` (the stable source-level ID — a YouTube video ID, or
+        # the resolved URL for an http source) must be checked before
+        # `encoded`/`id`: Lavalink's encoded track blob embeds the current
+        # playback position as its trailing field, so the SAME logical
+        # track encodes differently at track-start (position 0) than at
+        # track-end (position ~= full duration). Checking encoded/id first
+        # makes every track_end for an http/fallback track compare unequal
+        # to the value captured at track-start, permanently breaking queue
+        # advancement (confirmed by decoding two real encoded blobs that
+        # differed in exactly their last 3 bytes: the position field).
+        for name in ("identifier", "encoded", "id"):
             value = getattr(track, name, None)
             if isinstance(value, str) and value:
                 return f"{name}:{value}"
