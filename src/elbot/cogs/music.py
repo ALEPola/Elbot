@@ -2118,9 +2118,20 @@ class Music(commands.Cog):
             return
         current_key = self._track_key(current_entry.handle.track)
         if event_key and current_key and event_key != current_key:
+            now = time.monotonic()
+            playing_for = now - state.playback_started_at if state.playback_started_at else None
             self.logger.info(
                 "Ignoring stale track-end event",
-                extra={"guild_id": guild_id},
+                extra={
+                    "guild_id": guild_id,
+                    "event_key": event_key,
+                    "current_key": current_key,
+                    "current_title": self._safe_log_value(current_entry.handle.title),
+                    "current_is_fallback": current_entry.is_fallback,
+                    "current_duration_ms": current_entry.handle.duration,
+                    "playing_for_s": round(playing_for, 1) if playing_for is not None else None,
+                    "end_reason": self._normalise_end_reason(event.reason),
+                },
             )
             return
         track_obj = event_track or getattr(event.player, "current", None)
@@ -2184,7 +2195,13 @@ class Music(commands.Cog):
             if event_key and current_key and event_key != current_key:
                 self.logger.info(
                     "Ignoring stale track-exception event",
-                    extra={"guild_id": guild_id},
+                    extra={
+                        "guild_id": guild_id,
+                        "event_key": event_key,
+                        "current_key": current_key,
+                        "current_title": self._safe_log_value(current_entry.handle.title),
+                        "current_is_fallback": current_entry.is_fallback,
+                    },
                 )
                 return
         if current_entry is None and state.last_ended is not None:
@@ -2296,7 +2313,13 @@ class Music(commands.Cog):
         if event_key and current_key and event_key != current_key:
             self.logger.info(
                 "Ignoring stale track-stuck event",
-                extra={"guild_id": guild_id},
+                extra={
+                    "guild_id": guild_id,
+                    "event_key": event_key,
+                    "current_key": current_key,
+                    "current_title": self._safe_log_value(current_entry.handle.title),
+                    "current_is_fallback": current_entry.is_fallback,
+                },
             )
             return
         self._cancel_pending_end(state)
