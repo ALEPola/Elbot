@@ -149,3 +149,38 @@ async def test_playback_tracks_lavalinks_canonical_http_copy():
     assert state.now_playing is entry
     assert state.now_playing.handle.track is canonical
     assert music._track_key(state.now_playing.handle.track) == music._track_key(canonical)
+
+
+@pytest.mark.asyncio
+async def test_track_start_captures_lavalinks_canonical_track():
+    """Regression: player.current can stay stale/None right after play()
+    for HTTP/fallback sources (the REST update response's "track" field is
+    not guaranteed), so _begin_playback's reassignment can silently no-op.
+    TrackStartEvent's own track is authoritative and must win.
+    """
+    entry = make_entry("Direct Audio", "resolved-http-track")
+    state = GuildState()
+    state.now_playing = entry
+
+    music = Music.__new__(Music)
+    music._states = {7: state}
+
+    canonical = DummyTrack("Direct Audio", "canonical-playing-track")
+    event = SimpleNamespace(player=SimpleNamespace(guild=SimpleNamespace(id=7)), track=canonical)
+
+    await music.on_track_start(event)
+
+    assert state.now_playing.handle.track is canonical
+    assert music._track_key(state.now_playing.handle.track) == music._track_key(canonical)
+
+
+@pytest.mark.asyncio
+async def test_track_start_is_a_noop_without_a_tracked_entry():
+    music = Music.__new__(Music)
+    music._states = {7: GuildState()}  # now_playing is None
+    event = SimpleNamespace(player=SimpleNamespace(guild=SimpleNamespace(id=7)), track=DummyTrack("X", "y"))
+
+    await music.on_track_start(event)  # must not raise
+
+    music._states = {}  # unknown guild entirely
+    await music.on_track_start(event)
