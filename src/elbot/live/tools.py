@@ -1,27 +1,10 @@
-"""Phase 5/6 DJ tools, plus a small per-user memory tool, exposed to
-GPT-Live's backend model.
-
-Phase 5 tools (get_current_track, get_queue, search_track, get_requester,
-recommend_similar) only read Music cog state. Phase 6 adds tools that
-mutate playback (play_track, skip_track, pause_playback, resume_playback,
-set_volume) on behalf of whoever is currently addressing ELBOT in voice -
-GPT-Live only forwards audio from someone speaking in the bot's own voice
-channel, so no separate membership check is needed here (mirrors the one
-`Music._control_error` does for slash commands). Destructive actions
-(stop/clear queue) are deliberately not exposed yet; see Phase 7 in
-ELBOT_GPT_LIVE_BATTLE_PLAN.md for the planned confirmation/permission
-layer before those are added. remember_about_user/recall_about_user read
-and write the same UserMemory store the controller already consults on
-every wake to inject known facts into the turn's instructions, so these
-tools mainly exist for when the model is explicitly asked "what do you
-remember about me" or to record something proactively. Each tool takes a
-JSON-schema-shaped `arguments` dict (already parsed) and returns a
-JSON-serializable dict.
-"""
+"""DJ and memory tools with authenticated request context and shared execution policy."""
 
 from __future__ import annotations
 
 import time
+
+from elbot.music.actions import current_actor, ActionDenied
 from typing import Awaitable, Callable
 
 
@@ -106,101 +89,82 @@ def build_tools(
         ]
         return {"results": results[:3]}
 
-    def _speaker_identity() -> tuple[int, str]:
-        if controller is not None and controller.active_speaker:
-            return controller.active_speaker, controller.active_name or "voice request"
-        bot_user = getattr(music.bot, "user", None)
-        return getattr(bot_user, "id", 0), "voice request"
-
-    async def play_track(args: dict) -> dict:
-        query = str(args.get("query") or "").strip()
-        if not query:
-            return {"error": "no query given"}
-        state = music._get_state(guild.id)
-        if state.player is None:
-            return {"error": "not connected to a voice channel"}
-        play_next = bool(args.get("play_next"))
-        requested_by, requester_display = _speaker_identity()
-        music.backend  # ensure the lazily-built fallback pipeline exists
-        async with state.lock:
-            try:
-                entry = await music.fallback.build_queue_entry(
-                    query,
-                    requested_by=requested_by,
-                    requester_display=requester_display,
-                    channel_id=state.last_channel_id or 0,
-                )
-            except Exception as exc:
-                return {"error": f"{type(exc).__name__}: {exc}"[:200]}
-            if play_next:
-                state.queue.add_next(entry)
-                position = 1
-            else:
-                state.queue.add(entry)
-                position = len(state.queue)
-        await music._ensure_playing(guild.id)
-        await music._refresh_now_playing(guild.id)
-        return {
-            "queued": True,
-            "title": entry.handle.title,
-            "author": entry.handle.author,
-            "queue_position": position,
-        }
-
-    async def skip_track(_args: dict) -> dict:
-        state = _state(music, guild.id)
-        if state is None:
-            return {"skipped": False, "message": "Nothing is playing right now."}
-        skipped, message = await music._skip_current(guild.id, state)
-        return {"skipped": skipped, "message": message}
-
-    async def pause_playback(_args: dict) -> dict:
-        state = _state(music, guild.id)
-        if state is None or state.player is None:
-            return {"paused": False, "message": "Nothing is playing right now."}
-        if getattr(state.player, "paused", False):
-            return {"paused": True, "message": "Already paused."}
-        await state.player.pause()
-        await music._refresh_now_playing(guild.id)
-        return {"paused": True, "message": "Playback paused."}
-
-    async def resume_playback(_args: dict) -> dict:
-        state = _state(music, guild.id)
-        if state is None or state.player is None:
-            return {"paused": False, "message": "Nothing is playing right now."}
-        if not getattr(state.player, "paused", False):
-            return {"paused": False, "message": "Already playing."}
-        await state.player.resume()
-        await music._refresh_now_playing(guild.id)
-        return {"paused": False, "message": "Playback resumed."}
-
-    async def set_volume(args: dict) -> dict:
-        state = _state(music, guild.id)
-        if state is None or state.player is None:
-            return {"error": "not connected to a voice channel"}
+    async def action(name, args):
+        actor = current_actor.get()
         try:
-            level = int(args.get("level"))
-        except (TypeError, ValueError):
-            return {"error": "level must be an integer"}
-        level = max(0, min(200, level))
-        state.volume = level
-        await state.player.set_volume(level)
-        await music._refresh_now_playing(guild.id)
-        return {"volume": level}
+            return await music.actions.execute(guild, actor, name, args)
+        except ActionDenied as exc:
+            return {"error": str(exc)}
 
-    async def remember_about_user(args: dict) -> dict:
-        note = str(args.get("note") or "").strip()
+    async def play_track(args):
+        return await action("play", args)
+
+    async def skip_track(args):
+        return await action("skip", args)
+
+    async def vote_to_skip(args):
+        return await action("vote", args)
+
+    async def pause_playback(args):
+        return await action("pause", args)
+
+    async def resume_playback(args):
+        return await action("resume", args)
+
+    async def set_volume(args):
+        return await action("volume", args)
+
+    async def remove_from_queue(args):
+        return await action("remove", {"start": args["position"], "end": args["position"]})
+
+    async def confirmation(name):
+        actor = current_actor.get()
+        if actor is None:
+            return {"error": "No authenticated requester."}
+        state = music._states.get(guild.id)
+        channel = guild.get_channel(state.last_channel_id) if state and state.last_channel_id else None
+        if channel is None:
+            return {"error": "Use the slash command in a text channel to request confirmation."}
+        try:
+            return await music.actions.confirm(guild, actor, name, channel.send)
+        except ActionDenied as exc:
+            return {"error": str(exc)}
+
+    async def clear_queue(args):
+        return await confirmation("clear")
+
+    async def stop_playback(args):
+        return await confirmation("stop")
+
+    async def memory_actor():
+        actor = current_actor.get()
+        if actor is None or not actor.valid():
+            raise ActionDenied("No authenticated requester is attached to this action.")
+        state = music.actions.state(actor)
+        await music.actions.member(guild, actor, state, "memory")
+        return actor
+
+    async def remember_about_user(args):
+        if memory is None:
+            return {"error": "Memory is unavailable."}
+        try:
+            actor = await memory_actor()
+        except ActionDenied as exc:
+            return {"error": str(exc)}
+        note = args.get("note", "").strip()
         if not note:
             return {"error": "no note given"}
-        if memory is None or controller is None or not controller.active_speaker:
-            return {"error": "no active speaker to remember this about"}
-        memory.remember(controller.active_speaker, note)
+        memory.remember(actor.user_id, note)
         return {"remembered": True}
 
-    async def recall_about_user(_args: dict) -> dict:
-        if memory is None or controller is None or not controller.active_speaker:
+    async def recall_about_user(args):
+        if memory is None:
             return {"notes": []}
-        return {"notes": memory.recall(controller.active_speaker)}
+        try:
+            actor = await memory_actor()
+        except ActionDenied as exc:
+            return {"error": str(exc)}
+        return {"notes": memory.recall(actor.user_id)}
 
     return {
         "get_current_track": get_current_track,
@@ -210,6 +174,10 @@ def build_tools(
         "recommend_similar": recommend_similar,
         "play_track": play_track,
         "skip_track": skip_track,
+        "vote_to_skip": vote_to_skip,
+        "remove_from_queue": remove_from_queue,
+        "clear_queue": clear_queue,
+        "stop_playback": stop_playback,
         "pause_playback": pause_playback,
         "resume_playback": resume_playback,
         "set_volume": set_volume,

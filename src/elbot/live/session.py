@@ -40,6 +40,8 @@ class LiveConfig:
     session_max_s: float = 600.0
     warn_at_s: float = 420.0
     idle_s: float = 30.0
+    input_silence_s: float = 1.5
+    followup_s: float = 4.0
     daily_usd: float = 2.0
     monthly_usd: float = 8.0
 
@@ -63,6 +65,8 @@ class LiveConfig:
             session_max_s=num("ELBOT_LIVE_SESSION_MAX_MIN", 10) * 60,
             warn_at_s=num("ELBOT_LIVE_WARN_MIN", 7) * 60,
             idle_s=num("ELBOT_LIVE_IDLE_S", 30),
+            input_silence_s=max(0.5, min(5.0, num("ELBOT_LIVE_INPUT_SILENCE_S", 1.5))),
+            followup_s=max(0.0, min(10.0, num("ELBOT_LIVE_FOLLOWUP_S", 4.0))),
             daily_usd=num("ELBOT_LIVE_DAILY_USD", 2.0),
             monthly_usd=num("ELBOT_LIVE_MONTHLY_USD", 8.0),
         )
@@ -78,7 +82,15 @@ DEFAULT_INSTRUCTIONS = (
     "you can play, skip, pause, resume, or set the volume — delegate any of that "
     "(and anything else needing facts) rather than guessing; answer greetings and "
     "small talk yourself. If told to remember something about the speaker, or what "
-    "to call them, save it so it carries over next time."
+    "to call them, save it so it carries over next time. "
+    "Respond only when addressed or to a direct follow-up from that person. "
+    "Ignore side conversations, music, coughs, and comments meant for someone else. "
+    "After answering, stop and wait quietly. Do not invite small talk, suggest topics, "
+    "ask how their day is going, or add 'anything else?' or 'want to chat?'. "
+    "Ask a follow-up question only for a detail needed to fulfill their request. "
+    "If they say they're done, never mind, or that they weren't talking to you, "
+    "acknowledge briefly if needed and stop. 'Stop talking' refers to your speech, "
+    "not music playback. Backchannel policy: no listening sounds."
 )
 
 DEFAULT_BACKEND_INSTRUCTIONS = (
@@ -90,11 +102,17 @@ DEFAULT_BACKEND_INSTRUCTIONS = (
     "guess at that information. You may also play, skip, pause, resume, or set "
     "the volume via the matching tool when asked; confirm briefly what you did "
     "(e.g. \"skipping it\", \"queued that up\") rather than describing the tool "
-    "call. There is no tool to stop playback or clear the queue outright — say "
-    "that's not available yet if asked. Call remember_about_user whenever the "
+    "call. Direct skip and disruptive actions require owner/DJ permissions; "
+    "offer vote_to_skip to ordinary listeners. clear_queue and stop_playback "
+    "only request a Discord confirmation: tell the requester to click their button, "
+    "never claim the action completed before approval. Respect tool errors. "
+    "Call remember_about_user whenever the "
     "speaker asks you to remember something about them or tells you what to call "
     "them; call recall_about_user only if asked what you remember, since anything "
-    "already saved is given to you automatically at the start of the turn."
+    "already saved is given to you automatically at the start of the turn. "
+    "Answer the request, then stop. Do not solicit small talk or add an invitation "
+    "to keep chatting. Ask only necessary clarification questions. Ignore remarks "
+    "clearly addressed to someone else; do not turn them into tool actions."
 )
 
 # Phase 5: read-only DJ tools. None of these may mutate queue or playback state.
@@ -234,6 +252,20 @@ DEFAULT_TOOLS = [
 ]
 
 
+for _name, _description, _properties in (
+    ("vote_to_skip", "Vote to skip the current track; a majority of human listeners is required.", {}),
+    ("clear_queue", "Request a Discord confirmation to clear queued tracks (owner/DJ only).", {}),
+    ("stop_playback", "Request a Discord confirmation to stop music and clear queued tracks (owner/DJ only).", {}),
+    ("remove_from_queue", "Remove a queued request; listeners may remove only their own requests.",
+     {"position": {"type": "integer", "description": "One-based queue position."}}),
+):
+    DEFAULT_TOOLS.append({
+        "type": "function", "name": _name, "description": _description, "strict": True,
+        "parameters": {"type": "object", "properties": _properties,
+                       "required": list(_properties), "additionalProperties": False},
+    })
+
+
 class UsageLedger:
     """Connected-seconds per day and month, persisted as JSON."""
 
@@ -324,6 +356,9 @@ class LiveSession:
         # response.create resumes the turn. See docs/VOICE_ACCEPTANCE.md.
         self._pending_calls: list[tuple[str, str, str]] = []
         self._response_active = False
+        self._tool_results: dict[str, str] = {}
+        self._calls_by_response = {}
+        self._response_for_delegation = {}
 
     @property
     def connected(self) -> bool:
@@ -417,7 +452,15 @@ class LiveSession:
             return
         for call_id, name, arguments in calls:
             try:
-                output = await self._on_tool_call(name, arguments)
+                if call_id in self._tool_results:
+                    output = self._tool_results[call_id]
+                elif len(self._tool_results) >= 128:
+                    output = '{"error":"Session tool limit reached; start a new session"}'
+                else:
+                    # Record before awaiting so a replay cannot repeat a side effect.
+                    self._tool_results[call_id] = '{"error":"Action already attempted"}'
+                    output = await self._on_tool_call(name, arguments)
+                    self._tool_results[call_id] = output
             except Exception as exc:
                 logger.exception("Tool call %s failed", name)
                 output = json.dumps({"error": f"{type(exc).__name__}: {exc}"[:200]})
@@ -481,17 +524,29 @@ class LiveSession:
                 self.usage.input_tokens += int(usage.get("input_tokens", 0) or 0)
                 self.usage.output_tokens += int(usage.get("output_tokens", 0) or 0)
             if inner_type == "response.created":
-                self._pending_calls = []
+                response_id = (inner.get("response") or {}).get("id")
+                if response_id and len(self._calls_by_response) < 32:
+                    self._response_for_delegation[event.get("delegation_id")] = response_id
+                    self._calls_by_response.setdefault(response_id, [])
                 self._response_active = True
             elif inner_type == "response.output_item.done":
                 item = inner.get("item") or {}
                 if item.get("type") == "function_call":
                     call_id, name = item.get("call_id"), item.get("name")
-                    if call_id and name:
-                        self._pending_calls.append((call_id, name, item.get("arguments") or "{}"))
+                    response_id = inner.get("response_id") or self._response_for_delegation.get(event.get("delegation_id"))
+                    calls = self._calls_by_response.get(response_id)
+                    if call_id and name and calls is not None and len(calls) < 32:
+                        if not any(c[0] == call_id for c in calls):
+                            calls.append((call_id, name, item.get("arguments") or "{}"))
             elif inner_type in ("response.completed", "response.failed", "response.incomplete"):
                 self._response_active = False
-                if self._pending_calls:
+                response_id = (inner.get("response") or {}).get("id") or self._response_for_delegation.get(event.get("delegation_id"))
+                calls = self._calls_by_response.pop(response_id, [])
+                for delegation, mapped in list(self._response_for_delegation.items()):
+                    if mapped == response_id:
+                        del self._response_for_delegation[delegation]
+                if inner_type == "response.completed" and calls:
+                    self._pending_calls = calls
                     await self._answer_tool_calls()
         if self._on_event is not None:
             try:

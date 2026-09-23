@@ -101,7 +101,7 @@ async def test_reconnect_preserves_queue_and_replaces_player():
     state = music._states[7]
     state.player = await music._connect_voice(channel, player_cls, 1)
     original = state.player
-    queued = object()
+    queued = SimpleNamespace(id="queued", requested_by=1)
     state.queue.add(queued)
     replacement = await music._reconnect_player(7, state, original, SimpleNamespace(Player=player_cls), 1)
     assert replacement is not original
@@ -156,7 +156,7 @@ async def test_bridge_transport_failure_requeues_track_and_restarts_playback():
     music._begin_playback = AsyncMock()
     state = music._states[7]
     player = SimpleNamespace(guild=SimpleNamespace(id=7))
-    track = SimpleNamespace(handle=SimpleNamespace(title="song"))
+    track = SimpleNamespace(id="track", requested_by=1, handle=SimpleNamespace(title="song"))
     state.player = player
     state.now_playing = track
     state.playback_started_at = 123.0

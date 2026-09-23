@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from elbot.music.actions import Actor, current_actor
+from .schema import validate_arguments
 import logging
 import time
 from typing import Awaitable, Callable, Optional
@@ -27,7 +29,6 @@ logger = logging.getLogger("elbot.live.controller")
 OUT_FRAME = 3840  # 20 ms of 48 kHz stereo s16le
 PACE_S = 0.06
 BARGE_IN_BYTES = OUT_FRAME * 10  # 200 ms of pending bot speech
-BARGE_IN_FRAMES = 15  # the speaker must keep talking ~300 ms to cut the bot off
 
 
 class LimitReached(RuntimeError):
@@ -78,6 +79,9 @@ class LiveController:
         self.session: Optional[LiveSession] = None
         self.active_speaker: Optional[int] = None
         self.active_name = ""
+        self._tool_scope = None
+        self._tool_actor = None
+        self._wake_lock = asyncio.Lock()
         self._in_buf = bytearray()
         self._in_state = None
         self._stream_started = 0.0
@@ -85,7 +89,14 @@ class LiveController:
         self._out_buf = bytearray()
         self._out_state = None
         self._out_pending = b""  # a byte held back when a delta splits a 16-bit sample
-        self._barge_frames = 0
+        self._output_silence_samples = 0
+        self._input_open = False
+        self._last_input_speech = 0.0
+        self._last_output_speech = 0.0
+        self._reply_seen = False
+        self._followup_until = None
+        self._followup_blocked = False
+        self._playback_until = 0.0
         self._last_activity = 0.0
         self._warned = False
         self._allowance_s = 0.0
@@ -119,15 +130,43 @@ class LiveController:
             await self.on_stopped(self, reason)
 
     async def on_wake(self, event, outcome: str) -> None:
+        async with self._wake_lock:
+            await self._on_wake_locked(event, outcome)
+
+    async def _on_wake_locked(self, event, outcome: str) -> None:
         if self._stopped or outcome == "busy":
             return
+        if (self.session is not None and self.session.connected
+                and self.active_speaker == event.speaker.user_id
+                and self._input_open and outcome in ("extended", "held")):
+            # The wake recognizer finalizes after audio was already forwarded.
+            # Do not replay that utterance or clear the reply a second time.
+            return
+        if self.session is not None and (
+            self.active_speaker != event.speaker.user_id or not self.session.connected
+            or (not self._input_open and self._reply_seen and self._followup_until is None)
+        ):
+            # One immutable requester per API session. Closing invalidates late
+            # callbacks before they can act on behalf of the next speaker.
+            await self._close_session("speaker_changed_or_reconnect")
+        self.active_speaker = event.speaker.user_id
+        self.active_name = event.speaker.display_name
+        if self._tool_scope is None:
+            scope = object()
+            self._tool_scope = scope
+            self._tool_actor = Actor(
+                event.speaker.user_id, event.speaker.guild_id, event.speaker.channel_id,
+                lambda: self._tool_scope is scope and not self._stopped,
+            )
         self.stats["wakes"] += 1
         try:
             await self._ensure_session()
         except LimitReached as exc:
+            await self._close_session("spend cap reached")
             await self.announce(f"Can't talk right now: {exc}")
             return
         except Exception as exc:
+            await self._close_session("connect failed")
             logger.warning("GPT-Live connect failed: %s: %s", type(exc).__name__, exc)
             await self.announce("Couldn't reach GPT-Live; try again in a moment.")
             return
@@ -135,19 +174,6 @@ class LiveController:
         self.active_name = event.speaker.display_name
         self._in_buf.clear()
         self._in_state = None
-        if self._out_buf:
-            # Diagnostic (2026-09-12): user reports ELBOT's own speech
-            # sometimes cuts off mid-reply "randomly". A wake re-trigger
-            # (outcome extended/held, e.g. a Vosk false-positive on "elbow"
-            # from ongoing chatter, not just a fresh "opened" command)
-            # unconditionally wipes any still-playing reply here. Logging
-            # this to see whether that's actually what's happening before
-            # changing the behavior.
-            logger.info(
-                "Wake (%s) cut off %d ms of pending ELBOT speech",
-                outcome, len(self._out_buf) // OUT_FRAME * 20,
-                extra={"guild_id": self.player.guild.id},
-            )
         await self._clear_output()
         identity = (
             f"Current speaker: {event.speaker.display_name} (Discord user id {event.speaker.user_id}). "
@@ -164,36 +190,59 @@ class LiveController:
         self._stream_started = self._clock()
         self._sent_samples = 0
         self._last_activity = self._clock()
+        self._begin_input()
+        self.player.window.wake(event.speaker.user_id)
         self.player.window.touch(event.speaker.user_id)
 
+    def _begin_input(self):
+        self._input_open = True
+        self._last_input_speech = self._clock()
+        self._reply_seen = False
+        self._followup_until = None
+        self._followup_blocked = False
+
+    def _update_attention(self):
+        if self.session is None or not self.session.connected:
+            return
+        now = self._clock()
+        if self._input_open and now - self._last_input_speech >= self.config.input_silence_s:
+            self._input_open = False
+        # GPT-Live has no output-audio-done event. Use audible output, local
+        # playback drain and a quiet margin; never infer turns from transcripts.
+        if (not self._input_open and self._reply_seen and self._followup_until is None
+                and not self._out_buf and now >= self._playback_until + 0.8
+                and now - self._last_output_speech >= 0.8):
+            self._followup_until = now + (0 if self._followup_blocked else self.config.followup_s)
+        if self._followup_until is not None and now >= self._followup_until:
+            if self.player.window.active == self.active_speaker:
+                self.player.window.close()
+        elif self.active_speaker is not None:
+            self.player.window.touch(self.active_speaker)
+
     def _tap(self, speaker, pcm48: bytes) -> None:
-        if self.session is None or not self.session.connected or speaker.user_id != self.active_speaker:
+        if self.session is None or not self.session.connected:
             return
-        if not self.player.window.is_open_for(speaker.user_id):
+        self._update_attention()
+        if speaker.user_id != self.active_speaker:
+            if not self._input_open and not _is_silence(pcm48):
+                # Other people resuming conversation cancel implicit follow-ups.
+                self._followup_blocked = True
+                if self._followup_until is not None:
+                    self._followup_until = self._clock()
+                    self._update_attention()
             return
+        if not self.player.window.is_open_for(speaker.user_id) or _is_silence(pcm48):
+            return
+        if not self._input_open:
+            if self._followup_until is None or self._clock() >= self._followup_until:
+                return
+            self._begin_input()
         pcm16, self._in_state = resample(pcm48, self._in_state)
         self._in_buf += pcm16
-        self.player.window.touch(speaker.user_id)
+        self._last_input_speech = self._clock()
         self._last_activity = self._clock()
-        if len(self._out_buf) > BARGE_IN_BYTES:
-            self._barge_frames += 1
-            if self._barge_frames >= BARGE_IN_FRAMES:
-                self._barge_frames = 0
-                self.stats["barge_ins"] += 1
-                # Diagnostic (2026-09-12): see the matching note in on_wake.
-                # This fires whenever the active speaker keeps talking for
-                # ~300ms while ELBOT is still replying, whether or not they
-                # meant to interrupt it - a candidate for "random" cutoffs.
-                logger.info(
-                    "Barge-in: clearing %d ms of pending ELBOT speech",
-                    len(self._out_buf) // OUT_FRAME * 20,
-                    extra={"guild_id": self.player.guild.id},
-                )
-                self._out_buf.clear()
-                self._out_state = None
-                asyncio.get_running_loop().create_task(self._speak_clear())
-        else:
-            self._barge_frames = 0
+        # Packet arrival alone must never wipe an in-progress reply. A fresh
+        # explicit wake can interrupt; accepted speech uses GPT-Live's policy.
 
     async def _on_audio(self, pcm16k: bytes) -> None:
         if self._stopped or not pcm16k:
@@ -210,17 +259,22 @@ class LiveController:
         # GPT-Live streams silence between turns; it must not duck the music,
         # keep the session "active" or hold the command window open.
         if _is_silence(pcm16k):
-            if self._out_buf:
-                pcm48, self._out_state = upsample_to_discord(pcm16k, self._out_state)
+            # Retain at most 200 ms after real speech. Otherwise continuous
+            # silent deltas replenish the tail forever and hold everyone busy.
+            remaining = max(0, OUT_RATE // 5 - self._output_silence_samples)
+            self._output_silence_samples += len(pcm16k) // 2
+            if self._out_buf and remaining:
+                pcm48, self._out_state = upsample_to_discord(pcm16k[:remaining * 2], self._out_state)
                 self._out_buf += pcm48  # finish the tail of a real utterance smoothly
             return
+        self._output_silence_samples = 0
         if self.config.speech_gain != 1.0 and audioop is not None:
             pcm16k = audioop.mul(pcm16k, 2, self.config.speech_gain)  # saturating
         pcm48, self._out_state = upsample_to_discord(pcm16k, self._out_state)
         self._out_buf += pcm48
         self._last_activity = self._clock()
-        if self.active_speaker is not None:
-            self.player.window.touch(self.active_speaker)
+        self._last_output_speech = self._clock()
+        self._reply_seen = True
 
     async def _pace(self) -> None:
         idle_ticks = 0
@@ -240,15 +294,13 @@ class LiveController:
                 continue
             try:
                 await self.player.speak(frame)
+                self._playback_until = max(self._clock(), self._playback_until) + len(frame) / 192000
             except Exception:
                 logger.warning("Could not send speech to the voice transport")
                 self._out_buf.clear()
 
     def _pad_silence(self) -> None:
         if not self._stream_started or self.active_speaker is None:
-            return
-        if not self.player.window.is_open_for(self.active_speaker):
-            self._stream_started = 0.0
             return
         expected = int((self._clock() - self._stream_started) * OUT_RATE)
         have = self._sent_samples + len(self._in_buf) // 2
@@ -260,6 +312,7 @@ class LiveController:
         last_report = self._clock()
         while True:
             await asyncio.sleep(0.25)
+            self._update_attention()
             self._pad_silence()
             if self._in_buf and self.session is not None and self.session.connected:
                 pcm = bytes(self._in_buf)
@@ -312,10 +365,27 @@ class LiveController:
         self._allowance_s = allowance
         self._warned = False
         self._accounted_s = 0.0
+        actor = self._tool_actor
+
+        async def tool_call(name, arguments):
+            return await self._on_tool_call(name, arguments, actor=actor)
+
+        async def audio(pcm):
+            if actor is not None and actor.valid():
+                await self._on_audio(pcm)
+
+        async def event(kind, payload):
+            if actor is not None and actor.valid():
+                await self._on_event(kind, payload)
+
         session = self._session_factory(
-            self.config, on_audio=self._on_audio, on_event=self._on_event, on_tool_call=self._on_tool_call,
+            self.config, on_audio=audio, on_event=event, on_tool_call=tool_call,
         )
-        await session.connect()
+        try:
+            await session.connect()
+        except BaseException:
+            await session.close(reason="connect failed")
+            raise
         self.session = session
         self.stats["sessions"] += 1
         self._last_activity = self._clock()
@@ -328,22 +398,39 @@ class LiveController:
         elif kind == "session.closed":
             logger.info("GPT-Live session closed: %s", event.get("reason"), extra={"guild_id": self.player.guild.id})
 
-    async def _on_tool_call(self, name: str, arguments_json: str) -> str:
+    async def _on_tool_call(self, name: str, arguments_json: str, *, actor=None) -> str:
         tool = self.tools.get(name)
         if tool is None:
             logger.warning("Unknown tool call: %s", name, extra={"guild_id": self.player.guild.id})
             return json.dumps({"error": "unknown tool"})
         try:
-            arguments = json.loads(arguments_json) if arguments_json else {}
-        except ValueError:
-            arguments = {}
-        logger.info("Tool call: %s(%s)", name, arguments, extra={"guild_id": self.player.guild.id})
-        result = await tool(arguments)
-        return json.dumps(result)[:4000]
+            if len(arguments_json) > 4096:
+                raise ValueError("Arguments too large")
+            arguments = json.loads(arguments_json)
+            validate_arguments(name, arguments)
+        except (ValueError, TypeError) as exc:
+            logger.warning("Rejected tool arguments for %s: %s", name, type(exc).__name__)
+            return json.dumps({"error": str(exc)})
+        if actor is None or not actor.valid():
+            return json.dumps({"error": "The requesting speaker's session has expired. Please ask again."})
+        logger.info("Tool call: %s", name, extra={"guild_id": actor.guild_id, "user_id": actor.user_id})
+        token = current_actor.set(actor)
+        try:
+            result = await tool(arguments)
+            return json.dumps(result)[:4000]
+        finally:
+            current_actor.reset(token)
 
     async def _close_session(self, reason: str) -> None:
+        self._tool_scope = None
+        self._tool_actor = None
         session, self.session = self.session, None
         self.active_speaker = None
+        self._input_open = False
+        self._reply_seen = False
+        self._followup_until = None
+        self._stream_started = 0.0
+        self.player.window.close()
         self._in_buf.clear()
         if session is None:
             return
@@ -370,6 +457,9 @@ class LiveController:
     async def _clear_output(self) -> None:
         self._out_buf.clear()
         self._out_state = None
+        self._out_pending = b""
+        self._output_silence_samples = 0
+        self._playback_until = self._clock()
         await self._speak_clear()
 
     async def _speak_clear(self) -> None:

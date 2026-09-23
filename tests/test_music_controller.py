@@ -81,7 +81,7 @@ async def test_music_controls_reflect_pause_and_autoplay(monkeypatch):
     assert view.autoplay_button.style.name == "success"
     assert [item.label for item in view.children[:5]] == [
         "Resume",
-        "Skip",
+        "Vote skip",
         "Stop",
         "AutoPlay: On",
         "Queue",

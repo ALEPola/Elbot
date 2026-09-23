@@ -307,10 +307,43 @@ class QueuedTrack:
 class MusicQueue:
     """A thread-safe deque with atomic helpers."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, fair: bool = False) -> None:
         self._queue: Deque[QueuedTrack] = deque()
         self._lock = threading.Lock()
         self._last_played: Optional[QueuedTrack] = None
+        self.fair = fair
+        self._priority: set[str] = set()
+
+    @property
+    def last_played(self):
+        return self._last_played
+
+    def set_fair(self, enabled: bool) -> None:
+        with self._lock:
+            self.fair = enabled
+            self._rotate_fair()
+
+    def _rotate_fair(self):
+        if not self.fair:
+            return
+        priority, buckets = [], {}
+        for track in self._queue:
+            if track.id in self._priority:
+                priority.append(track)
+            else:
+                buckets.setdefault(track.requested_by, deque()).append(track)
+        users = list(buckets)
+        last = self._last_played.requested_by if self._last_played else None
+        if last in users:
+            index = users.index(last) + 1
+            users = users[index:] + users[:index]
+        ordered = list(priority)
+        while users:
+            for user in users:
+                ordered.append(buckets[user].popleft())
+            users = [user for user in users if buckets[user]]
+        self._queue = deque(ordered)
+        self._priority.intersection_update(t.id for t in ordered)
 
     def __len__(self) -> int:
         with self._lock:
@@ -335,17 +368,23 @@ class MusicQueue:
     def add(self, track: QueuedTrack) -> None:
         with self._lock:
             self._queue.append(track)
+            self._rotate_fair()
 
     def add_next(self, track: QueuedTrack) -> None:
         with self._lock:
             self._queue.appendleft(track)
+            if self.fair:
+                self._priority.add(track.id)
 
     def pop_next(self) -> Optional[QueuedTrack]:
         with self._lock:
             if not self._queue:
                 return None
             track = self._queue.popleft()
+            if self.fair:
+                self._priority.discard(track.id)
             self._last_played = track
+            self._rotate_fair()
             return track
 
     def peek(self, index: int = 0) -> Optional[QueuedTrack]:
@@ -360,6 +399,7 @@ class MusicQueue:
     def clear(self) -> None:
         with self._lock:
             self._queue.clear()
+            self._priority.clear()
 
     def remove_index(self, index: int) -> Optional[QueuedTrack]:
         with self._lock:
@@ -369,6 +409,7 @@ class MusicQueue:
             self._queue.rotate(-index)
             track = self._queue.popleft()
             self._queue.rotate(index)
+            self._priority.discard(track.id)
             return track
 
     def remove_range(self, start: int, end: int) -> List[QueuedTrack]:
@@ -386,6 +427,7 @@ class MusicQueue:
             for _ in range(count):
                 removed.append(self._queue.popleft())
             self._queue.rotate(start)
+            self._priority.difference_update(track.id for track in removed)
             return removed
 
     def move(self, source_index: int, dest_index: int) -> bool:

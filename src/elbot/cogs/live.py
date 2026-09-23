@@ -10,6 +10,7 @@ from elbot.live.controller import LiveController
 from elbot.live.memory import UserMemory
 from elbot.live.session import DEFAULT_TOOLS, LiveConfig, UsageLedger
 from elbot.live.tools import build_tools
+from elbot.music.actions import Actor, ActionDenied
 
 
 class Live(commands.Cog):
@@ -90,6 +91,7 @@ class Live(commands.Cog):
         # the controller needs its tools dict at construction, so wire it in
         # after the fact rather than restructuring LiveController's __init__.
         controller.tools = build_tools(music, interaction.guild, controller, self.memory)
+        controller.owner_id = interaction.user.id
         self.controllers[interaction.guild.id] = controller
         music.voice_holds.add(interaction.guild.id)  # keep the music cog's idle timer from leaving
         await controller.start()
@@ -108,11 +110,18 @@ class Live(commands.Cog):
         if controller is None:
             await interaction.response.send_message("ELBOT Live is not running.", ephemeral=True)
             return
-        member_channel = getattr(getattr(interaction.user, "voice", None), "channel", None)
-        if member_channel != controller.player.channel and not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("Join ELBOT's voice channel to stop it.", ephemeral=True)
-            return
         await interaction.response.defer()
+        music = self.bot.get_cog("Music")
+        actor = Actor(interaction.user.id, interaction.guild.id, controller.player.channel.id)
+        try:
+            state = music.actions.state(actor)
+            member = await music.actions.member(interaction.guild, actor, state, "pause")
+            from elbot.music.actions import privileged
+            if member.id != controller.owner_id and not privileged(member, state):
+                raise ActionDenied("Only the session owner, DJ, or server administrator can end Live.")
+        except ActionDenied as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return
         await controller.stop(f"stopped by {interaction.user.display_name}")
         try:
             await controller.player.stop_listening()

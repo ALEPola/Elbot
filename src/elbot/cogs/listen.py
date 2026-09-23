@@ -59,6 +59,13 @@ class Listen(commands.Cog):
 
     @listen.subcommand(name="stop", description="Stop local listening and clear audio buffers")
     async def stop(self, interaction: nextcord.Interaction):
+        live = self.bot.get_cog("Live")
+        if interaction.guild and live and interaction.guild.id in live.controllers:
+            await interaction.response.send_message(
+                "ELBOT Live is using the listener. Use /live stop so its owner/DJ permissions are checked.",
+                ephemeral=True,
+            )
+            return
         player = self._player(interaction)
         if player is None:
             await interaction.response.send_message("No shared voice listener is connected.", ephemeral=True)

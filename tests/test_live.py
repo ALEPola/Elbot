@@ -140,8 +140,8 @@ async def test_wake_connects_sends_context_and_only_active_speaker_audio():
         assert "Alexis" in session.instructions[0] and "100" in session.instructions[0]
         assert session.audio[0] == b"\x01\x00" * 1600
 
-        player.live_tap(Speaker(200, "Jovan", 1, 2), b"\x05\x00\x05\x00" * 960)
-        player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x05\x00\x05\x00" * 960)
+        player.live_tap(Speaker(200, "Jovan", 1, 2), b"\x00\x10\x00\x10" * 960)
+        player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x00\x10\x00\x10" * 960)
         await asyncio.sleep(0.35)
         assert len(session.audio) >= 2
         chunk = session.audio[1]
@@ -183,22 +183,18 @@ async def test_wake_without_remembered_notes_omits_the_clause():
 
 
 @pytest.mark.asyncio
-async def test_barge_in_clears_pending_bot_speech():
+async def test_packet_noise_and_side_speech_do_not_clear_reply():
     ctrl, player, _, _ = make(config(idle_s=60))
-    await ctrl.start()
-    try:
-        player.window.wake(100)
-        await ctrl.on_wake(wake(), "opened")
-        ctrl._out_buf += b"\0" * (BARGE_IN_BYTES + OUT_FRAME)
-        for _ in range(5):  # a syllable is not a barge-in
-            player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x01\x00\x01\x00" * 960)
-        assert ctrl.stats["barge_ins"] == 0 and len(ctrl._out_buf) > 0
-        for _ in range(12):  # sustained speech is
-            player.live_tap(Speaker(100, "Alexis", 1, 2), b"\x01\x00\x01\x00" * 960)
-        await asyncio.sleep(0.05)
-        assert ctrl.stats["barge_ins"] == 1 and len(ctrl._out_buf) == 0 and player.cleared >= 1
-    finally:
-        await ctrl.stop("test")
+    player.window.wake(100)
+    await ctrl.on_wake(wake(), "opened")
+    ctrl._input_open = False
+    ctrl._out_buf += b"\0" * (BARGE_IN_BYTES + OUT_FRAME)
+    before = bytes(ctrl._out_buf)
+    for _ in range(20):
+        ctrl._tap(Speaker(100, "Alexis", 1, 2), b"\x01\x00\x01\x00" * 960)
+        ctrl._tap(Speaker(200, "Other", 1, 2), b"\x00\x10\x00\x10" * 960)
+    assert bytes(ctrl._out_buf) == before and not ctrl._in_buf
+    await ctrl.stop("test")
 
 
 @pytest.mark.asyncio
@@ -332,7 +328,7 @@ async def test_tool_calls_are_collected_answered_and_response_resumed():
     await session._handle(response_event(
         "response.output_item.done", **function_call_item("call_2", "get_queue", '{"limit": 5}'),
     ))
-    assert session._pending_calls  # not yet answered — no terminal event seen
+    assert not calls  # No action before the completed response.
     await session._handle(response_event("response.completed", response={"id": "resp_1"}))
 
     assert calls == [("get_current_track", "{}"), ("get_queue", '{"limit": 5}')]
@@ -367,7 +363,7 @@ async def test_tool_call_exception_still_resumes_the_response():
     await session._handle(response_event(
         "response.output_item.done", **function_call_item("call_1", "search_track", '{"query": "x"}'),
     ))
-    await session._handle(response_event("response.failed", response={"id": "resp_1"}))
+    await session._handle(response_event("response.completed", response={"id": "resp_1"}))
 
     sent = session._ws.sent
     assert [m["type"] for m in sent] == ["response.item.create", "response.create"]
@@ -383,8 +379,201 @@ async def test_controller_tool_call_dispatches_by_name_and_serializes_json():
 
     ctrl, _player, _announced, _ledger = make(config(idle_s=60))
     ctrl.tools = {"get_current_track": get_current_track}
-    result = await ctrl._on_tool_call("get_current_track", "{}")
+    from elbot.music.actions import Actor
+    result = await ctrl._on_tool_call("get_current_track", "{}", actor=Actor(100, 1, 2))
     assert json.loads(result) == {"playing": True}
 
     unknown = await ctrl._on_tool_call("does_not_exist", "{}")
     assert "error" in json.loads(unknown)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['response.failed', 'response.incomplete'])
+async def test_failed_response_never_executes_tools(terminal):
+    calls = []
+
+    async def handler(name, args):
+        calls.append(name)
+        return '{}'
+
+    session = LiveSession(config(), on_audio=lambda pcm: asyncio.sleep(0), on_tool_call=handler)
+    session._ws = FakeWS()
+    await session._handle(response_event('response.created', response={'id': 'a'}))
+    await session._handle(response_event('response.output_item.done', **function_call_item('c', 'skip_track', '{}')))
+    await session._handle(response_event(terminal, response={'id': 'a'}))
+    assert calls == [] and session._ws.sent == []
+
+
+@pytest.mark.asyncio
+async def test_interleaved_responses_and_duplicate_calls_execute_once():
+    calls = []
+
+    async def handler(name, args):
+        calls.append(name)
+        return '{}'
+
+    session = LiveSession(config(), on_audio=lambda pcm: asyncio.sleep(0), on_tool_call=handler)
+    session._ws = FakeWS()
+
+    async def emit(delegation, kind, **kwargs):
+        event = response_event(kind, **kwargs)
+        event['delegation_id'] = delegation
+        await session._handle(event)
+
+    for rid in ['a', 'b']:
+        await emit(rid, 'response.created', response={'id': rid})
+        await emit(rid, 'response.output_item.done', **function_call_item(rid, rid, '{}'))
+    await emit('b', 'response.completed', response={'id': 'b'})
+    assert calls == ['b']
+    await emit('a', 'response.failed', response={'id': 'a'})
+    assert calls == ['b']
+    await emit('c', 'response.created', response={'id': 'c'})
+    await emit('c', 'response.output_item.done', **function_call_item('b', 'b', '{}'))
+    await emit('c', 'response.completed', response={'id': 'c'})
+    assert calls == ['b']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('new_user', [100, 200])
+async def test_old_session_cannot_execute_after_reconnect_or_speaker_change(new_user):
+    from elbot.music.actions import current_actor
+    ctrl, _, _, _ = make(config(idle_s=60))
+    actors = []
+
+    async def handler(args):
+        actors.append(current_actor.get().user_id)
+        return {'ok': True}
+
+    ctrl.tools = {'get_current_track': handler}
+    await ctrl.on_wake(wake(), 'opened')
+    old_session = ctrl.session
+    if new_user == 100:
+        old_session.connected = False
+    await ctrl.on_wake(wake(uid=new_user), 'opened')
+    try:
+        assert old_session is not ctrl.session
+        result = json.loads(await old_session.on_tool_call('get_current_track', '{}'))
+        assert 'error' in result and actors == []
+        await ctrl.session.on_tool_call('get_current_track', '{}')
+        assert actors == [new_user]
+    finally:
+        await ctrl.stop('test')
+
+@pytest.mark.asyncio
+async def test_followup_only_same_speaker_after_reply_then_expires():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    now = [10.0]
+    ctrl._clock = lambda: now[0]
+    player.window._clock = ctrl._clock
+    player.window.wake(100)
+    await ctrl.on_wake(wake(), 'opened')
+    now[0] = 11.6
+    ctrl._update_attention()
+    assert not ctrl._input_open
+    before = bytes(ctrl._in_buf)
+    pcm = b'\x00\x10\x00\x10' * 960
+    ctrl._tap(Speaker(100, 'Alexis', 1, 2), pcm)
+    assert bytes(ctrl._in_buf) == before  # waiting for the answer, not a follow-up yet
+    await ctrl._on_audio(b'\x00\x10' * 1600)
+    ctrl._out_buf.clear()  # transport drained
+    ctrl._playback_until = now[0]
+    now[0] = 12.5
+    ctrl._update_attention()
+    assert ctrl._followup_until == 16.5
+    ctrl._tap(Speaker(100, 'Alexis', 1, 2), pcm)
+    assert ctrl._input_open and ctrl._in_buf
+    now[0] = 14.1
+    ctrl._update_attention()
+    await ctrl._on_audio(b'\x00\x10' * 1600)
+    ctrl._out_buf.clear()
+    now[0] = 15.0
+    ctrl._update_attention()
+    now[0] = 19.1
+    ctrl._update_attention()
+    ctrl._in_buf.clear()
+    ctrl._tap(Speaker(100, 'Alexis', 1, 2), pcm)
+    assert not ctrl._in_buf and player.window.active is None
+    await ctrl.stop('test')
+
+
+@pytest.mark.asyncio
+async def test_other_speaker_cancels_implicit_followup_and_noise_does_not_extend_input():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    now = [10.0]
+    ctrl._clock = lambda: now[0]
+    player.window._clock = ctrl._clock
+    player.window.wake(100)
+    await ctrl.on_wake(wake(), 'opened')
+    for step in [10.5, 11.0, 11.6]:
+        now[0] = step
+        ctrl._tap(Speaker(100, 'Alexis', 1, 2), b'\x01\x00\x01\x00' * 960)
+    assert not ctrl._input_open and ctrl._last_input_speech == 10.0
+    await ctrl._on_audio(b'\x00\x10' * 1600)
+    ctrl._out_buf.clear()
+    now[0] = 13.0
+    ctrl._update_attention()
+    pcm = b'\x00\x10\x00\x10' * 960
+    ctrl._tap(Speaker(200, 'Other', 1, 2), pcm)
+    ctrl._tap(Speaker(100, 'Alexis', 1, 2), pcm)
+    assert not ctrl._in_buf and player.window.active is None
+    await ctrl.stop('test')
+
+
+@pytest.mark.asyncio
+async def test_repeated_wake_does_not_replay_forwarded_audio():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    player.window.wake(100)
+    await ctrl.on_wake(wake(), 'opened')
+    session = ctrl.session
+    count = len(session.audio)
+    ctrl._out_buf += b'\x00\x10' * 1600
+    await ctrl.on_wake(wake(), 'extended')
+    assert len(session.audio) == count and ctrl._out_buf
+    await ctrl.stop('test')
+
+@pytest.mark.asyncio
+async def test_explicit_wake_interrupts_and_old_audio_cannot_resume():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    player.window.wake(100)
+    await ctrl.on_wake(wake(), 'opened')
+    old = ctrl.session
+    ctrl._input_open = False
+    await ctrl._on_audio(b'\x00\x10' * 1600)
+    await ctrl.on_wake(wake(), 'held')
+    assert ctrl.session is not old and not ctrl._out_buf
+    await old.on_audio(b'\x00\x10' * 1600)
+    assert not ctrl._out_buf
+    await ctrl.stop('test')
+
+@pytest.mark.asyncio
+async def test_continuous_silent_output_drains_and_opens_followup():
+    ctrl, player, _, _ = make(config(idle_s=60))
+    await ctrl.start()
+    try:
+        player.window.wake(100)
+        await ctrl.on_wake(wake(), 'opened')
+        ctrl._input_open = False
+        await ctrl._on_audio(b'\x00\x10' * 1600)
+        for _ in range(24):
+            await ctrl._on_audio(b'\x00\x00' * 2000)
+            await asyncio.sleep(0.125)
+        assert not ctrl._out_buf
+        assert ctrl._followup_until is not None
+        # 100 ms speech plus at most 200 ms tail (and frame padding).
+        assert sum(map(len, player.spoken)) <= 192000 * 0.34
+    finally:
+        await ctrl.stop('test')
+
+
+@pytest.mark.asyncio
+async def test_budget_denial_releases_speaker_and_expires_tool_identity():
+    ledger = UsageLedger(None)
+    ledger.add(10000)
+    ctrl, player, _, _ = make(config(), ledger)
+    player.window.wake(100)
+    await ctrl.on_wake(wake(), 'opened')
+    assert ctrl.session is None and ctrl.active_speaker is None
+    assert ctrl._tool_actor is None and player.window.active is None
+    ctrl._update_attention()
+    assert player.window.active is None
+    assert player.window.wake(200) == 'opened'
+    await ctrl.stop('test')

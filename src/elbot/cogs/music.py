@@ -37,6 +37,7 @@ from elbot.music import (
     configure_json_logging,
 )
 from elbot.utils import safe_reply
+from elbot.music.actions import Actor, ActionDenied, MusicActions, DESTRUCTIVE
 
 _LOGGING_INITIALISED = False
 
@@ -54,7 +55,12 @@ def _lavalink_config() -> tuple[str, int, str, bool]:
 
 @dataclass
 class GuildState:
-    queue: MusicQueue = field(default_factory=MusicQueue)
+    queue: MusicQueue = field(default_factory=lambda: MusicQueue(fair=True))
+    action_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    owner_id: Optional[int] = None
+    request_times: dict = field(default_factory=dict)
+    skip_votes: set[int] = field(default_factory=set)
+    vote_track: Optional[str] = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     playback_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     voice_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -176,17 +182,10 @@ class MusicControls(nextcord.ui.View):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         state = self.cog._states[self.guild_id]
-        if getattr(state.player, "paused", False):
-            await state.player.resume()
-            message = "Playback resumed."
-        else:
-            await state.player.pause()
-            message = "Playback paused."
-        await self.cog._refresh_now_playing(self.guild_id)
-        await safe_reply(interaction, message, ephemeral=True)
+        await self.cog._action_reply(interaction, ("resume" if getattr(state.player, "paused", False) else "pause"), {})
 
     @nextcord.ui.button(
-        label="Skip",
+        label="Vote skip",
         emoji="⏭️",
         style=nextcord.ButtonStyle.secondary,
         custom_id="elbot:music:skip",
@@ -196,9 +195,7 @@ class MusicControls(nextcord.ui.View):
         self, _: nextcord.ui.Button, interaction: nextcord.Interaction
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        state = self.cog._states[self.guild_id]
-        _, message = await self.cog._skip_current(self.guild_id, state)
-        await safe_reply(interaction, message, ephemeral=True)
+        await self.cog._action_reply(interaction, "vote", {})
 
     @nextcord.ui.button(
         label="Stop",
@@ -211,12 +208,7 @@ class MusicControls(nextcord.ui.View):
         self, _: nextcord.ui.Button, interaction: nextcord.Interaction
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        await self.cog._stop(self.guild_id)
-        await safe_reply(
-            interaction,
-            "Playback stopped and queue cleared.",
-            ephemeral=True,
-        )
+        await self.cog._action_reply(interaction, "stop", {})
 
     @nextcord.ui.button(
         label="AutoPlay: Off",
@@ -230,13 +222,7 @@ class MusicControls(nextcord.ui.View):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         state = self.cog._states[self.guild_id]
-        state.autoplay = not state.autoplay
-        await self.cog._refresh_now_playing(self.guild_id)
-        await safe_reply(
-            interaction,
-            f"AutoPlay turned **{'on' if state.autoplay else 'off'}**.",
-            ephemeral=True,
-        )
+        await self.cog._action_reply(interaction, "autoplay", {"enabled": not state.autoplay})
 
     @nextcord.ui.button(
         label="Queue",
@@ -290,8 +276,7 @@ class MusicControls(nextcord.ui.View):
             getattr(interaction.user, "id", 0),
             loved=False,
         )
-        _, message = await self.cog._skip_current(self.guild_id, state)
-        await safe_reply(interaction, message, ephemeral=True)
+        await self.cog._action_reply(interaction, "vote")
 
     @nextcord.ui.button(
         label="What's next?",
@@ -327,6 +312,33 @@ class MusicControls(nextcord.ui.View):
 
 class Music(commands.Cog):
     """Slash command music cog with resilient fallback playback."""
+
+    @property
+    def actions(self):
+        if not hasattr(self, "_actions"):
+            self._actions = MusicActions(self)
+        return self._actions
+
+    async def _action_reply(self, interaction, action, args=None):
+        if interaction.guild is None:
+            await safe_reply(interaction, "This command can only be used in a server.", ephemeral=True)
+            return
+        state = self._states.get(interaction.guild.id)
+        if state is None or state.player is None:
+            await safe_reply(interaction, "I'm not connected to voice.", ephemeral=True)
+            return
+        actor = Actor(interaction.user.id, interaction.guild.id, state.player.channel.id)
+        try:
+            if action in DESTRUCTIVE:
+                async def send(text, **kwargs):
+                    return await safe_reply(interaction, text, ephemeral=True, **kwargs)
+                await self.actions.confirm(interaction.guild, actor, action, send)
+                return
+            result = await self.actions.execute(interaction.guild, actor, action, args)
+            message = result.get("message") or f"Queued **{result.get('title', 'track')}** at position {result.get('queue_position')}."
+            await safe_reply(interaction, message, ephemeral=True)
+        except ActionDenied as exc:
+            await safe_reply(interaction, str(exc), ephemeral=True)
 
     def __init__(self, bot: commands.Bot) -> None:
         _ensure_logging()
@@ -716,6 +728,8 @@ class Music(commands.Cog):
                 None,
                 "Could not establish voice connection. Please reconnect to voice and try again.",
             )
+        if state.owner_id is None:
+            state.owner_id = user.id
         return voice, None
 
     def _calculate_eta_ms(self, guild_id: int) -> int:
@@ -1475,79 +1489,12 @@ class Music(commands.Cog):
         ),
     ) -> None:
         # CRITICAL: Defer IMMEDIATELY to prevent timeout on slow systems like Raspberry Pi
-        try:
-            await interaction.response.defer(ephemeral=False)
-        except Exception as e:
-            self.logger.error("Failed to defer interaction: %s", e)
-            return
-
-        self.logger.info(
-            "Slash play invoked",
-            extra={
-                "guild_id": getattr(interaction.guild, "id", None),
-                "user_id": getattr(interaction.user, "id", None),
-            },
-        )
+        await interaction.response.defer()
         player, error = await self._ensure_voice(interaction)
-        if error:
-            await safe_reply(
-                interaction,
-                embed=self.embed_factory.failure(error),
-                ephemeral=True,
-            )
+        if error or player is None:
+            await safe_reply(interaction, error or "Could not join voice.", ephemeral=True)
             return
-        assert interaction.guild is not None
-        state = self._get_state(interaction.guild.id)
-        async with state.lock:
-            if play_next and state.now_playing and state.player:
-                position = getattr(state.player, "position", 0)
-                eta_ms = max(state.now_playing.handle.duration - int(position), 0)
-            else:
-                eta_ms = self._calculate_eta_ms(interaction.guild.id)
-            try:
-                queued_track = await self.fallback.build_queue_entry(
-                    query,
-                    requested_by=interaction.user.id if interaction.user else 0,
-                    requester_display=str(interaction.user),
-                    channel_id=interaction.channel_id,
-                )
-            except TrackLoadFailure as exc:
-                self.metrics.incr_failed()
-                self.logger.error(
-                    "Track load failure: %s",
-                    self._safe_log_value(str(exc), limit=1200),
-                )
-                if getattr(exc, "cause", None):
-                    self.logger.error(
-                        "Underlying cause: %s",
-                        self._safe_log_value(str(exc.cause), limit=1200),
-                    )
-                await safe_reply(
-                    interaction,
-                    embed=self.embed_factory.failure(str(exc)),
-                    ephemeral=True,
-                )
-                return
-            if play_next:
-                state.queue.add_next(queued_track)
-                queue_position = 1
-            else:
-                state.queue.add(queued_track)
-                queue_position = len(state.queue)
-            msg = await safe_reply(
-                interaction,
-                embed=self.embed_factory.queued(
-                    queued_track,
-                    position=queue_position,
-                    eta_ms=eta_ms,
-                ),
-            )
-            try:
-                queued_track.queued_message_id = msg.id
-            except Exception:
-                queued_track.queued_message_id = None
-            await self._ensure_playing(interaction.guild.id)
-            await self._refresh_now_playing(interaction.guild.id)
+        await self._action_reply(interaction, "play", {"query": query, "play_next": play_next})
 
     @play.on_autocomplete("query")
     async def play_autocomplete(
@@ -1677,72 +1624,27 @@ class Music(commands.Cog):
     @nextcord.slash_command(name="skip", description="Skip the current track")
     async def skip(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
-            return
-        state = self._get_state(guild.id)
-        if not state.player or not state.now_playing:
-            await safe_reply(
-                interaction,
-                "Nothing is playing right now.",
-                ephemeral=True,
-            )
-            return
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        success, message = await self._skip_current(guild.id, state)
-        await safe_reply(interaction, message, ephemeral=not success)
+        await self._action_reply(interaction, 'skip', {})
+
+    @nextcord.slash_command(name="voteskip", description="Vote to skip the current track (majority of listeners)")
+    async def voteskip(self, interaction: nextcord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._action_reply(interaction, "vote")
+
+    @nextcord.slash_command(name="fairqueue", description="Enable or disable rotation among requesters (DJ/owner)")
+    async def fairqueue(self, interaction: nextcord.Interaction, enabled: bool):
+        await interaction.response.defer(ephemeral=True)
+        await self._action_reply(interaction, "fair", {"enabled": enabled})
 
     @nextcord.slash_command(name="pause", description="Pause the current track")
     async def pause(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
-            return
-        state = self._get_state(guild.id)
-        if not state.player or not state.now_playing:
-            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
-            return
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        if getattr(state.player, "paused", False):
-            await safe_reply(interaction, "Playback is already paused.", ephemeral=True)
-            return
-        await state.player.pause()
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(interaction, "Playback paused.")
+        await self._action_reply(interaction, 'pause', {})
 
     @nextcord.slash_command(name="resume", description="Resume the paused track")
     async def resume(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
-            return
-        state = self._get_state(guild.id)
-        if not state.player or not state.now_playing:
-            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
-            return
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        if not getattr(state.player, "paused", False):
-            await safe_reply(interaction, "Playback is not paused.", ephemeral=True)
-            return
-        await state.player.resume()
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(interaction, "Playback resumed.")
+        await self._action_reply(interaction, 'resume', {})
 
     @nextcord.slash_command(name="volume", description="Set playback volume")
     async def volume(
@@ -1753,22 +1655,7 @@ class Music(commands.Cog):
         ),
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
-            return
-        state = self._get_state(guild.id)
-        if not state.player:
-            await safe_reply(interaction, "I'm not connected to voice.", ephemeral=True)
-            return
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        state.volume = level
-        await state.player.set_volume(level)
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(interaction, f"Volume set to **{level}%**.")
+        await self._action_reply(interaction, 'volume', {'level': level})
 
     @nextcord.slash_command(name="seek", description="Seek within the current track")
     async def seek(
@@ -1779,29 +1666,11 @@ class Music(commands.Cog):
         ),
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
+        milliseconds = self._parse_seek_position(position)
+        if milliseconds is None:
+            await safe_reply(interaction, "Use seconds, mm:ss, or hh:mm:ss.", ephemeral=True)
             return
-        state = self._get_state(guild.id)
-        if not state.player or not state.now_playing:
-            await safe_reply(interaction, "Nothing is playing right now.", ephemeral=True)
-            return
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        position_ms = self._parse_seek_position(position)
-        if position_ms is None:
-            await safe_reply(interaction, "Use seconds, `mm:ss`, or `hh:mm:ss`.", ephemeral=True)
-            return
-        duration = state.now_playing.handle.duration
-        if duration > 0 and position_ms >= duration:
-            await safe_reply(interaction, "That position is past the end of the track.", ephemeral=True)
-            return
-        await state.player.seek(position_ms)
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(interaction, f"Seeked to **{position}**.")
+        await self._action_reply(interaction, "seek", {"position": milliseconds})
 
     @nextcord.slash_command(name="nowplaying", description="Show the current track")
     async def nowplaying(self, interaction: nextcord.Interaction) -> None:
@@ -1827,19 +1696,7 @@ class Music(commands.Cog):
         ),
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        state.loop_mode = mode
-        labels = {"off": "off", "track": "current track", "queue": "whole queue"}
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(interaction, f"Repeat mode set to **{labels[mode]}**.")
+        await self._action_reply(interaction, 'loop', {'mode': mode})
 
     @nextcord.slash_command(
         name="autoplay",
@@ -1853,81 +1710,24 @@ class Music(commands.Cog):
         ),
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        state.autoplay = enabled
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(
-            interaction,
-            f"AutoPlay turned **{'on' if enabled else 'off'}**.",
-        )
+        await self._action_reply(interaction, 'autoplay', {'enabled': enabled})
 
     @nextcord.slash_command(name="clear", description="Clear the queued tracks")
     async def clear(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        count = len(state.queue)
-        state.queue.clear()
-        await self._refresh_now_playing(guild.id)
-        await safe_reply(interaction, f"Cleared **{count}** queued track(s).")
+        await self._action_reply(interaction, 'clear', {})
 
     @nextcord.slash_command(name="disconnect", description="Stop music and leave voice")
     async def disconnect(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(interaction, "This command can only be used in guilds.", ephemeral=True)
-            return
-        state = self._states.get(guild.id)
-        if state is None or state.player is None:
-            await safe_reply(interaction, "I'm not connected to voice.", ephemeral=True)
-            return
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        await self._disconnect(guild.id, state)
-        await safe_reply(interaction, "Disconnected and cleared the queue.")
+        await self._action_reply(interaction, 'disconnect', {})
 
     @nextcord.slash_command(
         name="stop", description="Stop playback and clear the queue"
     )
     async def stop(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        await self._stop(guild.id)
-        await safe_reply(interaction, "Playback stopped and queue cleared.")
+        await self._action_reply(interaction, 'stop', {})
 
     @nextcord.slash_command(name="queue", description="Show the current queue")
     async def show_queue(self, interaction: nextcord.Interaction) -> None:
@@ -1963,49 +1763,14 @@ class Music(commands.Cog):
     @nextcord.slash_command(name="remove", description="Remove a queued track")
     async def remove(self, interaction: nextcord.Interaction, target: str) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
+        try:
+            positions = [int(value.strip()) for value in target.split("-")]
+            if len(positions) not in (1, 2):
+                raise ValueError()
+        except ValueError:
+            await safe_reply(interaction, "Provide a queue position or range such as 2-4.", ephemeral=True)
             return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        removed: Optional[QueuedTrack] = None
-        removed_many = []
-        if "-" in target:
-            try:
-                start_str, end_str = target.split("-", 1)
-                start = int(start_str.strip()) - 1
-                end = int(end_str.strip()) - 1
-            except ValueError:
-                await safe_reply(interaction, "Invalid range.", ephemeral=True)
-                return
-            removed_many = state.queue.remove_range(start, end)
-        else:
-            try:
-                index = int(target) - 1
-            except ValueError:
-                await safe_reply(interaction, "Invalid index.", ephemeral=True)
-                return
-            removed = state.queue.remove_index(index)
-        if removed_many:
-            await safe_reply(
-                interaction,
-                f"Removed {len(removed_many)} tracks from the queue.",
-            )
-        elif removed:
-            await safe_reply(
-                interaction,
-                f"Removed **{removed.handle.title}** from the queue.",
-            )
-        else:
-            await safe_reply(interaction, "No tracks removed.", ephemeral=True)
+        await self._action_reply(interaction, "remove", {"start": positions[0], "end": positions[-1]})
 
     @nextcord.slash_command(
         name="move", description="Move a track to a different position"
@@ -2014,73 +1779,17 @@ class Music(commands.Cog):
         self, interaction: nextcord.Interaction, source: int, destination: int
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        success = state.queue.move(source - 1, destination - 1)
-        if success:
-            await safe_reply(interaction, "Track moved.")
-        else:
-            await safe_reply(interaction, "Invalid indices provided.", ephemeral=True)
+        await self._action_reply(interaction, 'move', {'source': source, 'destination': destination})
 
     @nextcord.slash_command(name="shuffle", description="Shuffle the queue")
     async def shuffle(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        state.queue.shuffle()
-        await safe_reply(interaction, "Queue shuffled.")
+        await self._action_reply(interaction, 'shuffle', {})
 
     @nextcord.slash_command(name="replay", description="Replay the last played track")
     async def replay(self, interaction: nextcord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await safe_reply(
-                interaction,
-                "This command can only be used in guilds.",
-                ephemeral=True,
-            )
-            return
-        state = self._get_state(guild.id)
-        control_error = self._control_error(interaction, state)
-        if control_error:
-            await safe_reply(interaction, control_error, ephemeral=True)
-            return
-        replayed = state.queue.replay_last()
-        if not replayed:
-            await safe_reply(interaction, "Nothing to replay.", ephemeral=True)
-            return
-        await safe_reply(
-            interaction,
-            embed=self.embed_factory.queued(
-                replayed,
-                position=1,
-                eta_ms=self._calculate_eta_ms(guild.id),
-            ),
-        )
-        await self._ensure_playing(guild.id)
+        await self._action_reply(interaction, 'replay', {})
 
     @nextcord.slash_command(
         name="ytcheck", description="Show YouTube stack diagnostics"
@@ -2404,4 +2113,3 @@ class Music(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(Music(bot))
-
