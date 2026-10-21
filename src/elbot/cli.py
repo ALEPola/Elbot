@@ -7,6 +7,7 @@ import argparse
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -164,6 +165,23 @@ def _pip_install(args: Iterable[str]) -> None:
         run=_run,
         error_cls=CommandError,
     )
+    if not IS_WINDOWS and os.environ.get("ELBOT_SHARED_RUNTIME") == "1":
+        # The isolated panel installs into a shared, setgid service venv.
+        # Pip can move owner-only metadata directories into place. Restore
+        # group reads only on files owned by this installer, never secrets.
+        for root, directories, files in os.walk(VENV_DIR):
+            for entry in [Path(root), *(Path(root) / name for name in directories + files)]:
+                if entry.is_symlink():
+                    continue
+                metadata = entry.stat()
+                if metadata.st_uid != os.geteuid():
+                    continue
+                mode = stat.S_IMODE(metadata.st_mode) | stat.S_IRGRP
+                if entry.is_dir() or mode & 0o111:
+                    mode |= stat.S_IXGRP
+                if entry.is_dir():
+                    mode |= stat.S_ISGID
+                entry.chmod(mode)
 
 
 
