@@ -12,7 +12,7 @@ authors = [{name = "Elbot Team"}]
 license = {text = "MIT"}
 dependencies = [
     "nextcord>=2.6,<3",
-    "setuptools>=80.10.2,<81",  # Nextcord 2.6 imports pkg_resources at runtime.
+    "setuptools>=80.10.2,<85",  # Nextcord 2.6 imports pkg_resources at runtime.
     "PyNaCl>=1.6.2",
     "openai",
     "textblob",
