@@ -1,0 +1,2 @@
+# Deployment helpers execute on Linux even when authored on Windows.
+*.sh text eol=lf

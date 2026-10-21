@@ -4,13 +4,25 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=%i
-WorkingDirectory=/opt/elbot               # tell users to place repo here or edit this
+User=elbot
+Group=elbot
+# Edit paths and provision the dedicated account before enabling.
+WorkingDirectory=/opt/elbot
 EnvironmentFile=/opt/elbot/.env
 ExecStart=/opt/elbot/.venv/bin/python -m elbot.main
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

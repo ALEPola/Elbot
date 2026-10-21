@@ -8,6 +8,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -152,6 +153,10 @@ def _run_in_venv(args: Iterable[str]) -> subprocess.CompletedProcess:
 
 
 def _pip_install(args: Iterable[str]) -> None:
+    args = list(args)
+    lock = PROJECT_ROOT / "requirements-pi.lock"
+    if args and args[0] == "install" and platform.system() == "Linux" and sys.version_info[:2] == (3, 11) and lock.exists():
+        args[1:1] = ["--constraint", str(lock)]
     ops.pip_install(
         args,
         venv_dir=VENV_DIR,

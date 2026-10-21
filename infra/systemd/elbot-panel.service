@@ -4,9 +4,9 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=elbot                                # bot owner; edit to match your install
+User=elbot
 Group=elbot
-WorkingDirectory=/opt/elbot               # tell users to place repo here or edit this
+WorkingDirectory=/opt/elbot
 # The panel loads .env itself. Set ELBOT_PREINSTALLED_TIMER=1 and
 # ELBOT_SERVICE_SUDO=1 there so it toggles elbot-update.timer and controls
 # elbot.service through the scoped rules in infra/sudoers.d/elbot-panel.
@@ -14,6 +14,15 @@ ExecStart=/opt/elbot/.venv/bin/gunicorn --workers 1 --threads 4 --timeout 660 --
 Restart=on-failure
 RestartSec=5
 UMask=0077
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# The management panel's documented scoped sudo commands require privilege
+# transitions. Do not add NoNewPrivileges=true without replacing that mechanism.
 
 [Install]
 WantedBy=multi-user.target

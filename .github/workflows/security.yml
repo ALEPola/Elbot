@@ -1,0 +1,36 @@
+name: Dependency security
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '37 12 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pip-audit
+      # Nextcord 2.6 needs pkg_resources from setuptools<81. This advisory
+      # concerns macOS APFS/HFS+ sdist exclusion; this job/lock targets Linux.
+      # See SECURITY.md for the scoped exception and Nextcord migration plan.
+      - run: python -m pip_audit --disable-pip --no-deps -r requirements-pi.lock --ignore-vuln PYSEC-2026-3447 --ignore-vuln GHSA-h35f-9h28-mq5c
+  voice:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/elbot/live/transport
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack pnpm install --frozen-lockfile --ignore-scripts
+      - run: corepack pnpm audit --prod
+      - run: node --test

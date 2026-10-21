@@ -21,6 +21,7 @@ import yt_dlp
 from elbot.config import get_lavalink_connection_info
 
 from .support import CacheRecord, CookieManager, PlaybackMetrics, SearchCache
+from .url_policy import validate_media_query
 
 os.environ.setdefault("MAFIC_LIBRARY", "nextcord")
 os.environ.setdefault("MAFIC_IGNORE_LIBRARY_CHECK", "1")
@@ -227,6 +228,9 @@ class LavalinkAudioBackend:
         prefer_search: bool = True,
     ) -> List[TrackHandle]:
         """Resolve a Lavalink track list from a query or URL."""
+
+        if prefer_search:
+            query = validate_media_query(query)
 
         if self._node is None:
             raise LavalinkUnavailable("Lavalink node is not ready")
@@ -475,7 +479,7 @@ _KNOWN_YTDLP_PREFIXES = (
 
 
 def _normalise_query(query: str) -> str:
-    stripped = query.strip()
+    stripped = validate_media_query(query)
     lower = stripped.lower()
     if lower.startswith(("http://", "https://")):
         return stripped
@@ -521,6 +525,8 @@ class FallbackPlayer:
         channel_id: int,
     ) -> QueuedTrack:
         """Resolve a queued track using the configured backend precedence."""
+
+        query = validate_media_query(query)
 
         start = time.perf_counter()
         prefer_search = not query.startswith("http")
