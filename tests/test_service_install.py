@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -70,11 +71,15 @@ def test_install_systemd_service_does_not_override_env_vars(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, record_runs: _RunRecorder
 ) -> None:
     monkeypatch.setattr(service_install, "SYSTEMD_SERVICE_FILE", tmp_path / "elbot.service")
+    # The service uses the target account's passwd entry, which can differ
+    # from HOME in a container or an isolated security verification run.
+    account_home = tmp_path / "account-home"
+    monkeypatch.setattr("pwd.getpwnam", lambda _user: SimpleNamespace(pw_dir=str(account_home)))
 
     service_install.install_systemd_service(tmp_path)
 
     content = (tmp_path / "elbot.service").read_text(encoding="utf-8")
     assert "Environment=AUTO_LAVALINK" not in content
     assert "Environment=FFMPEG_PATH" not in content
-    assert f"{Path.home() / '.local' / 'bin'}" in content
+    assert f"{account_home / '.local' / 'bin'}" in content
     assert f"{tmp_path / '.venv' / 'bin'}" in content

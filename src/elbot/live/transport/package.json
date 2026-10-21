@@ -2,15 +2,25 @@
   "name": "elbot-voice-transport",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22.12.0"},
-  "scripts": {"test": "node --test"},
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "@discordjs/opus": "0.10.0",
     "@discordjs/voice": "0.19.2",
     "prism-media": "1.3.5",
-    "ws": "8.19.0"
+    "ws": "8.22.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@discordjs/opus"]
-  }
+    "onlyBuiltDependencies": [
+      "@discordjs/opus"
+    ],
+    "overrides": {
+      "tar": "^7.5.21"
+    }
+  },
+  "packageManager": "pnpm@10.28.0"
 }

@@ -53,18 +53,25 @@ def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> bool | None:
     if not inspect.iscoroutinefunction(test_function):
         return None
 
+    # Autouse fixtures belong to the fixture graph, not the test signature.
+    # pytest-asyncio adds event_loop_policy on CI even for our unmarked tests.
+    arguments = {
+        name: pyfuncitem.funcargs[name]
+        for name in inspect.signature(test_function).parameters
+        if name in pyfuncitem.funcargs
+    }
     loop = pyfuncitem.funcargs.get("event_loop")
     if loop is None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(test_function(**pyfuncitem.funcargs))
+            loop.run_until_complete(test_function(**arguments))
             loop.run_until_complete(loop.shutdown_asyncgens())
         finally:
             asyncio.set_event_loop(None)
             loop.close()
     else:
-        loop.run_until_complete(test_function(**pyfuncitem.funcargs))
+        loop.run_until_complete(test_function(**arguments))
     return True
 
 

@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Iterable
 
 import pytest
 
 from elbot import cli
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 11), reason="Pi lock targets Python 3.11")
+@pytest.mark.parametrize("system,locked", [("Linux", True), ("Windows", False)])
+def test_pip_install_applies_tested_lock_on_pi_only(monkeypatch, tmp_path, system, locked):
+    lock = tmp_path / "requirements-pi.lock"
+    lock.write_text("aiohttp==3.14.5\n")
+    monkeypatch.setattr(cli, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cli.platform, "system", lambda: system)
+    calls = []
+    monkeypatch.setattr(cli.ops, "pip_install", lambda args, **kwargs: calls.append(list(args)))
+    cli._pip_install(["install", "-e", "."])
+    assert ("--constraint" in calls[0]) is locked
+    if locked:
+        assert str(lock) in calls[0]
 
 
 def test_command_install_non_interactive_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

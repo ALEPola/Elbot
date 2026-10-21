@@ -46,6 +46,9 @@ The install script checks prerequisites, creates the virtual environment, helps 
 
 ## Requirements
 
+See [SECURITY.md](SECURITY.md) for the tested Linux dependency lock, moderation
+authorization rules, accepted media sources, and service-account isolation.
+
 - Python **3.10+** (3.12 recommended)
 - Java **17+** (for Lavalink)
 - `ffmpeg`
