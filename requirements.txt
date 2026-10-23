@@ -1,5 +1,5 @@
 nextcord>=2.6,<3
-setuptools>=80.10.2,<81
+setuptools>=80.10.2,<85
 PyNaCl>=1.6.2
 openai
 textblob
