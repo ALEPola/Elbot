@@ -23,7 +23,7 @@ Entry points (see `pyproject.toml`): `elbot`, `elbot-portal`, `elbotctl`, `elbot
 
 ## Deployment
 
-Production runs on a Raspberry Pi as a systemd service (`elbot.service`, unit template in `infra/systemd/`), executing `.venv/bin/python -m elbot.main` with `Restart=on-failure`. To deploy: `git pull origin main`, reinstall requirements if they changed, then `sudo systemctl restart elbot`. Lavalink runs alongside it (`lavalink.service`); its config is `infra/docker/lavalink/application.yml`.
+Production runs on a Raspberry Pi as a systemd service (`elbot.service`, unit template in `infra/systemd/`), executing `.venv/bin/python -m elbot.main` with `Restart=on-failure`. To deploy: `git pull origin main`, reinstall requirements if they changed, then `sudo systemctl restart elbot`. Music runs on Lavalink in one of two modes, chosen in `.env`: the bot starts and manages its own Lavalink process (`AUTO_LAVALINK=1`, port 2333), or with `ELBOT_VOICE_TRANSPORT=bridge` it uses the separate `lavalink-bridge.service` on loopback port 2334 (see `docs/VOICE_BRIDGE_PREREQS.md` and `docs/VOICE_ACCEPTANCE.md`). The standalone `lavalink.service` unit in `infra/systemd/` (config `infra/docker/lavalink/application.yml`) was inactive in the 2026-10-25 audit, so it is not evidence that music is down. Check which mode is configured before diagnosing music.
 
 ## Conventions
 
