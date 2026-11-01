@@ -220,6 +220,9 @@ logs/health.json
 # Bot runtime state
 logs/
 subscribers.json
+subscribers.json.corrupt-*
+f1_reminders.json
+f1_reminders.json.corrupt-*
 
 # Node (voice transport bridge) — reinstall via pnpm/npm, don't commit
 src/elbot/live/transport/node_modules/

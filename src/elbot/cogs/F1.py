@@ -1,114 +1,61 @@
 # cogs/f1.py
 
-import os
-import json
 import logging
-import inspect
-import aiohttp
-try:
-    from icalendar import Calendar
-except Exception:
-    # Lightweight fallback used only in tests when 'icalendar' is not installed.
-    class Calendar:
-        @staticmethod
-        def from_ical(text: str):
-            # Very small parser: create an object with .walk() that yields comps
-            class Comp:
-                def __init__(self, props):
-                    self.props = props
-                    self.name = "VEVENT"
+import os
+from datetime import datetime, timedelta, time as dt_time, tzinfo
+from pathlib import Path
+from typing import Optional
+from zoneinfo import ZoneInfo
 
-                def get(self, key, default=None):
-                    val = self.props.get(key, default)
-                    # For DTSTART return a small object with .dt attribute
-                    if key == "DTSTART" and val is not None:
-                        class DT:
-                            def __init__(self, dt):
-                                self.dt = dt
-
-                        v = val
-                        # Very small parser: handle UTC timestamps like 29991231T000000Z
-                        try:
-                            if v.endswith("Z"):
-                                from datetime import datetime, timezone
-
-                                dt = datetime.strptime(v, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
-                            else:
-                                from datetime import datetime
-
-                                dt = datetime.strptime(v, "%Y%m%dT%H%M%S")
-                        except Exception:
-                            dt = v
-                        return DT(dt)
-                    return val
-
-            lines = [line.strip() for line in text.splitlines()]
-            comps = []
-            cur = {}
-            in_event = False
-            for line in lines:
-                if line == "BEGIN:VEVENT":
-                    in_event = True
-                    cur = {}
-                    continue
-                if line == "END:VEVENT":
-                    if cur:
-                        comps.append(Comp(cur.copy()))
-                    in_event = False
-                    cur = {}
-                    continue
-                if in_event and ":" in line:
-                    k, v = line.split(":", 1)
-                    cur[k] = v
-            class CalObj:
-                def __init__(self, comps):
-                    self._comps = comps
-
-                def walk(self):
-                    return self._comps
-
-            return CalObj(comps)
 import nextcord
 from nextcord.ext import commands, tasks
-from datetime import datetime, timedelta, time as dt_time, tzinfo
-from zoneinfo import ZoneInfo
-from cachetools import TTLCache
 
 from elbot.config import Config
+from elbot.f1.data import F1Data, F1DataError, ResultTable
+from elbot.f1.sessions import (
+    KIND_LABELS,
+    RACE,
+    Session,
+    current_weekend,
+    discord_time,
+    upcoming,
+    weekend_sessions,
+)
+from elbot.f1.store import (
+    LEAD_LABELS,
+    SESSION_FILTER_LABELS,
+    ReminderLog,
+    Subscription,
+    SubscriptionStore,
+)
 from elbot.utils import safe_reply
 
 logger = logging.getLogger("elbot.f1")
 
-# Configuration loaded from environment via Config
-# If ``ICS_URL`` is empty, event fetching will be skipped.
-ICS_URL = Config.ICS_URL  # URL to the ICS calendar feed
-# Allow ``webcal://`` style URLs by converting them to HTTPS
-if ICS_URL.startswith("webcal://"):
-    ICS_URL = "https://" + ICS_URL[len("webcal://") :]
+# Configuration loaded from environment via Config.
+# With ``ICS_URL`` empty, the schedule comes from the Jolpica API instead.
+ICS_URL = Config.ICS_URL  # URL to the ICS calendar feed (webcal:// is accepted)
 # Convert "0" to None when F1_CHANNEL_ID isn't configured
 CHANNEL_ID = Config.F1_CHANNEL_ID or None  # Channel ID for weekly updates
 GUILD_ID = Config.GUILD_ID  # Optional guild restriction
 # Use UTC if LOCAL_TIMEZONE is unset or blank
 # Set LOCAL_TIMEZONE to an IANA zone like "America/New_York".
-# See .env.example for a list of common US values.
+# It sets when the weekly post goes out and how zone-less feed times are read;
+# users see session times in their own zone through Discord timestamps.
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE") or "UTC")
 
-# Reusable HTTP session for API calls
-_session: aiohttp.ClientSession | None = None
+# Persistence files (in project root, gitignored)
+SUBSCRIBERS_FILE = Path(Config.BASE_DIR) / "subscribers.json"
+REMINDERS_FILE = Path(Config.BASE_DIR) / "f1_reminders.json"
 
+F1_RED = 0xE10600
+MAX_SCHEDULE = 15
+UNAVAILABLE = "⚠️ Couldn't reach the F1 data service. Try again later."
 
-async def get_session() -> aiohttp.ClientSession:
-    """Return a shared :class:`aiohttp.ClientSession`."""
-    global _session
-    if _session is None or _session.closed:
-        _session = aiohttp.ClientSession()
-    return _session
-
-
-async def close_session() -> None:
-    """Close the shared HTTP session if it exists."""
-    if _session and not _session.closed:
-        await _session.close()
+SESSION_CHOICES = {label.capitalize(): key for key, label in SESSION_FILTER_LABELS.items()}
+LEAD_CHOICES = {label.capitalize(): key for key, label in LEAD_LABELS.items()}
+RESULT_CHOICES = {"Race": "race", "Qualifying": "qualifying", "Sprint": "sprint"}
+STANDINGS_CHOICES = {"Drivers": "drivers", "Constructors": "constructors"}
 
 
 class AwareZone(tzinfo):
@@ -133,122 +80,60 @@ class AwareZone(tzinfo):
         return self.zone.tzname(dt)
 
 
-# Path to subscriber persistence file (in project root)
-SUBSCRIBERS_FILE = os.path.join(Config.BASE_DIR, "subscribers.json")
-
-
-def load_subscribers():
-    try:
-        with open(SUBSCRIBERS_FILE, "r") as f:
-            return set(json.load(f))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return set()
-
-
-def save_subscribers(subscribers):
-    with open(SUBSCRIBERS_FILE, "w") as f:
-        json.dump(list(subscribers), f)
-
-
-async def fetch_events(limit=10):
-    """Fetch and parse the next up to `limit` F1 sessions from the ICS feed.
-
-    Returns an empty list if ``ICS_URL`` is not configured.
-    """
-    if not ICS_URL:
-        logger.warning("ICS_URL not configured; skipping event fetch")
-        return []
-    try:
-        session = await get_session()
-        async with session.get(ICS_URL) as resp:
-            resp.raise_for_status()
-            cal = Calendar.from_ical(await resp.text())
-    except aiohttp.ClientError as e:
-        logger.error("Failed to fetch F1 schedule: %s", e)
-        return []
-
-    now = datetime.now(LOCAL_TZ)
-    events = []
-    for comp in cal.walk():
-        if comp.name != "VEVENT":
-            continue
-        summary = str(comp.get("SUMMARY", ""))
-        dt = comp.get("DTSTART").dt
-        if not isinstance(dt, datetime):
-            dt = datetime(dt.year, dt.month, dt.day, tzinfo=LOCAL_TZ)
-        else:
-            dt = dt.astimezone(LOCAL_TZ)
-        if dt > now:
-            events.append((dt, summary))
-
-    events.sort(key=lambda x: x[0])
-    return events[:limit]
-
-
-async def fetch_race_results():
-    """Fetch the latest race results from the Ergast API."""
-    url = "https://ergast.com/api/f1/current/last/results.json"
-    try:
-        session = await get_session()
-        async with session.get(url) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-    except aiohttp.ClientError as e:
-        logger.error("Failed to fetch F1 results: %s", e)
-        return None, []
-
-    race = data.get("MRData", {}).get("RaceTable", {}).get("Races", [{}])[0]
-    race_name = race.get("raceName", "")
-    results = []
-    for entry in race.get("Results", [])[:10]:
-        pos = entry.get("position")
-        driver = entry.get("Driver", {}).get("familyName")
-        team = entry.get("Constructor", {}).get("name")
-        results.append((pos, driver, team))
-    return race_name, results
-
-
-def format_countdown(dt):
+def format_countdown(dt, now=None):
     """Return a countdown string 'Xd Xh Xm' until datetime `dt`."""
-    delta = dt - datetime.now(LOCAL_TZ)
+    delta = max(dt - (now or datetime.now(LOCAL_TZ)), timedelta(0))
     days = delta.days
     hours, rem = divmod(delta.seconds, 3600)
     minutes = rem // 60
     return f"{days}d {hours}h {minutes}m"
 
 
-def format_event_details(events):
-    """Return a list of (name, human-readable datetime) tuples."""
-    return [(name, dt.strftime("%A, %b %d %I:%M %p %Z")) for dt, name in events]
+def format_when(session: Session) -> str:
+    return f"{discord_time(session.start)} ({discord_time(session.start, 'R')})"
+
+
+def results_embed(table: ResultTable, heading: str) -> nextcord.Embed:
+    lines = []
+    for row in table.rows:
+        who = row.driver or row.team
+        if row.driver and row.team:
+            who = f"{row.driver} — {row.team}"
+        extras = [part for part in (row.detail, f"{row.points} pts" if row.points else "") if part]
+        lines.append(f"**{row.position}.** {who}" + (f" · {' · '.join(extras)}" if extras else ""))
+    embed = nextcord.Embed(title=f"{table.title} {heading}".strip(), description="\n".join(lines), color=F1_RED)
+    if table.subtitle:
+        embed.set_footer(text=table.subtitle)
+    return embed
 
 
 class F1Cog(commands.Cog):
-    """Cog for Formula 1 schedule, countdown, and reminders."""
+    """Cog for Formula 1 schedule, results, standings, and reminders."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.subscribers = load_subscribers()
-        self.schedule_cache = TTLCache(maxsize=1, ttl=3600)
-        self.sent_reminders = set()
+        self.data = F1Data(ICS_URL, LOCAL_TZ)
+        self.subscriptions = SubscriptionStore(SUBSCRIBERS_FILE)
+        self.reminders = ReminderLog(REMINDERS_FILE)
+        self.reminders.prune(datetime.now(LOCAL_TZ))
         self.weekly_update.start()
         self.reminder_loop.start()
 
     def cog_unload(self):
         self.weekly_update.cancel()
         self.reminder_loop.cancel()
-        self.bot.loop.create_task(close_session())
+        self.bot.loop.create_task(self.data.close())
 
-    async def get_schedule(self):
-        if "schedule" not in self.schedule_cache:
-            self.schedule_cache["schedule"] = await fetch_events(limit=10)
-        return self.schedule_cache["schedule"]
+    async def upcoming_sessions(self, limit: Optional[int] = None) -> list[Session]:
+        # Filter on every read: the cached schedule is fetched once an hour
+        # and would otherwise keep sessions that have already started.
+        return upcoming(await self.data.schedule(), datetime.now(LOCAL_TZ), limit)
 
-
-    async def _resolve_schedule(self):
-        schedule = self.get_schedule()
-        if inspect.isawaitable(schedule):
-            schedule = await schedule
-        return schedule
+    async def _blocked(self, interaction: nextcord.Interaction) -> bool:
+        if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
+            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+            return True
+        return False
 
     @tasks.loop(time=dt_time(hour=12, tzinfo=AwareZone(LOCAL_TZ)))
     async def weekly_update(self):
@@ -260,20 +145,20 @@ class F1Cog(commands.Cog):
         if channel is None:
             logger.error("F1Cog: CHANNEL_ID not found.")
             return
+        await channel.send(self.weekly_message(await self.upcoming_sessions()))
 
-        events = await self._resolve_schedule()
-        if not events:
-            events = await fetch_events(limit=1)
-        events = events[:1]
-        if not events:
-            await channel.send("⚠️ No upcoming Grand Prix found.")
-            return
-
-        dt, name = events[0]
-        await channel.send(
-            f"🏁 **Next F1 Race:** {name}\n"
-            f"📅 **When:** {dt.strftime('%A, %b %d %I:%M %p %Z')}"
-        )
+    @staticmethod
+    def weekly_message(sessions: list[Session]) -> str:
+        if not sessions:
+            return "⚠️ No upcoming F1 sessions found."
+        race = next((s for s in sessions if s.kind == RACE), None)
+        if race is None:
+            # The feed's names could not be classified; don't call a practice a race.
+            return f"🏎️ **Next F1 Session:** {sessions[0].name}\n📅 **When:** {format_when(sessions[0])}"
+        message = f"🏁 **Next F1 Race:** {race.name}\n📅 **When:** {format_when(race)}"
+        if sessions[0] is not race:
+            message += f"\n🟢 **First up:** {sessions[0].name} — {format_when(sessions[0])}"
+        return message
 
     @weekly_update.before_loop
     async def before_weekly(self):
@@ -281,49 +166,81 @@ class F1Cog(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def reminder_loop(self):
-        """Check every minute and DM subscribers if a session starts within 1 hour."""
-        now = datetime.now(LOCAL_TZ)
-        schedule = await self._resolve_schedule()
-        if not schedule:
-            schedule = await fetch_events(limit=5)
-        for dt, name in schedule[:5]:
-            delta = dt - now
-            if timedelta(0) < delta <= timedelta(hours=1):
-                if dt not in self.sent_reminders:
-                    for user_id in list(self.subscribers):
-                        try:
-                            user = await self.bot.fetch_user(user_id)
-                            await user.send(
-                                f"⏰ Reminder: **{name}** starts in {format_countdown(dt)}"
-                            )
-                        except Exception as e:
-                            logger.error(f"F1Cog reminder failed for {user_id}: {e}")
-                    self.sent_reminders.add(dt)
-            elif delta <= timedelta(0) and dt in self.sent_reminders:
-                self.sent_reminders.discard(dt)
+        """Check every minute and DM subscribers whose reminder window has opened."""
+        try:
+            await self.check_reminders()
+        except Exception:
+            # Keep the loop alive; the next tick retries.
+            logger.exception("F1 reminder check failed")
+
+    async def check_reminders(self, now: Optional[datetime] = None) -> None:
+        now = now or datetime.now(LOCAL_TZ)
+        subs = self.subscriptions.items()
+        if not subs:
+            return
+        horizon = now + timedelta(minutes=max(max(sub.leads) for _, sub in subs))
+        changed = False
+        for session in upcoming(await self.data.schedule(), now):
+            if session.start > horizon:
+                break
+            until = session.start - now
+            for user_id, sub in subs:
+                if session.kind not in sub.kinds:
+                    continue
+                # Every lead time whose window has opened is covered by one
+                # message, so a late start doesn't send a burst of reminders.
+                keys = [
+                    key
+                    for lead in sub.leads
+                    if until <= timedelta(minutes=lead)
+                    for key in [self.reminders.entry_key(session, lead, user_id)]
+                    if self.reminders.pending(key)
+                ]
+                if not keys:
+                    continue
+                sent, permanent = await self._send_reminder(user_id, session, now)
+                self.reminders.record(keys, session, sent=sent, permanent=permanent)
+                changed = True
+        if changed:
+            self.reminders.prune(now)
+            self.reminders.save()
+
+    async def _send_reminder(self, user_id: int, session: Session, now: datetime) -> tuple[bool, bool]:
+        """Return (sent, permanent_failure)."""
+        try:
+            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+            await user.send(
+                f"⏰ Reminder: **{session.name}** starts in {format_countdown(session.start, now)} "
+                f"({discord_time(session.start, 't')})"
+            )
+            return True, False
+        except (nextcord.Forbidden, nextcord.NotFound) as e:
+            logger.warning("F1Cog reminder to %s cannot be delivered: %s", user_id, e)
+            return False, True
+        except Exception as e:
+            logger.error("F1Cog reminder failed for %s: %s", user_id, e)
+            return False, False
 
     @reminder_loop.before_loop
     async def before_reminder(self):
         await self.bot.wait_until_ready()
 
-    @commands.Cog.listener()
-    async def on_guild_remove(self, guild):
-        """Remove subscriber DMs when bot leaves a guild."""
-        # no-op: subscribers are by user DM, not guild
-
     @nextcord.slash_command(name="f1_schedule", description="Show upcoming F1 sessions")
-    async def f1_schedule(self, interaction: nextcord.Interaction, count: int = 5):
+    async def f1_schedule(
+        self,
+        interaction: nextcord.Interaction,
+        count: int = nextcord.SlashOption(default=5, min_value=1, max_value=MAX_SCHEDULE),
+    ):
         await interaction.response.defer(with_message=True)
-        if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+        if await self._blocked(interaction):
             return
-        events = await self._resolve_schedule()
-        if not events:
-            events = await fetch_events(limit=count)
-        events = events[:count]
-        embed = nextcord.Embed(title=f"Next {len(events)} F1 Sessions", color=0xE10600)
-        for name, when in format_event_details(events):
-            embed.add_field(name=name, value=when, inline=False)
+        sessions = await self.upcoming_sessions(count)
+        if not sessions:
+            await safe_reply(interaction, "⚠️ No upcoming F1 sessions found.")
+            return
+        embed = nextcord.Embed(title=f"Next {len(sessions)} F1 Sessions", color=F1_RED)
+        for session in sessions:
+            embed.add_field(name=session.name, value=format_when(session), inline=False)
         await safe_reply(interaction, embed=embed)
 
     @nextcord.slash_command(
@@ -331,55 +248,133 @@ class F1Cog(commands.Cog):
     )
     async def f1_countdown(self, interaction: nextcord.Interaction):
         await interaction.response.defer(with_message=True)
-        if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+        if await self._blocked(interaction):
             return
-        events = await self._resolve_schedule()
-        if not events:
-            events = await fetch_events(limit=1)
-        events = events[:1]
-        if not events:
-            await safe_reply(interaction, "⚠️ No upcoming Grand Prix found.")
+        sessions = await self.upcoming_sessions()
+        if not sessions:
+            await safe_reply(interaction, "⚠️ No upcoming F1 sessions found.")
             return
-        dt, name = events[0]
-        await safe_reply(
-            interaction,
-            f"⏱ **{name}** starts in {format_countdown(dt)}",
-        )
+        lines = [f"⏱ **{sessions[0].name}** starts in {format_countdown(sessions[0].start)} "
+                 f"({discord_time(sessions[0].start)})"]
+        race = next((s for s in sessions if s.kind == RACE), None)
+        if race is not None and race is not sessions[0]:
+            lines.append(f"🏁 **{race.name}** starts in {format_countdown(race.start)} ({discord_time(race.start)})")
+        await safe_reply(interaction, "\n".join(lines))
 
-    @nextcord.slash_command(name="f1_results", description="Latest race results")
-    async def f1_results(self, interaction: nextcord.Interaction):
+    @nextcord.slash_command(name="f1_next", description="Full timetable for the current or next race weekend")
+    async def f1_next(self, interaction: nextcord.Interaction):
         await interaction.response.defer(with_message=True)
-        if GUILD_ID and interaction.guild and interaction.guild.id != GUILD_ID:
-            await safe_reply(interaction, "Not available in this server.", ephemeral=True)
+        if await self._blocked(interaction):
             return
-        race_name, results = await fetch_race_results()
-        if not race_name:
-            await safe_reply(interaction, "⚠️ Unable to fetch results.")
+        try:
+            races = await self.data.season_races()
+        except F1DataError:
+            await safe_reply(interaction, UNAVAILABLE)
             return
-        embed = nextcord.Embed(title=f"{race_name} Results", color=0xE10600)
-        for pos, driver, team in results:
-            embed.add_field(name=f"#{pos} {driver}", value=team, inline=False)
+        now = datetime.now(LOCAL_TZ)
+        race = current_weekend(races, now)
+        if race is None:
+            await safe_reply(interaction, "🏁 The season is over — no more race weekends this year.")
+            return
+        circuit = race.get("Circuit", {})
+        where = circuit.get("Location", {})
+        place = ", ".join(p for p in (where.get("locality"), where.get("country")) if p)
+        embed = nextcord.Embed(
+            title=f"Round {race.get('round', '?')} · {race.get('raceName', 'Grand Prix')}",
+            description=" — ".join(p for p in (circuit.get("circuitName"), place) if p),
+            url=race.get("url") or None,
+            color=F1_RED,
+        )
+        for session in weekend_sessions(race, LOCAL_TZ):
+            label = session.name.rsplit(" - ", 1)[-1] or KIND_LABELS[session.kind]
+            if session.start <= now:
+                value = f"✅ {discord_time(session.start)}"
+            else:
+                value = format_when(session)
+            embed.add_field(name=label, value=value, inline=False)
         await safe_reply(interaction, embed=embed)
 
+    @nextcord.slash_command(name="f1_results", description="Race, qualifying, or sprint results")
+    async def f1_results(
+        self,
+        interaction: nextcord.Interaction,
+        session: str = nextcord.SlashOption(
+            description="Which session (default: race)", choices=RESULT_CHOICES, default="race", required=False
+        ),
+        round_: Optional[int] = nextcord.SlashOption(
+            name="round", description="Round number this season (default: latest)",
+            min_value=1, max_value=30, default=None, required=False,
+        ),
+    ):
+        await interaction.response.defer(with_message=True)
+        if await self._blocked(interaction):
+            return
+        fetch = {"race": self.data.race_results, "qualifying": self.data.qualifying, "sprint": self.data.sprint}
+        try:
+            table = await fetch.get(session, self.data.race_results)(round_)
+        except F1DataError:
+            await safe_reply(interaction, UNAVAILABLE)
+            return
+        if table is None:
+            which = f"round {round_}" if round_ else "the latest round"
+            await safe_reply(interaction, f"⚠️ No {session} results available for {which} yet.")
+            return
+        heading = {"race": "Results", "qualifying": "Qualifying", "sprint": "Sprint Results"}.get(session, "Results")
+        await safe_reply(interaction, embed=results_embed(table, heading))
+
+    @nextcord.slash_command(name="f1_standings", description="Drivers' or constructors' championship standings")
+    async def f1_standings(
+        self,
+        interaction: nextcord.Interaction,
+        championship: str = nextcord.SlashOption(choices=STANDINGS_CHOICES, default="drivers", required=False),
+    ):
+        await interaction.response.defer(with_message=True)
+        if await self._blocked(interaction):
+            return
+        try:
+            if championship == "constructors":
+                table = await self.data.constructor_standings()
+            else:
+                table = await self.data.driver_standings()
+        except F1DataError:
+            await safe_reply(interaction, UNAVAILABLE)
+            return
+        if table is None:
+            await safe_reply(interaction, "⚠️ No standings available yet this season.")
+            return
+        await safe_reply(interaction, embed=results_embed(table, ""))
+
     @nextcord.slash_command(
-        name="f1_subscribe", description="DM reminders 1 hour before each session"
+        name="f1_subscribe", description="DM reminders before F1 sessions"
     )
-    async def f1_subscribe(self, interaction: nextcord.Interaction):
+    async def f1_subscribe(
+        self,
+        interaction: nextcord.Interaction,
+        sessions: Optional[str] = nextcord.SlashOption(
+            description="Which sessions to be reminded about", choices=SESSION_CHOICES, default=None, required=False
+        ),
+        lead: Optional[str] = nextcord.SlashOption(
+            description="How long before each session", choices=LEAD_CHOICES, default=None, required=False
+        ),
+    ):
         await interaction.response.defer(with_message=True, ephemeral=True)
-        self.subscribers.add(interaction.user.id)
-        save_subscribers(self.subscribers)
+        if await self._blocked(interaction):
+            return
+        current = self.subscriptions.get(interaction.user.id) or Subscription()
+        sub = Subscription(sessions or current.sessions, lead or current.lead)
+        self.subscriptions.set(interaction.user.id, sub)
         await safe_reply(
             interaction,
-            "✅ You will receive session reminders.",
+            f"✅ You will receive DM reminders for {sub.describe()}.",
             ephemeral=True,
         )
 
     @nextcord.slash_command(name="f1_unsubscribe", description="Stop session reminders")
     async def f1_unsubscribe(self, interaction: nextcord.Interaction):
         await interaction.response.defer(with_message=True, ephemeral=True)
-        self.subscribers.discard(interaction.user.id)
-        save_subscribers(self.subscribers)
+        if await self._blocked(interaction):
+            return
+        self.subscriptions.remove(interaction.user.id)
         await safe_reply(
             interaction,
             "🛑 You have been unsubscribed.",
@@ -392,5 +387,5 @@ def setup(bot: commands.Bot):
     cog = F1Cog(bot)
     bot.add_cog(cog)
     logger.info("✅ Loaded F1Cog")
-    bot.loop.create_task(cog.get_schedule())  # Preload schedule on startup
+    bot.loop.create_task(cog.data.schedule())  # Preload schedule on startup
     logger.info("F1 schedule preloaded.")

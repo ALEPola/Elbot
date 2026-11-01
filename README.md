@@ -75,7 +75,8 @@ Key variables:
 | `ELBOT_MUSIC_DASHBOARD_URL` | Optional public dashboard link on music controls |
 | `AUTO_UPDATE_WEBHOOK` | Discord webhook for update failures |
 | `ELBOT_PORTAL_SECRET` | Flask session secret |
-| `ICS_URL` / `LOCAL_TIMEZONE` | F1 schedule + timezone |
+| `ICS_URL` / `LOCAL_TIMEZONE` | F1 schedule feed (optional; Jolpica's schedule is used when blank) + timezone |
+| `F1_CHANNEL_ID` | Channel for the Sunday next-race post |
 
 For full options, see [`.env.example`](.env.example).
 
@@ -99,8 +100,14 @@ For full options, see [`.env.example`](.env.example).
 
 ### Formula 1
 
-- `/f1_schedule`, `/f1_countdown`, `/f1_results`
-- `/f1_subscribe`, `/f1_unsubscribe`
+- `/f1_schedule [count]`, `/f1_countdown`, `/f1_next` (full timetable for the current or next race weekend)
+- `/f1_results [session] [round]` (race, qualifying, or sprint; latest by default)
+- `/f1_standings [championship]` (drivers or constructors)
+- `/f1_subscribe [sessions] [lead]` (DM reminders: all sessions / qualifying, sprints and races / races only;
+  15 minutes, 1 hour, 1 day, or 1 day and 1 hour before), `/f1_unsubscribe`
+
+Results, standings, and the weekend timetable come from the [Jolpica F1 API](https://github.com/jolpica/jolpica-f1)
+(the Ergast successor). Session times are shown as Discord timestamps in each viewer's own time zone.
 
 ### Utility / Admin
 
